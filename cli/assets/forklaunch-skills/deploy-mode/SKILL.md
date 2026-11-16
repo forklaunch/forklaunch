@@ -1,6 +1,6 @@
 ---
 name: deploy-mode
-description: "The two decisions a first deploy forces: single-app vs managed-mode template, and where the app's compute runs (platform-shared / org-shared / dedicated). How each is resolved, which is authoritative, and what is not enforced yet."
+description: "The decisions a first deploy forces: single-app vs managed-mode template, where the app's compute runs (platform-shared / org-shared / dedicated), and whether each service scales to zero or is always on. How each is resolved, which is authoritative, and what is not enforced yet."
 user-invokable: true
 ---
 
@@ -161,6 +161,56 @@ next deployment enacts it. Free before a first deploy; afterwards it needs
 `--confirm-downtime`, and the next deployment copies the data to the new
 substrate and cuts over there instead of deploying directly.
 
+## A third choice, per service: sleep when idle, or always on
+
+Cluster placement says *where* a service runs. Compute mode says *whether it
+runs when nobody is calling it*.
+
+- **scale-to-zero**: the service is suspended after a few minutes without a
+  request and woken by the next one. The wake takes about a second, and the
+  first request that touches the database after it can take a few seconds. You
+  pay for the time it is awake.
+- **always-on**: it runs all the time. No request waits.
+- **auto**: the platform picks on every deploy: scale to zero when the service
+  can run that way, always on when it cannot. **A new service starts here.**
+
+Say an app has an `api` that is busy all day and an `admin` service used an hour
+a week. Leave `admin` alone and it sleeps; set `api` to always on.
+
+```bash
+forklaunch deploy create ... --compute always-on        # first deploy: every new service
+forklaunch app compute -e production -r us-west-2       # show each service's mode
+forklaunch app compute -e production -r us-west-2 \
+  --service api=always-on --service admin=scale-to-zero # change; applies on the next deploy
+```
+
+What `auto` will not put on scale to zero, and a chosen `scale-to-zero` is
+refused for:
+
+| Reason | Decided by | What the owner sees |
+|---|---|---|
+| The application declares a compliance framework | control plane | `auto` shows "runs always-on" with the reason |
+| The platform switch is off | control plane | same |
+| The service serves WebSockets or an extra port | deploy | a warning in the deploy log |
+
+A Rust service that declares a migration (`migrate` in its release, e.g. the
+same executable with `--migrate`) is not on that list. On scale to zero its
+migration runs as one task per deploy, as the database's owner, before the
+new version is built and routed. If it fails, the deploy fails with the task's
+exit code, the previous version keeps serving, and the migration's output is
+in the application's log under `<service>-migrate`.
+
+Things to say out loud before someone picks scale to zero for a service people
+use:
+
+- A request can run for at most 30 seconds and carry a body of about 4 MB.
+- Workers are not offered the choice: nothing calls a worker, so nothing could
+  wake it.
+- A service that existed before this choice did stays always on until someone
+  changes it. Nothing moves by itself.
+- A busy service costs about three times more on scale to zero than always on.
+  It is for services that are idle most of the day.
+
 ## Plain summary
 
 A first deploy forces two questions, and both belong to the platform rather than
@@ -178,3 +228,58 @@ the gate at first deploy. An app that declares HIPAA, SOC 2 or PCI-DSS cannot us
 the cross-tenant option; the platform enforces that and tells you why. Read the
 estimates to the user before they choose — it is a real cost decision, not a
 technical detail.
+
+## Scheduled calls: timed work without a timer in the process
+
+A timer inside a process (`setInterval`, an in-process cron) stops while a
+scale-to-zero service is asleep. Have the platform call the service instead.
+
+Example: a notification service sweeps for due reminders every 15 minutes.
+Expose the sweep as a route and store a schedule for it:
+
+```bash
+forklaunch app schedule -e production -r us-west-2 --service notifications \
+  --set sweep --schedule "rate(15 minutes)" --call /internal/sweep   # add, or replace the one named sweep
+forklaunch app schedule -e production -r us-west-2                   # list every service's schedules
+forklaunch app schedule -e production -r us-west-2 --service notifications --remove sweep
+```
+
+`--method` defaults to POST. The command changes only the schedules: the
+service's size and mode stay as they are, and no deployment is started. Behind
+it is `PATCH /services/<serviceId>/infrastructure` with `schedules`, which
+replaces the whole list (`[]` removes all) and also requires `instanceType` and
+`desiredCount`; send `"deploy": false` or it redeploys.
+
+`schedule` is `rate(N minutes|hours|days)` or a six-field `cron(...)` in UTC.
+The next deploy creates the schedule. At each time the organization's wake
+router calls the path, waking the service first if it sleeps; an always-on
+service is called at its hostname, so the same route works on both.
+
+The route is reachable from the internet, so check every call. The platform
+sets `FORKLAUNCH_SCHEDULE_SECRET` on the service and sends:
+
+| Header | Value |
+| --- | --- |
+| `x-forklaunch-schedule` | the schedule's name |
+| `x-forklaunch-schedule-timestamp` | unix seconds |
+| `x-forklaunch-schedule-signature` | hex HMAC-SHA256, keyed with the secret, of `<timestamp>.<METHOD>.<path>.<name>` (path includes the query string) |
+
+```ts
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function isScheduledCall(req: { method: string; originalUrl: string; headers: Record<string, string | string[] | undefined> }) {
+  const name = String(req.headers['x-forklaunch-schedule'] ?? '');
+  const timestamp = String(req.headers['x-forklaunch-schedule-timestamp'] ?? '');
+  const given = Buffer.from(String(req.headers['x-forklaunch-schedule-signature'] ?? ''), 'hex');
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const expected = createHmac('sha256', process.env.FORKLAUNCH_SCHEDULE_SECRET!)
+    .update(`${timestamp}.${req.method}.${req.originalUrl}.${name}`)
+    .digest();
+  return given.length === expected.length && timingSafeEqual(given, expected);
+}
+```
+
+Limits: at most 20 per service; the finest schedule is one minute; a call that fails is not retried
+(the next one comes at its time), so make the route do "whatever is due now",
+not "one step"; a service called more often than its idle window (5 minutes by
+default) never sleeps. Services only: a worker has no route to call.

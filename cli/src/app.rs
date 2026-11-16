@@ -9,6 +9,7 @@ use log_limit::LogLimitCommand;
 use readiness::ReadinessCommand;
 use resize::ResizeCommand;
 use route::RouteCommand;
+use schedule::ScheduleCommand;
 use services::ServicesCommand;
 use website::WebsiteCommand;
 
@@ -23,6 +24,7 @@ mod log_limit;
 mod readiness;
 mod resize;
 mod route;
+mod schedule;
 mod services;
 mod website;
 
@@ -37,6 +39,7 @@ pub(crate) struct AppCommand {
     readiness: ReadinessCommand,
     resize: ResizeCommand,
     route: RouteCommand,
+    schedule: ScheduleCommand,
     controller: ControllerCommand,
     website: WebsiteCommand,
 }
@@ -53,6 +56,7 @@ impl AppCommand {
             readiness: ReadinessCommand::new(),
             resize: ResizeCommand::new(),
             route: RouteCommand::new(),
+            schedule: ScheduleCommand::new(),
             controller: ControllerCommand::new(),
             website: WebsiteCommand::new(),
         }
@@ -72,6 +76,7 @@ impl CliCommand for AppCommand {
             .subcommand(self.readiness.command())
             .subcommand(self.resize.command())
             .subcommand(self.route.command())
+            .subcommand(self.schedule.command())
             .subcommand(self.controller.command())
             .subcommand(self.website.command())
     }
@@ -87,6 +92,7 @@ impl CliCommand for AppCommand {
             Some(("readiness", matches)) => self.readiness.handler(matches),
             Some(("resize", matches)) => self.resize.handler(matches),
             Some(("route", matches)) => self.route.handler(matches),
+            Some(("schedule", matches)) => self.schedule.handler(matches),
             Some(("controller", matches)) => self.controller.handler(matches),
             Some(("website", matches)) => self.website.handler(matches),
             _ => unreachable!(),
