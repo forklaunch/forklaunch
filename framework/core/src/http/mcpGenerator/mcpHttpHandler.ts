@@ -175,10 +175,10 @@ export function createMcpHttpHandler(
     // transport rejects anything else, and we drop it if no session started.
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
-      onsessioninitialized: (id) => {
+      onsessioninitialized: (id: string) => {
         sessions.set(id, { transport, session, lastSeen: Date.now() });
       },
-      onsessionclosed: (id) => {
+      onsessionclosed: (id: string) => {
         sessions.delete(id);
       }
     });

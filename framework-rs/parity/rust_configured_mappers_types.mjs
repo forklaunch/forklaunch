@@ -43,6 +43,8 @@ for(const name of ['body-parser','busboy','cors','express','qs','range-parser','
  const declaration=path.join(modules,'@types',name,'index.d.ts');await access(declaration);paths[name]=[declaration];
 }
 paths['*']=dependencyRoots.map(directory=>path.join(directory,'*'));
+// Path mapping skips package exports, so point the SDK's subpaths at its declarations.
+paths['@modelcontextprotocol/sdk/*']=dependencyRoots.map(directory=>path.join(directory,'@modelcontextprotocol/sdk/dist/esm/*'));
 const sdkProfile=process.argv.includes('--sdk');
 assert.ok(process.argv.slice(2).every(argument=>argument==='--sdk'),'Only --sdk is supported');
 const roots=sdkProfile?['framework/universal-sdk/index.ts']:[

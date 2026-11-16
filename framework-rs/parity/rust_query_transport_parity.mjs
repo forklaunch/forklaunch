@@ -22,7 +22,7 @@ function loadSync(absolute,imports,cache){
  if(cache.has(file))return cache.get(file);
  const compiled=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
  const exports={};cache.set(file,exports);
- vm.runInNewContext(compiled,{exports,require(spec){if(spec in imports)return imports[spec];if(spec.startsWith('.'))return loadSync(path.resolve(path.dirname(file),spec.replace(/\.js$/,'')),imports,cache);return external(spec);},fetch:fetcher,Buffer,URL,URLSearchParams,Response,FormData,Blob,TextEncoder,TextDecoder,structuredClone,crypto:globalThis.crypto,console});
+ vm.runInNewContext(compiled,{exports,require(spec){if(spec in imports)return imports[spec];if(spec.startsWith('.'))return loadSync(path.resolve(path.dirname(file),spec.replace(/\.js$/,'')),imports,cache);return external(spec);},fetch:fetcher,Buffer,Headers,URL,URLSearchParams,Response,FormData,Blob,TextEncoder,TextDecoder,structuredClone,crypto:globalThis.crypto,console});
  return exports;
 }
 async function load(file,imports={}) {
@@ -35,7 +35,7 @@ try {
  const {getSdkPath}=await load('framework/universal-sdk/src/core/resolvePath.ts',{'./regex':{generateStringFromRegex(){throw Error('unexpected regex');}}});
  class ZodSchemaValidator {schemify(value){return value;}}
  class FastMCP {tools=[];addTool(tool){this.tools.push(tool);}}
- const {generateMcpServer}=await load('framework/core/src/http/mcpGenerator/mcpGenerator.ts',{'@forklaunch/common':{safeStringify,isRecord:value=>value!==null&&typeof value==='object'&&!Array.isArray(value),isNever:()=>false},'@forklaunch/validator/zod':{ZodSchemaValidator,string:{startsWith:()=>({})}},fastmcp:{FastMCP},'../router/discriminateBody':{discriminateBody(){throw Error('unexpected body');},discriminateResponseBodies:()=>({200:{contentType:'application/json'}})},'../router/unpackRouters':{unpackRouters}});
+ const {generateMcpServer}=await load('framework/core/src/http/mcpGenerator/mcpGenerator.ts',{'@forklaunch/common':{safeStringify,isRecord:value=>value!==null&&typeof value==='object'&&!Array.isArray(value),isNever:()=>false},'@forklaunch/validator/zod':{ZodSchemaValidator,string:{startsWith:()=>({})}},fastmcp:{FastMCP},'./mcpHttpHandler':{getMcpTransportHeaders(){}},'../router/discriminateBody':{discriminateBody(){throw Error('unexpected body');},discriminateResponseBodies:()=>({200:{contentType:'application/json'}})},'../router/unpackRouters':{unpackRouters}});
  const app={basePath:'/',routers:[],routes:[{method:'get',path:'/query/:id',contractDetails:{name:'Read Query',summary:'Read query',params:{id:{}},query:{},responses:{200:{}},options:{mcp:true}}}]};
  const mcp=generateMcpServer(new ZodSchemaValidator(),'http','127.0.0.1',9000,'1.0.0',app);
  assert.equal(mcp.tools.length,1);
