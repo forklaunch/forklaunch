@@ -568,23 +568,38 @@ mod tests {
             "myapp",
             "postgresql",
             vec![
-                ("iam", ProjectType::Service, None, Some("better-auth".to_string())),
-                ("billing", ProjectType::Service, Some(ResourceInventory {
-                    database: Some("postgresql".to_string()),
-                    cache: Some("redis".to_string()),
-                    queue: None,
-                    object_store: None,
-                    redis_partition: Some(0),
-                    capabilities: None,
-                }), None),
-                ("notifications", ProjectType::Worker, Some(ResourceInventory {
-                    database: None,
-                    cache: Some("redis".to_string()),
-                    queue: None,
-                    object_store: None,
-                    redis_partition: Some(1),
-                    capabilities: None,
-                }), None),
+                (
+                    "iam",
+                    ProjectType::Service,
+                    None,
+                    Some("better-auth".to_string()),
+                ),
+                (
+                    "billing",
+                    ProjectType::Service,
+                    Some(ResourceInventory {
+                        database: Some("postgresql".to_string()),
+                        cache: Some("redis".to_string()),
+                        queue: None,
+                        object_store: None,
+                        redis_partition: Some(0),
+                        capabilities: None,
+                    }),
+                    None,
+                ),
+                (
+                    "notifications",
+                    ProjectType::Worker,
+                    Some(ResourceInventory {
+                        database: None,
+                        cache: Some("redis".to_string()),
+                        queue: None,
+                        object_store: None,
+                        redis_partition: Some(1),
+                        capabilities: None,
+                    }),
+                    None,
+                ),
             ],
         )
     }

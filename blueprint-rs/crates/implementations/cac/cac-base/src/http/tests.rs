@@ -24,6 +24,7 @@ fn router() -> axum::Router {
         });
     routes.finish().into_router()
 }
+static NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 fn header(path: &str) -> String {
     let timestamp = chrono::DateTime::<chrono::Utc>::from(SystemTime::now())
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -34,7 +35,11 @@ fn header(path: &str) -> String {
         path,
         SignedBody::Absent,
         &timestamp,
-        "test-nonce",
+        // A fresh nonce per request: a signed request is accepted only once.
+        &format!(
+            "test-nonce-{}",
+            NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ),
     )
     .unwrap()
 }

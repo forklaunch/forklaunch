@@ -17,9 +17,9 @@ pub(crate) fn s3_import<'a>(
     registrations_text: &str,
     registrations_program: &mut Program<'a>,
 ) -> Result<()> {
-    if !registrations_text
-        .contains("import { S3ObjectStore, s3ClientConfig } from \"@forklaunch/infrastructure-s3\";")
-    {
+    if !registrations_text.contains(
+        "import { S3ObjectStore, s3ClientConfig } from \"@forklaunch/infrastructure-s3\";",
+    ) {
         let import_text =
             "import { S3ObjectStore, s3ClientConfig } from \"@forklaunch/infrastructure-s3\";";
 
@@ -100,7 +100,8 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
     otel_token: &str,
 ) -> Result<()> {
     let s3_registration_text: &'static str = Box::leak(
-        format!("const configInjector = createConfigInjector(SchemaValidator(), {{
+        format!(
+            "const configInjector = createConfigInjector(SchemaValidator(), {{
   ObjectStore: {{
     lifetime: Lifetime.Singleton,
     type: S3ObjectStore,
@@ -144,7 +145,8 @@ pub(crate) fn s3_object_store_runtime_dependency<'a>(
         }}
       )
   }},
-    }});")
+    }});"
+        )
         .into_boxed_str(),
     );
 

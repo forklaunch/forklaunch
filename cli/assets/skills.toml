@@ -55,6 +55,7 @@ include = [
   "prereqs",
   "quick-reference",
   "rust-framework",
+  "rust-service-recipes",
   "score",
   "score-self-heal",
   "security",

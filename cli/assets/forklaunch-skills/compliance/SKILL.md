@@ -1,6 +1,6 @@
 ---
 name: compliance
-description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation, DPIA."
+description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, compliance documents (docs CLI), encryption, tenant isolation, DPIA."
 user-invokable: true
 ---
 
@@ -18,6 +18,7 @@ Use when the user asks about:
 - Tenant isolation (MikroORM filters, PostgreSQL RLS)
 - Audit logging
 - The `forklaunch compliance audit` CLI command
+- Compliance documents for audits and security reviews (`forklaunch compliance docs`)
 - Compliance reports in the portal
 - GDPR erasure/export endpoints
 - Data residency enforcement
@@ -785,6 +786,100 @@ When uploaded, the platform computes:
 - **Findings** (severity: critical/high/medium/low with point values)
 - **PCI Data Flow Diagram** (Mermaid format)
 - **DPIA** (GDPR Data Protection Impact Assessment with data inventory, mitigations, cross-border analysis)
+
+## Compliance Documents (`forklaunch compliance docs`)
+
+The Document Center writes audit documents (SOC 2, HIPAA, ISO 27001, GDPR,
+PCI DSS) from the platform's records of the organization's apps: data-flow and
+data inventory, infrastructure controls and gaps, subprocessors, change log,
+secure development policy, onboarding and offboarding, backup and disaster
+recovery, encryption and key management, logging and monitoring, network
+security, GDPR records of processing, and a privacy facts sheet (the facts a
+privacy policy must state, not the policy itself). Anything the platform
+cannot prove is left as `[Needs input: ...]` for a person to answer. People
+and HR policies (code of conduct, training, acceptable use) are left to the
+organization's compliance tool.
+
+Two kinds of document:
+
+- **Company-wide** (policies, subprocessors): one per organization. `generate`
+  adds a version to it.
+- **Per system** (data flow, infrastructure controls, change log): each copy
+  covers its own set of applications. `generate` makes a new copy; the default
+  scope is the apps that declare a compliance framework.
+
+```bash
+forklaunch compliance docs list [--app <applicationId>] [--json]
+forklaunch compliance docs generate <type> [--apps id1,id2] [--title "Hospital review"] [--json]
+forklaunch compliance docs regenerate <documentId>... [--json]
+forklaunch compliance docs regenerate --all            # every document configuration
+forklaunch compliance docs regenerate <documentId> --apps id1,id2   # change a system copy's scope
+forklaunch compliance docs show <documentId>           # newest markdown to stdout
+forklaunch compliance docs save <documentId> --file doc.md [--base-version N] [--note "..."]
+forklaunch compliance docs download <documentId>... [--approved] [--format md|pdf|both] [-o dir]
+forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
+forklaunch compliance docs push <documentId>... [--json]   # approved version to Oneleet
+forklaunch compliance docs push --all                     # every approved document
+forklaunch compliance docs delete <documentId>...         # only documents never approved
+```
+
+`push` sends a document's approved version (as a PDF) to the organization's
+Oneleet workspace, attached to each Oneleet control that document type is
+evidence for, or to the evidence library when the workspace has none of them.
+Drafts are refused. Oneleet is connected once in the dashboard (Compliance,
+then Documents) with a service key that has the `WRITE_EVIDENCE` scope; the key
+is stored encrypted and never returned. A 409 means Oneleet is not connected
+or the document has no approved version.
+
+What the documents read from code comes with each release: `release create`
+attaches the field inventory (regulated fields per entity, their service and
+retention rule) and a storage scan (every `TtlCache` / `ObjectStore` write:
+key prefix, TTL, and whether a tenant context encrypts it per tenant). An
+entity with regulated fields and no `retention` is reported as "kept until
+deleted", so declaring `retention: { duration, action }` on the entity is what
+changes the Data Retention Schedule.
+
+Diagrams are ```architecture blocks: JSON with `layout` (`boundaries` for a
+system's data flow, `layers` for a simple stack, `flow` for a process),
+`boundary` (the cloud network's label, boundaries only), `nodes` (`id`, `label`, `kind`: client, gateway, service,
+worker with `parent`, database, cache, objectstore, queue, search, integration,
+step, decision, end; optional `detail`) and `edges` (`from`, `to`, optional
+`label`, and `tone`: `restricted` for health or payment data, `personal` for
+personal data). Service-to-service edges are drawn as API calls. The dashboard
+and the PDFs draw them with the same renderer. Edit the
+JSON, never an image; regenerating rebuilds them from platform records.
+```mermaid blocks also render, for diagrams people add by hand.
+
+Agent workflow for filling in documents (answer once, every document updates):
+
+```bash
+forklaunch compliance docs inputs --json          # every open question: key, question, suggestion, documents asking it
+forklaunch compliance docs answer owner-name-and-role="Ada Diaz, CTO" review-cadence-for-example-every-quarter="Every quarter"
+forklaunch compliance docs answer --file answers.json   # { "key": "answer", ... }; - reads stdin
+```
+
+1. `docs inputs --json`. Each entry has a `key`, the `question`, the documents
+   that ask it, and sometimes a `suggestion` (what the platform already knows,
+   such as the organization's admins). A suggestion is a hint, not an answer.
+2. Answer only from what the user told you or the repository proves (CI
+   workflow files for required checks, branch protection settings, a
+   CODEOWNERS file, IaC for backup retention). Ask the user for the rest in
+   one batch; do not guess people, dates, targets or cadences.
+3. `docs answer key=value ...`. Answers are saved for the organization, written
+   into every document that asks that question (a new version, earlier edits
+   kept), and filled in automatically whenever a document is regenerated.
+   An empty value forgets a saved answer.
+4. For wording changes beyond an answer: `docs show <id> > doc.md`, edit,
+   `docs save <id> --file doc.md --note "what changed"` (409 = someone saved
+   since you read it; show again and re-apply).
+5. Tell the user what is still open. **Do not approve**: approval is a named
+   person's sign-off in the dashboard (Compliance, then Documents), and the CLI
+   has no approve command on purpose.
+
+Never write that an app "is compliant" or "certified"; documents describe
+controls and auditors decide. After infrastructure or integration changes,
+`docs regenerate --all` refreshes every document from current records (new
+versions; earlier ones stay in history).
 
 ## Portal Compliance Page
 

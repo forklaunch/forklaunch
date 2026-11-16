@@ -118,15 +118,19 @@ pub(super) fn enable(
         }
     }
     anyhow::ensure!(
-        crate::core::forklaunch_state::file_stamped(&root.join("Dockerfile.typescript")) != Some(false),
+        crate::core::forklaunch_state::file_stamped(&root.join("Dockerfile.typescript"))
+            != Some(false),
         "Modified TypeScript image requires an explicit development profile"
     );
     // Generated production processes, recognized by their Compose commands.
-    let production = if crate::core::forklaunch_state::file_stamped(&root.join("Dockerfile.typescript")).is_some() {
-        crate::init::rust_project::typescript_planned_processes(&root)
-    } else {
-        Default::default()
-    };
+    let production =
+        if crate::core::forklaunch_state::file_stamped(&root.join("Dockerfile.typescript"))
+            .is_some()
+        {
+            crate::init::rust_project::typescript_planned_processes(&root)
+        } else {
+            Default::default()
+        };
     let mut plans = Vec::new();
     let mut changes = serde_json::Map::new();
     for project in projects {
@@ -206,15 +210,16 @@ pub(super) fn enable(
             // contexts and arguments (a `--framework-path` checkout, ...).
             // An image-only service takes them from its image's builder.
             let image = &compose["services"][name]["image"];
-            let production = compose["services"][name]["build"]
-                .as_object()
-                .or_else(|| {
-                    compose["services"].as_object()?.values().find_map(|candidate| {
+            let production = compose["services"][name]["build"].as_object().or_else(|| {
+                compose["services"]
+                    .as_object()?
+                    .values()
+                    .find_map(|candidate| {
                         (!image.is_null() && candidate["image"] == *image)
                             .then(|| candidate["build"].as_object())
                             .flatten()
                     })
-                });
+            });
             for key in ["additional_contexts", "args"] {
                 if let Some(value) = production.and_then(|build| build.get(key)) {
                     build[key] = value.clone();
@@ -224,15 +229,21 @@ pub(super) fn enable(
             // The builder stage has no curl; probe health with the runtime.
             if let Some(url) = service["healthcheck"]["test"]
                 .as_array()
-                .filter(|test| test.len() == 4 && test[..3] == [json!("CMD"), json!("curl"), json!("-f")])
+                .filter(|test| {
+                    test.len() == 4 && test[..3] == [json!("CMD"), json!("curl"), json!("-f")]
+                })
                 .and_then(|test| test[3].as_str())
             {
                 let probe = format!(
                     "fetch({}).then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
                     serde_json::to_string(url)?
                 );
-                service["healthcheck"]["test"] =
-                    json!(["CMD", if runtime == "bun" { "bun" } else { "node" }, "-e", probe]);
+                service["healthcheck"]["test"] = json!([
+                    "CMD",
+                    if runtime == "bun" { "bun" } else { "node" },
+                    "-e",
+                    probe
+                ]);
             }
             service["image"] = json!(format!(
                 "{}-{name}-dev:local",
@@ -404,7 +415,10 @@ mod tests {
             without_migrations("DOTENV_FILE_PATH=.env.local pnpm run migrate:up && DOTENV_FILE_PATH=.env.local pnpm tsx watch server.ts").as_deref(),
             Some("DOTENV_FILE_PATH=.env.local pnpm tsx watch server.ts")
         );
-        assert_eq!(without_migrations("pnpm migrate:up && pnpm tsx watch server.ts").as_deref(), Some("pnpm tsx watch server.ts"));
+        assert_eq!(
+            without_migrations("pnpm migrate:up && pnpm tsx watch server.ts").as_deref(),
+            Some("pnpm tsx watch server.ts")
+        );
         assert_eq!(without_migrations("pnpm tsx watch server.ts"), None);
         assert_eq!(without_migrations("pnpm migrate:up"), None);
     }
@@ -423,15 +437,29 @@ mod tests {
         let plan = json!({"services": {"api": {"directory": "api", "entry": "server"}, "api-migrate": {"directory": "api", "entry": "migrate"}}});
         fs::write(
             root.path().join("Dockerfile.typescript"),
-            crate::core::forklaunch_state::stamp(&format!("COPY <<\"FORKLAUNCH_EOF\" /forklaunch/production.json\n{plan}\nFORKLAUNCH_EOF\n")),
+            crate::core::forklaunch_state::stamp(&format!(
+                "COPY <<\"FORKLAUNCH_EOF\" /forklaunch/production.json\n{plan}\nFORKLAUNCH_EOF\n"
+            )),
         )
         .unwrap();
-        let manifest: toml::Value =
-            toml::from_str("modules_path='modules'\nruntime='node'\n[[projects]]\nname='api'\ntype='Service'\n").unwrap();
+        let manifest: toml::Value = toml::from_str(
+            "modules_path='modules'\nruntime='node'\n[[projects]]\nname='api'\ntype='Service'\n",
+        )
+        .unwrap();
         let mut compose = json!({"services":{"api":{"image":"demo-typescript:local","working_dir":"/app/api","command":["node","/app/api/production/server.mjs"],"volumes":[],"build":{"context":".","dockerfile":"Dockerfile.typescript"}},"api-migrate":{"image":"demo-typescript:local","command":["node","/app/api/production/migrate.mjs"]}}});
-        enable(root.path(), &manifest, &BTreeSet::from(["api".into()]), &mut compose, &json!({})).unwrap();
+        enable(
+            root.path(),
+            &manifest,
+            &BTreeSet::from(["api".into()]),
+            &mut compose,
+            &json!({}),
+        )
+        .unwrap();
         let entrypoint = compose["services"]["api"]["entrypoint"].as_array().unwrap();
-        assert_eq!(entrypoint[entrypoint.len() - 3..], [json!("sh"), json!("-c"), json!("pnpm tsx watch server.ts")]);
+        assert_eq!(
+            entrypoint[entrypoint.len() - 3..],
+            [json!("sh"), json!("-c"), json!("pnpm tsx watch server.ts")]
+        );
     }
 
     #[test]
@@ -469,11 +497,22 @@ mod tests {
             // The builder image has no curl; health is probed with the runtime.
             let test = &compose["services"]["api"]["healthcheck"]["test"];
             assert_eq!(test[1], if runtime == "bun" { "bun" } else { "node" });
-            assert!(test[3].as_str().unwrap().starts_with("fetch(\"http://localhost:8000/health\")"));
+            assert!(
+                test[3]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("fetch(\"http://localhost:8000/health\")")
+            );
             assert_eq!(compose["services"]["api"]["healthcheck"]["interval"], "30s");
             // Named contexts and arguments of the image's build carry over.
-            assert_eq!(compose["services"]["api"]["build"]["additional_contexts"]["framework"], "/checkout/framework-rs");
-            assert_eq!(compose["services"]["api"]["build"]["args"]["FRAMEWORK_ROOT"], "/checkout");
+            assert_eq!(
+                compose["services"]["api"]["build"]["additional_contexts"]["framework"],
+                "/checkout/framework-rs"
+            );
+            assert_eq!(
+                compose["services"]["api"]["build"]["args"]["FRAMEWORK_ROOT"],
+                "/checkout"
+            );
             assert_eq!(
                 compose["services"]["api"]["image"],
                 "demo-typescript-api-dev:local"

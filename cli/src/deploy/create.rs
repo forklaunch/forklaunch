@@ -47,6 +47,13 @@ struct CreateDeploymentRequest {
     #[serde(rename = "clusterType")]
     #[serde(skip_serializing_if = "Option::is_none")]
     cluster_type: Option<String>,
+    /// How services that have no setting yet should run: `scale-to-zero`,
+    /// `always-on` or `auto`. Omitted when nothing was chosen, which the
+    /// control plane reads as `auto` (scale to zero wherever a service can run
+    /// that way), so an older control plane that does not know the field is
+    /// unaffected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compute: Option<String>,
     /// Deploy a managed-mode application down the single-app pipeline anyway.
     /// The control plane refuses this by default; `--force` is the deliberate
     /// override. Omitted entirely when not set, so an older control plane that
@@ -55,6 +62,22 @@ struct CreateDeploymentRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     force_single_app_deploy: Option<bool>,
 }
+
+/// What `--compute` accepts. `auto` is what the control plane assumes when
+/// nothing is sent.
+const COMPUTE_CHOICES: [&str; 3] = ["auto", "scale-to-zero", "always-on"];
+
+/// What the first-deploy prompt offers, default first. It offers `auto`
+/// rather than a strict `scale-to-zero`: a service that cannot sleep (it
+/// serves WebSockets, say) then runs always on instead of failing the
+/// person's first deploy.
+const COMPUTE_PROMPT: [(&str, &str); 2] = [
+    (
+        "Scale to zero where possible: sleeps when idle, wakes in about a second, costs least",
+        "auto",
+    ),
+    ("Always on: never makes a request wait", "always-on"),
+];
 
 #[derive(Debug, Deserialize)]
 struct CreateDeploymentResponse {
@@ -641,7 +664,6 @@ fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> HashSet<Strin
     app_var_keys
 }
 
-
 /// Best-effort check for whether this application has any prior deployment. Used only to
 /// decide whether to print the one-line managed-mode hint on a first deploy, so any
 /// uncertainty (request failure, unexpected shape) resolves to `false` and the hint is
@@ -750,6 +772,12 @@ impl CliCommand for CreateCommand {
                     .long("cluster-type")
                     .value_parser(["platform-shared", "org-shared", "dedicated"])
                     .help("Cluster placement for the app's FIRST deploy to this environment/region: platform-shared (cheapest, ForkLaunch-managed hosts), org-shared (your org's shared hosts), or dedicated (your own cluster)"),
+            )
+            .arg(
+                Arg::new("compute")
+                    .long("compute")
+                    .value_parser(COMPUTE_CHOICES)
+                    .help("How services run on their FIRST deploy to this environment/region: scale-to-zero (suspended when idle, woken by the next request in about a second; you pay for the time awake), always-on (never waits), or auto (the default: scale to zero wherever a service can run that way, always on where it cannot). Change a service later with `forklaunch app compute`"),
             )
             .arg(
                 Arg::new("node-env")
@@ -960,8 +988,13 @@ impl CliCommand for CreateCommand {
                     .cloned()
                     .unwrap_or_else(|| "centralized".to_string()),
             ),
-            force_refresh: if matches.get_flag("full") { Some(true) } else { None },
+            force_refresh: if matches.get_flag("full") {
+                Some(true)
+            } else {
+                None
+            },
             cluster_type: matches.get_one::<String>("cluster-type").cloned(),
+            compute: matches.get_one::<String>("compute").cloned(),
             force_single_app_deploy: if force { Some(true) } else { None },
         };
 
@@ -1321,7 +1354,10 @@ impl CliCommand for CreateCommand {
                 } else {
                     writeln!(stdout)?;
                     writeln!(stdout, "Deployment started; not waiting for it to finish.")?;
-                    writeln!(stdout, "This exit code says nothing about the deployment's outcome.")?;
+                    writeln!(
+                        stdout,
+                        "This exit code says nothing about the deployment's outcome."
+                    )?;
                     writeln!(
                         stdout,
                         "  Follow it:  forklaunch deploy info --deployment {}",
@@ -1346,12 +1382,17 @@ impl CliCommand for CreateCommand {
                 // Printing the same "this is the first deployment" header for both
                 // told a user who had already chosen at `app create` that they had
                 // never chosen, and silently dropped the server's explanation.
-                let rejected_choice =
-                    selection_required.message.starts_with("cluster_unavailable");
+                let rejected_choice = selection_required
+                    .message
+                    .starts_with("cluster_unavailable");
 
                 writeln!(stdout)?;
                 if rejected_choice {
-                    log_header!(stdout, Color::Yellow, "That cluster isn't available for this app");
+                    log_header!(
+                        stdout,
+                        Color::Yellow,
+                        "That cluster isn't available for this app"
+                    );
                     writeln!(stdout)?;
                     writeln!(
                         stdout,
@@ -1362,12 +1403,23 @@ impl CliCommand for CreateCommand {
                             .trim()
                     )?;
                     writeln!(stdout)?;
-                    writeln!(stdout, "  Pick another placement for {} ({}):", environment, region)?;
+                    writeln!(
+                        stdout,
+                        "  Pick another placement for {} ({}):",
+                        environment, region
+                    )?;
                 } else {
                     log_header!(stdout, Color::Cyan, "First deploy — choose a cluster");
                     writeln!(stdout)?;
-                    writeln!(stdout, "  This is the first deployment of this application to {} ({}).", environment, region)?;
-                    writeln!(stdout, "  Pick where its compute should run (estimates are monthly, compute only):")?;
+                    writeln!(
+                        stdout,
+                        "  This is the first deployment of this application to {} ({}).",
+                        environment, region
+                    )?;
+                    writeln!(
+                        stdout,
+                        "  Pick where its compute should run (estimates are monthly, compute only):"
+                    )?;
                 }
                 writeln!(stdout)?;
                 for opt in &selection_required.cluster_options {
@@ -1395,7 +1447,10 @@ impl CliCommand for CreateCommand {
                     .filter(|o| o.available)
                     .collect();
                 if available.is_empty() {
-                    bail!("No cluster options are available: {}", selection_required.message);
+                    bail!(
+                        "No cluster options are available: {}",
+                        selection_required.message
+                    );
                 }
 
                 if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
@@ -1419,8 +1474,27 @@ impl CliCommand for CreateCommand {
                     .default(0)
                     .interact()?;
                 request_body.cluster_type = Some(available[selection].cluster_type.clone());
-                log_ok!(stdout, "Selected cluster: {}", available[selection].cluster_type);
+                log_ok!(
+                    stdout,
+                    "Selected cluster: {}",
+                    available[selection].cluster_type
+                );
                 writeln!(stdout)?;
+                // The same first deploy decides how the services run. Asked
+                // here because this is the one moment the CLI knows the
+                // deploy is a first one; `--compute` answers it up front.
+                if request_body.compute.is_none() {
+                    let labels: Vec<&str> =
+                        COMPUTE_PROMPT.iter().map(|(label, _)| *label).collect();
+                    let picked = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("How should its services run")
+                        .items(&labels)
+                        .default(0)
+                        .interact()?;
+                    request_body.compute = Some(COMPUTE_PROMPT[picked].1.to_string());
+                    log_ok!(stdout, "Selected compute: {}", COMPUTE_PROMPT[picked].1);
+                    writeln!(stdout)?;
+                }
                 continue;
             } else if status.as_u16() == 400 {
                 let error_text = response.text().unwrap_or_default();
@@ -1778,6 +1852,83 @@ impl CliCommand for CreateCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod compute_choice_tests {
+    use super::*;
+
+    fn deploy_cmd() -> Command {
+        CreateCommand::new().command().version("0.0.0-test")
+    }
+
+    fn request(compute: Option<&str>) -> serde_json::Value {
+        serde_json::to_value(CreateDeploymentRequest {
+            application_id: "app-1".to_string(),
+            release_version: "1.0.0".to_string(),
+            environment: "production".to_string(),
+            region: "us-west-2".to_string(),
+            distribution_config: None,
+            force_refresh: None,
+            cluster_type: None,
+            compute: compute.map(str::to_string),
+            force_single_app_deploy: None,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn the_flag_takes_each_mode_and_nothing_else() {
+        for mode in COMPUTE_CHOICES {
+            let matches = deploy_cmd()
+                .try_get_matches_from([
+                    "create",
+                    "--release",
+                    "1.0.0",
+                    "--environment",
+                    "production",
+                    "--region",
+                    "us-west-2",
+                    "--compute",
+                    mode,
+                ])
+                .unwrap();
+            assert_eq!(matches.get_one::<String>("compute").unwrap(), mode);
+        }
+        // The stored value is not what a person types.
+        assert!(
+            deploy_cmd()
+                .try_get_matches_from([
+                    "create",
+                    "--release",
+                    "1.0.0",
+                    "--environment",
+                    "production",
+                    "--region",
+                    "us-west-2",
+                    "--compute",
+                    "microvm",
+                ])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn nothing_is_sent_when_nothing_was_chosen() {
+        // An absent field is how the control plane knows to apply its own
+        // default, and how an older control plane stays unaffected.
+        assert!(request(None).get("compute").is_none());
+        assert_eq!(request(Some("always-on"))["compute"], "always-on");
+    }
+
+    #[test]
+    fn the_prompt_defaults_to_scale_to_zero_where_possible() {
+        assert_eq!(COMPUTE_PROMPT[0].1, "auto");
+        assert!(COMPUTE_PROMPT[0].0.starts_with("Scale to zero"));
+        for (_, value) in COMPUTE_PROMPT {
+            assert!(COMPUTE_CHOICES.contains(&value));
+        }
     }
 }
 

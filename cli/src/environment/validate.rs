@@ -113,11 +113,19 @@ impl CliCommand for ValidateCommand {
     }
 }
 
-pub(crate) fn report_native_gaps(gaps: &[(String, String)], stdout: &mut StandardStream) -> Result<()> {
+pub(crate) fn report_native_gaps(
+    gaps: &[(String, String)],
+    stdout: &mut StandardStream,
+) -> Result<()> {
     if gaps.is_empty() {
         return Ok(());
     }
-    log_header!(stdout, Color::Cyan, "\nRust process settings missing from .env ({}):", gaps.len());
+    log_header!(
+        stdout,
+        Color::Cyan,
+        "\nRust process settings missing from .env ({}):",
+        gaps.len()
+    );
     for (service, variable) in gaps {
         writeln!(stdout, "  {variable} (required by {service})")?;
     }

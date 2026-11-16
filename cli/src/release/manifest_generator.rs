@@ -479,19 +479,35 @@ fn project_is_rust(project: &ProjectEntry) -> bool {
 /// Native binaries that migrate a database with `--migrate`: generated PostgreSQL
 /// services read `MIGRATION_DATABASE_URL`; modules and worker consumers take the
 /// owner URL as `DATABASE_URL`. Producers never migrate, so a worker migrates once.
-fn project_native_migration(project: &ProjectEntry, binary: Option<String>) -> Option<NativeMigration> {
-    let database = project.resources.as_ref().and_then(|resources| resources.database.as_deref());
+fn project_native_migration(
+    project: &ProjectEntry,
+    binary: Option<String>,
+) -> Option<NativeMigration> {
+    let database = project
+        .resources
+        .as_ref()
+        .and_then(|resources| resources.database.as_deref());
     if !project_is_rust(project) || database.is_none_or(|database| database != "postgresql") {
         return None;
     }
     let variant = project.variant.as_deref().unwrap_or_default();
     let database_url_env = match (&project.r#type, variant) {
         (ProjectType::Service, "") => "MIGRATION_DATABASE_URL",
-        (ProjectType::Service, variant) if variant.starts_with("iam") || variant.starts_with("billing") || variant.starts_with("ecommerce") => "DATABASE_URL",
+        (ProjectType::Service, variant)
+            if variant.starts_with("iam")
+                || variant.starts_with("billing")
+                || variant.starts_with("ecommerce") =>
+        {
+            "DATABASE_URL"
+        }
         (ProjectType::Worker, _) => "DATABASE_URL",
         _ => return None,
     };
-    Some(NativeMigration { binary: binary?, args: vec!["--migrate".into()], database_url_env: database_url_env.into() })
+    Some(NativeMigration {
+        binary: binary?,
+        args: vec!["--migrate".into()],
+        database_url_env: database_url_env.into(),
+    })
 }
 
 fn project_native_binary(project: &ProjectEntry) -> Option<String> {
@@ -685,18 +701,25 @@ fn project_build_context(
 }
 
 fn project_native_worker_role(project: &ProjectEntry, role: &str) -> Option<String> {
-    if !project_is_rust(project) { return None; }
+    if !project_is_rust(project) {
+        return None;
+    }
     let metadata = project.metadata.as_ref()?;
     // Separate producer/consumer executables do not implement the legacy role flag.
-    if metadata.worker_service == Some(true) { return None; }
-    (metadata.worker_control_service == Some(true) && role == "control").then(|| "--control-service".to_owned())
+    if metadata.worker_service == Some(true) {
+        return None;
+    }
+    (metadata.worker_control_service == Some(true) && role == "control")
+        .then(|| "--control-service".to_owned())
 }
 
 fn project_worker_consumer_binary(project: &ProjectEntry) -> Option<String> {
     project_native_binary(project).map(|binary| {
         if project.metadata.as_ref().and_then(|m| m.worker_service) == Some(true) {
             format!("{binary}-worker")
-        } else { binary }
+        } else {
+            binary
+        }
     })
 }
 
@@ -980,47 +1003,47 @@ pub(crate) fn generate_release_manifest(
             };
 
             if project.metadata.as_ref().and_then(|m| m.worker_service) != Some(false) {
-            services.push(ServiceDefinition {
-                id: format!("{}-service", project.name),
-                name: format!("{}-service", project.name),
-                status: None,
-                config: ServiceConfigEnum::Service(ServiceConfig {
-                    service_type: ConfigType::Service,
-                    controllers,
-                    integrations: integrations.as_ref().map(
-                        |integrations: &Vec<IntegrationDefinition>| {
-                            integrations
-                                .iter()
-                                .map(|integration| IntegrationDefinition {
-                                    id: integration.id.clone(),
-                                    integration_type: integration.integration_type.clone(),
-                                    config: integration.config.clone(),
-                                    status: integration.status.clone(),
-                                })
-                                .collect::<Vec<IntegrationDefinition>>()
-                        },
-                    ),
-                    open_api_spec: open_api_spec.clone(),
-                    dependencies: deps.clone(),
-                    runtime_dependencies: runtime_deps.clone(),
-                    instance_size: None,
-                    hosting_type: project
-                        .metadata
-                        .as_ref()
-                        .and_then(|m| m.hosting_type.clone()),
-                    health_check: None,
-                    is_worker_service: Some(true),
-                    privileged: project.metadata.as_ref().and_then(|m| m.privileged),
-                    serves: serving_ports(project),
-                }),
-                build_context: project_build_context(app_root, manifest, project),
-                dockerfile: Some(project_dockerfile(app_root, manifest, project)),
-                runtime: project_is_rust(project).then_some(Runtime::Tokio),
-                binary: project_native_binary(project),
-                native_worker_role: project_native_worker_role(project, "control"),
-                migrate: None,
-                variant: project.variant.clone(),
-            });
+                services.push(ServiceDefinition {
+                    id: format!("{}-service", project.name),
+                    name: format!("{}-service", project.name),
+                    status: None,
+                    config: ServiceConfigEnum::Service(ServiceConfig {
+                        service_type: ConfigType::Service,
+                        controllers,
+                        integrations: integrations.as_ref().map(
+                            |integrations: &Vec<IntegrationDefinition>| {
+                                integrations
+                                    .iter()
+                                    .map(|integration| IntegrationDefinition {
+                                        id: integration.id.clone(),
+                                        integration_type: integration.integration_type.clone(),
+                                        config: integration.config.clone(),
+                                        status: integration.status.clone(),
+                                    })
+                                    .collect::<Vec<IntegrationDefinition>>()
+                            },
+                        ),
+                        open_api_spec: open_api_spec.clone(),
+                        dependencies: deps.clone(),
+                        runtime_dependencies: runtime_deps.clone(),
+                        instance_size: None,
+                        hosting_type: project
+                            .metadata
+                            .as_ref()
+                            .and_then(|m| m.hosting_type.clone()),
+                        health_check: None,
+                        is_worker_service: Some(true),
+                        privileged: project.metadata.as_ref().and_then(|m| m.privileged),
+                        serves: serving_ports(project),
+                    }),
+                    build_context: project_build_context(app_root, manifest, project),
+                    dockerfile: Some(project_dockerfile(app_root, manifest, project)),
+                    runtime: project_is_rust(project).then_some(Runtime::Tokio),
+                    binary: project_native_binary(project),
+                    native_worker_role: project_native_worker_role(project, "control"),
+                    migrate: None,
+                    variant: project.variant.clone(),
+                });
             }
 
             let worker_type_str = project_worker_type(project);
@@ -1502,14 +1525,25 @@ mod tests {
     fn worker_producer_and_consumer_have_distinct_native_roles() {
         let root = TempDir::new().unwrap();
         let mut manifest = rust_release_test_manifest();
-        let worker = manifest.projects.iter_mut().find(|project| project.r#type == ProjectType::Worker).unwrap();
+        let worker = manifest
+            .projects
+            .iter_mut()
+            .find(|project| project.r#type == ProjectType::Worker)
+            .unwrap();
         worker.metadata.as_mut().unwrap().worker_service = Some(true);
         let producer = project_native_binary(worker).unwrap();
-        assert_eq!(project_worker_consumer_binary(worker).unwrap(), format!("{producer}-worker"));
+        assert_eq!(
+            project_worker_consumer_binary(worker).unwrap(),
+            format!("{producer}-worker")
+        );
         assert!(project_native_worker_role(worker, "control").is_none());
         assert!(project_native_worker_role(worker, "consumer").is_none());
         crate::core::manifest::language::normalized(root.path(), &manifest).unwrap();
-        let worker = manifest.projects.iter_mut().find(|project| project.r#type == ProjectType::Worker).unwrap();
+        let worker = manifest
+            .projects
+            .iter_mut()
+            .find(|project| project.r#type == ProjectType::Worker)
+            .unwrap();
         worker.metadata.as_mut().unwrap().contract_export = Some(false);
         assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
     }
@@ -1519,20 +1553,40 @@ mod tests {
         let root = TempDir::new().unwrap();
         let mut manifest = rust_release_test_manifest();
         manifest.projects[0].metadata.as_mut().unwrap().language = None;
-        let normalized = crate::core::manifest::language::normalized(root.path(), &manifest).unwrap();
+        let normalized =
+            crate::core::manifest::language::normalized(root.path(), &manifest).unwrap();
         assert!(project_is_rust(&normalized.projects[0]));
-        assert!(manifest.projects[0].metadata.as_ref().unwrap().language.is_none());
+        assert!(
+            manifest.projects[0]
+                .metadata
+                .as_ref()
+                .unwrap()
+                .language
+                .is_none()
+        );
         manifest.projects[0].metadata.as_mut().unwrap().language = Some("go".into());
         assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
         manifest.projects[0].metadata.as_mut().unwrap().language = Some("rust".into());
-        manifest.projects[0].metadata.as_mut().unwrap().worker_control_service = Some(true);
+        manifest.projects[0]
+            .metadata
+            .as_mut()
+            .unwrap()
+            .worker_control_service = Some(true);
         assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
-        manifest.projects[0].metadata.as_mut().unwrap().worker_control_service = None;
+        manifest.projects[0]
+            .metadata
+            .as_mut()
+            .unwrap()
+            .worker_control_service = None;
         manifest.application_language = Some("typescript".into());
         assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
         manifest.language = Some("mixed".into());
         manifest.application_language = Some("mixed".into());
-        let worker = manifest.projects.iter_mut().find(|p| p.r#type == ProjectType::Worker).unwrap();
+        let worker = manifest
+            .projects
+            .iter_mut()
+            .find(|p| p.r#type == ProjectType::Worker)
+            .unwrap();
         worker.metadata.as_mut().unwrap().language = Some("typescript".into());
         worker.metadata.as_mut().unwrap().worker_control_service = Some(true);
         assert!(crate::core::manifest::language::normalized(root.path(), &manifest).is_err());
@@ -1659,12 +1713,15 @@ mod tests {
         assert_eq!(migration.binary, "accounts");
         assert_eq!(migration.args, ["--migrate"]);
         assert_eq!(migration.database_url_env, "MIGRATION_DATABASE_URL");
-        let consumer = project_native_migration(worker, Some("email-worker-worker".into())).unwrap();
+        let consumer =
+            project_native_migration(worker, Some("email-worker-worker".into())).unwrap();
         assert_eq!(consumer.database_url_env, "DATABASE_URL");
         let mut billing = service.clone();
         billing.variant = Some("billing-stripe".into());
         assert_eq!(
-            project_native_migration(&billing, Some("billing".into())).unwrap().database_url_env,
+            project_native_migration(&billing, Some("billing".into()))
+                .unwrap()
+                .database_url_env,
             "DATABASE_URL"
         );
         let mut storeless = service.clone();
@@ -1748,7 +1805,9 @@ mod tests {
                 let serialized = serde_json::to_value(&service).unwrap();
                 match service.id.as_str() {
                     // The legacy binary takes `--control-service`; its consumer takes no flag.
-                    "email-worker-service" => assert_eq!(serialized["nativeWorkerRole"], "--control-service"),
+                    "email-worker-service" => {
+                        assert_eq!(serialized["nativeWorkerRole"], "--control-service")
+                    }
                     _ => assert!(serialized.get("nativeWorkerRole").is_none()),
                 }
                 if legacy {

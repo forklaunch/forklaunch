@@ -84,24 +84,48 @@ fn rustfmt_source(path: &Path, source: &str) -> Result<String> {
 // selection get the current release; unknown local versions keep compatibility.
 fn supports_native_docs(directory: &Path) -> bool {
     fn workspace_version(path: &Path) -> Option<String> {
-        read_to_string(path).ok()
+        read_to_string(path)
+            .ok()
             .and_then(|source| toml::from_str::<Value>(&source).ok())
-            .and_then(|manifest| manifest.get("workspace")?.get("package")?.get("version")?.as_str().map(str::to_owned))
+            .and_then(|manifest| {
+                manifest
+                    .get("workspace")?
+                    .get("package")?
+                    .get("version")?
+                    .as_str()
+                    .map(str::to_owned)
+            })
     }
-    let Some(config) = directory.ancestors().find_map(crate::core::forklaunch_state::framework) else {
+    let Some(config) = directory
+        .ancestors()
+        .find_map(crate::core::forklaunch_state::framework)
+    else {
         return true;
     };
     let version = if let Some(path) = config.get("path").and_then(Value::as_str) {
         workspace_version(&Path::new(path).join("Cargo.toml"))
     } else {
-        config.get("version").and_then(Value::as_str).map(str::to_owned)
+        config
+            .get("version")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
     };
-    let Some(version) = version else { return false; };
+    let Some(version) = version else {
+        return false;
+    };
     let version = version.split('+').next().unwrap_or(&version);
-    let (release, prerelease) = version.split_once('-').map_or((version, false), |(release, _)| (release, true));
-    let Ok(parts) = release.split('.').map(str::parse::<u64>).collect::<Result<Vec<_>, _>>() else { return false; };
-    parts.len() == 3 && (parts.as_slice() > [0, 1, 1].as_slice()
-        || (parts == [0, 1, 1] && !prerelease))
+    let (release, prerelease) = version
+        .split_once('-')
+        .map_or((version, false), |(release, _)| (release, true));
+    let Ok(parts) = release
+        .split('.')
+        .map(str::parse::<u64>)
+        .collect::<Result<Vec<_>, _>>()
+    else {
+        return false;
+    };
+    parts.len() == 3
+        && (parts.as_slice() > [0, 1, 1].as_slice() || (parts == [0, 1, 1] && !prerelease))
 }
 
 pub(super) fn service_templates(
@@ -144,12 +168,15 @@ pub(super) fn service_templates(
         .map(|file| RenderedTemplate {
             path: dir.join(file),
             content: {
-                let source = render_rust_template(&format!("rust/project/native-service/{file}"), &data);
+                let source =
+                    render_rust_template(&format!("rust/project/native-service/{file}"), &data);
                 if file == "application.rs" && !native_docs {
                     source.replace("native::with_docs(", "native::with_openapi(")
                 } else if file == "__test__/http.rs" && !native_docs {
                     source.replace("text/html", "application/json")
-                } else { source }
+                } else {
+                    source
+                }
             },
             context: None,
         })
@@ -179,7 +206,10 @@ pub(super) fn service_templates(
             .split("pub fn contract()")
             .next()
             .unwrap()
-            .replace("use forklaunch_core::contract::{BodyContract, RouteContract};\n", "")
+            .replace(
+                "use forklaunch_core::contract::{BodyContract, RouteContract};\n",
+                ""
+            )
     );
     for (file, content) in [
         ("Cargo.toml", cargo),
@@ -334,19 +364,28 @@ pub(super) fn flatten(
                 let header = source[..entry]
                     .replace(", write_contract_artifacts", "")
                     .replace(", telemetry::otlp::TelemetryRuntime", "")
-                    .replace("use forklaunch_core::telemetry::otlp::TelemetryRuntime;\n", "");
+                    .replace(
+                        "use forklaunch_core::telemetry::otlp::TelemetryRuntime;\n",
+                        "",
+                    );
                 let lifecycle =
                     source[entry..runtime].replace("start_runtime()", "crate::worker::run()");
                 let runtime =
                     source[runtime..].replacen("async fn start_runtime()", "pub async fn run()", 1);
-                let std_imports = match (lifecycle.contains("env::"), lifecycle.contains("dyn Error")) {
-                    (true, true) => "use std::{env, error::Error};\n",
-                    (true, false) => "use std::env;\n",
-                    (false, true) => "use std::error::Error;\n",
-                    (false, false) => "",
-                };
-                let core = match (lifecycle.contains("config::"), lifecycle.contains("TelemetryRuntime::")) {
-                    (true, true) => "use forklaunch_core::{config, telemetry::otlp::TelemetryRuntime};\n",
+                let std_imports =
+                    match (lifecycle.contains("env::"), lifecycle.contains("dyn Error")) {
+                        (true, true) => "use std::{env, error::Error};\n",
+                        (true, false) => "use std::env;\n",
+                        (false, true) => "use std::error::Error;\n",
+                        (false, false) => "",
+                    };
+                let core = match (
+                    lifecycle.contains("config::"),
+                    lifecycle.contains("TelemetryRuntime::"),
+                ) {
+                    (true, true) => {
+                        "use forklaunch_core::{config, telemetry::otlp::TelemetryRuntime};\n"
+                    }
                     (true, false) => "use forklaunch_core::config;\n",
                     (false, true) => "use forklaunch_core::telemetry::otlp::TelemetryRuntime;\n",
                     (false, false) => "",
@@ -451,8 +490,13 @@ pub(super) fn generate_router(
     if postgres {
         let controller = contracts_layout::source(dir, &format!("api/controllers/{module}.rs"));
         if let Ok(source) = read_to_string(&controller) {
-            let compact: String = source.chars().filter(|character| !character.is_whitespace()).collect();
-            if compact.contains("state.repository.list().map_err(|_|EndpointError::InvalidResponse)?") {
+            let compact: String = source
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
+            if compact
+                .contains("state.repository.list().map_err(|_|EndpointError::InvalidResponse)?")
+            {
                 bail!(
                     "Existing PostgreSQL router {} calls the in-memory repository list method. Its source was preserved. Update the handler and response schema to a tenant-scoped async count, or implement an explicit audited projection for protected records before reinitializing this router.",
                     controller.display()
@@ -460,21 +504,28 @@ pub(super) fn generate_router(
             }
         }
     }
-    let (operation, binding, label, description, records_field, query, response_fields) = if postgres {
-        (
-            "summary", "Summary", "Summarize", "Summarize tenant-scoped",
-            "",
-            "    // Protected records require an application-owned projection with explicit audited disclosure.\n    // This endpoint exposes only the current tenant's count.\n    let total = state.repository.count().await.map_err(|_| EndpointError::Unavailable)?;\n",
-            "",
-        )
-    } else {
-        (
-            "list", "List", "List", "List",
-            ", pub records: Vec<super::Record>",
-            "    let records = state.repository.list().map_err(|_| EndpointError::InvalidResponse)?;\n    let total = records.len();\n",
-            ", records",
-        )
-    };
+    let (operation, binding, label, description, records_field, query, response_fields) =
+        if postgres {
+            (
+                "summary",
+                "Summary",
+                "Summarize",
+                "Summarize tenant-scoped",
+                "",
+                "    // Protected records require an application-owned projection with explicit audited disclosure.\n    // This endpoint exposes only the current tenant's count.\n    let total = state.repository.count().await.map_err(|_| EndpointError::Unavailable)?;\n",
+                "",
+            )
+        } else {
+            (
+                "list",
+                "List",
+                "List",
+                "List",
+                ", pub records: Vec<super::Record>",
+                "    let records = state.repository.list().map_err(|_| EndpointError::InvalidResponse)?;\n    let total = records.len();\n",
+                ", records",
+            )
+        };
     let mut files = vec![
         (
             format!("domain/schemas/{module}.rs"),
@@ -501,13 +552,28 @@ pub(super) fn generate_router(
             ),
         ),
     ];
-    if contracts_layout::directory(dir).is_some_and(|path| path == contracts_layout::new_host_directory(dir)) {
-        let contract_path=format!("api/contracts/{module}.rs");
-        let declaration=contracts_layout::inline_contract(&files.iter().find(|(path,_)|path==&contract_path).unwrap().1);
-        files.retain(|(path,_)|path!=&contract_path);
-        for (path,content) in &mut files {
-            if path==&format!("api/controllers/{module}.rs") { content.push_str(&format!("\n{declaration}")); }
-            if path==&format!("api/routes/{module}.rs") { *content=content.replace(&format!("contracts::{module}::"),&format!("crate::api::controllers::{module}::contract::")); }
+    if contracts_layout::directory(dir)
+        .is_some_and(|path| path == contracts_layout::new_host_directory(dir))
+    {
+        let contract_path = format!("api/contracts/{module}.rs");
+        let declaration = contracts_layout::inline_contract(
+            &files
+                .iter()
+                .find(|(path, _)| path == &contract_path)
+                .unwrap()
+                .1,
+        );
+        files.retain(|(path, _)| path != &contract_path);
+        for (path, content) in &mut files {
+            if path == &format!("api/controllers/{module}.rs") {
+                content.push_str(&format!("\n{declaration}"));
+            }
+            if path == &format!("api/routes/{module}.rs") {
+                *content = content.replace(
+                    &format!("contracts::{module}::"),
+                    &format!("crate::api::controllers::{module}::contract::"),
+                );
+            }
         }
     }
     for (path, content) in files {
@@ -548,10 +614,16 @@ fn rewrite_router_exports(
         .iter()
         .map(|module| format!("let router = {module}::mount(router)?;\n"))
         .collect();
-    let capability_mount = if read_to_string(dir.join("api/routes/mod.rs")).is_ok_and(|source| source.contains(".with_managed_capabilities()")) {
+    let capability_mount = if read_to_string(dir.join("api/routes/mod.rs"))
+        .is_ok_and(|source| source.contains(".with_managed_capabilities()"))
+    {
         ".with_managed_capabilities()?"
-    } else { "" };
-    let capability_import = if capability_mount.is_empty() { "" } else {
+    } else {
+        ""
+    };
+    let capability_import = if capability_mount.is_empty() {
+        ""
+    } else {
         "use crate::capabilities::ManagedCapabilitiesRouterExt;\n"
     };
     let mut routes = format!(
@@ -562,20 +634,36 @@ fn rewrite_router_exports(
         routes = super::agent::routes_with_agent(&routes)?;
     }
     write_text_file(&dir.join("api/routes/mod.rs"), &routes, dryrun, stdout)?;
-    if contracts_layout::directory(dir).is_some_and(|path|path==contracts_layout::new_host_directory(dir)) {
-        let cargo:Value=toml::from_str(&read_to_string(dir.join("Cargo.toml"))?)?;
-        let name=cargo["package"]["name"].as_str().context("package name")?;
-        if dir.join("api/controllers/platform_events.rs").exists() { modules.push("platform_events".into()); }
-        let mut host=contracts_layout::host_source(name,&modules);
-        if dir.join("domain/schemas/jobs.rs").is_file() {host.push_str("\n#[path=\"../../domain/schemas/jobs.rs\"] pub mod jobs;\n");}
-        if dir.join("agent/mod.rs").is_file() { host = super::agent::host_with_agent(&host)?; }
-        return write_text_file(&contracts_layout::new_host_directory(dir).join("lib.rs"),&host,dryrun,stdout);
+    if contracts_layout::directory(dir)
+        .is_some_and(|path| path == contracts_layout::new_host_directory(dir))
+    {
+        let cargo: Value = toml::from_str(&read_to_string(dir.join("Cargo.toml"))?)?;
+        let name = cargo["package"]["name"].as_str().context("package name")?;
+        if dir.join("api/controllers/platform_events.rs").exists() {
+            modules.push("platform_events".into());
+        }
+        let mut host = contracts_layout::host_source(name, &modules);
+        if dir.join("domain/schemas/jobs.rs").is_file() {
+            host.push_str("\n#[path=\"../../domain/schemas/jobs.rs\"] pub mod jobs;\n");
+        }
+        if dir.join("agent/mod.rs").is_file() {
+            host = super::agent::host_with_agent(&host)?;
+        }
+        return write_text_file(
+            &contracts_layout::new_host_directory(dir).join("lib.rs"),
+            &host,
+            dryrun,
+            stdout,
+        );
     }
     let contracts: String = modules
         .iter()
         .map(|module| format!("{module}::contract(),"))
         .collect();
-    let bindings: String = modules.iter().map(|module| format!("bindings.extend({module}::binding_manifest()?);\n")).collect();
+    let bindings: String = modules
+        .iter()
+        .map(|module| format!("bindings.extend({module}::binding_manifest()?);\n"))
+        .collect();
     // Preserve service identity from the existing registry rather than assuming
     // the package and directory still have their original names.
     let registry = read_to_string(contracts_layout::source(dir, "api/contracts/mod.rs"))?;
@@ -681,8 +769,10 @@ pub(super) fn framework_paths(
     root: &Path,
     mut templates: Vec<RenderedTemplate>,
 ) -> Vec<RenderedTemplate> {
-    let paths = regex::Regex::new(r#"path\s*=\s*"[^"]*(\.forklaunch/framework-rs|\.forklaunch/blueprint-rs)(/[^"]*)?""#)
-        .expect("fixed dependency path pattern");
+    let paths = regex::Regex::new(
+        r#"path\s*=\s*"[^"]*(\.forklaunch/framework-rs|\.forklaunch/blueprint-rs)(/[^"]*)?""#,
+    )
+    .expect("fixed dependency path pattern");
     for template in &mut templates {
         if template
             .path
@@ -760,8 +850,14 @@ pub(super) fn rename_project(dir: &Path, old: &str, new: &str) -> Result<()> {
                     &format!("\"{new}-contracts\""),
                 )
                 .replace(&format!("\"{old}-worker\""), &format!("\"{new}-worker\""))
-                .replace(&format!("--bin {old}-worker"), &format!("--bin {new}-worker"))
-                .replace(&format!("../{old}-contracts"), &format!("../{new}-contracts"))
+                .replace(
+                    &format!("--bin {old}-worker"),
+                    &format!("--bin {new}-worker"),
+                )
+                .replace(
+                    &format!("../{old}-contracts"),
+                    &format!("../{new}-contracts"),
+                )
                 .replace(&format!("rust/{old}.rs\""), &format!("rust/{new}.rs\""))
                 .replace(&format!("\"{old}-sdk\""), &format!("\"{new}-sdk\""))
                 .replace(
@@ -776,8 +872,14 @@ pub(super) fn rename_project(dir: &Path, old: &str, new: &str) -> Result<()> {
                     &format!("PACKAGE := {old}\n"),
                     &format!("PACKAGE := {new}\n"),
                 )
-                .replace(&format!("PACKAGE := {old}-sdk\n"), &format!("PACKAGE := {new}-sdk\n"))
-                .replace(&format!("\"{old} listening on "), &format!("\"{new} listening on "));
+                .replace(
+                    &format!("PACKAGE := {old}-sdk\n"),
+                    &format!("PACKAGE := {new}-sdk\n"),
+                )
+                .replace(
+                    &format!("\"{old} listening on "),
+                    &format!("\"{new} listening on "),
+                );
             if changed != source {
                 write(path, changed)?;
             }
@@ -787,7 +889,10 @@ pub(super) fn rename_project(dir: &Path, old: &str, new: &str) -> Result<()> {
             let changed = source
                 .replacen(&format!("# {old} "), &format!("# {new} "), 1)
                 .replace(&format!("--bin {old}`"), &format!("--bin {new}`"))
-                .replace(&format!("--bin {old}-worker`"), &format!("--bin {new}-worker`"))
+                .replace(
+                    &format!("--bin {old}-worker`"),
+                    &format!("--bin {new}-worker`"),
+                )
                 .replace(&format!("-p {old}`"), &format!("-p {new}`"));
             if changed != source {
                 write(path, changed)?;
@@ -805,13 +910,30 @@ mod tests {
     fn rename_updates_startup_message_and_sdk_package_task() {
         let root = tempfile::tempdir().unwrap();
         create_dir_all(root.path().join("sdk/rust")).unwrap();
-        write(root.path().join("bootstrapper.rs"), "println!(\"notes listening on http://{}\", address);\n").unwrap();
-        write(root.path().join("sdk/rust/Makefile"), "PACKAGE := notes-sdk\n").unwrap();
+        write(
+            root.path().join("bootstrapper.rs"),
+            "println!(\"notes listening on http://{}\", address);\n",
+        )
+        .unwrap();
+        write(
+            root.path().join("sdk/rust/Makefile"),
+            "PACKAGE := notes-sdk\n",
+        )
+        .unwrap();
         write(root.path().join("README.md"), "# notes worker\n\nRun `cargo run --bin notes` and `cargo run --bin notes-worker`; notes stay.\n").unwrap();
         rename_project(root.path(), "notes", "records").unwrap();
-        assert_eq!(read_to_string(root.path().join("README.md")).unwrap(), "# records worker\n\nRun `cargo run --bin records` and `cargo run --bin records-worker`; notes stay.\n");
-        assert_eq!(read_to_string(root.path().join("bootstrapper.rs")).unwrap(), "println!(\"records listening on http://{}\", address);\n");
-        assert_eq!(read_to_string(root.path().join("sdk/rust/Makefile")).unwrap(), "PACKAGE := records-sdk\n");
+        assert_eq!(
+            read_to_string(root.path().join("README.md")).unwrap(),
+            "# records worker\n\nRun `cargo run --bin records` and `cargo run --bin records-worker`; notes stay.\n"
+        );
+        assert_eq!(
+            read_to_string(root.path().join("bootstrapper.rs")).unwrap(),
+            "println!(\"records listening on http://{}\", address);\n"
+        );
+        assert_eq!(
+            read_to_string(root.path().join("sdk/rust/Makefile")).unwrap(),
+            "PACKAGE := records-sdk\n"
+        );
     }
 
     #[test]
@@ -958,22 +1080,50 @@ mod tests {
                 let config = if local {
                     let source = root.join("custom-framework");
                     create_dir_all(&source).unwrap();
-                    write(source.join("Cargo.toml"), format!("[workspace.package]\nversion={:?}\n", version)).unwrap();
-                    format!("path={}\n", toml::Value::String(source.to_string_lossy().into_owned()))
-                } else { format!("version={:?}\n", version) };
-                { let manifest = root.join(".forklaunch/manifest.toml"); let prior = std::fs::read_to_string(&manifest).unwrap_or_default(); std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", config)).unwrap(); }
+                    write(
+                        source.join("Cargo.toml"),
+                        format!("[workspace.package]\nversion={:?}\n", version),
+                    )
+                    .unwrap();
+                    format!(
+                        "path={}\n",
+                        toml::Value::String(source.to_string_lossy().into_owned())
+                    )
+                } else {
+                    format!("version={:?}\n", version)
+                };
+                {
+                    let manifest = root.join(".forklaunch/manifest.toml");
+                    let prior = std::fs::read_to_string(&manifest).unwrap_or_default();
+                    std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", config))
+                        .unwrap();
+                }
             }
             let directory = root.join("modules/team/notes");
-            let render = || service_templates(&directory, "notes", "Notes").into_iter()
-                .find(|file| file.path == directory.join("application.rs")).unwrap().content;
+            let render = || {
+                service_templates(&directory, "notes", "Notes")
+                    .into_iter()
+                    .find(|file| file.path == directory.join("application.rs"))
+                    .unwrap()
+                    .content
+            };
             let source = render();
-            assert!(source.contains(&format!("native::{expected}(")), "{version:?} local={local}");
-            assert!(!directory.exists(), "Rendering must not create project files");
+            assert!(
+                source.contains(&format!("native::{expected}(")),
+                "{version:?} local={local}"
+            );
+            assert!(
+                !directory.exists(),
+                "Rendering must not create project files"
+            );
             create_dir_all(&directory).unwrap();
             let authored = "// Application-owned composition\npub const CUSTOM: bool = true;\n";
             write(directory.join("application.rs"), authored).unwrap();
             assert_eq!(render(), source);
-            assert_eq!(read_to_string(directory.join("application.rs")).unwrap(), authored);
+            assert_eq!(
+                read_to_string(directory.join("application.rs")).unwrap(),
+                authored
+            );
         }
     }
 
@@ -986,16 +1136,30 @@ mod tests {
                 let selection = if local {
                     let checkout = root.path().join("framework-rs");
                     create_dir_all(&checkout).unwrap();
-                    write(checkout.join("Cargo.toml"), format!("[workspace.package]\nversion={version:?}\n")).unwrap();
+                    write(
+                        checkout.join("Cargo.toml"),
+                        format!("[workspace.package]\nversion={version:?}\n"),
+                    )
+                    .unwrap();
                     format!("path = {:?}", checkout.to_string_lossy())
                 } else {
                     format!("version = {version:?}")
                 };
-                write(root.path().join(".forklaunch/manifest.toml"), format!("[framework]\n{selection}\n")).unwrap();
+                write(
+                    root.path().join(".forklaunch/manifest.toml"),
+                    format!("[framework]\n{selection}\n"),
+                )
+                .unwrap();
                 let directory = root.path().join("src/notes");
-                let source = service_templates(&directory, "notes", "Notes").into_iter()
-                    .find(|file| file.path == directory.join("application.rs")).unwrap().content;
-                assert!(source.contains(&format!("native::{expected}(")), "local={local} {version}");
+                let source = service_templates(&directory, "notes", "Notes")
+                    .into_iter()
+                    .find(|file| file.path == directory.join("application.rs"))
+                    .unwrap()
+                    .content;
+                assert!(
+                    source.contains(&format!("native::{expected}(")),
+                    "local={local} {version}"
+                );
             }
         }
     }
@@ -1022,11 +1186,19 @@ mod tests {
         assert_eq!(host["lib"]["path"].as_str(), Some("lib.rs"));
         assert_eq!(host["package"]["publish"].as_bool(), Some(false));
         assert!(!root.with_file_name("notes-contracts").exists());
-        let host_source=read_to_string(root.join(".forklaunch/contracts/lib.rs")).unwrap();
+        let host_source = read_to_string(root.join(".forklaunch/contracts/lib.rs")).unwrap();
         assert!(host_source.contains("../../domain/schemas/mod.rs"));
         assert!(host_source.contains("../../api/controllers/health.rs"));
-        assert!(read_to_string(root.join("domain/schemas/mod.rs")).unwrap().contains("pub struct HealthResponse"));
-        assert!(read_to_string(root.join("api/controllers/health.rs")).unwrap().contains("#[forklaunch_core::contract::api]"));
+        assert!(
+            read_to_string(root.join("domain/schemas/mod.rs"))
+                .unwrap()
+                .contains("pub struct HealthResponse")
+        );
+        assert!(
+            read_to_string(root.join("api/controllers/health.rs"))
+                .unwrap()
+                .contains("#[forklaunch_core::contract::api]")
+        );
         assert!(!root.join("api/contracts").exists());
         let build = read_to_string(root.as_path().join("build.rs")).unwrap();
         let declaration = build
@@ -1039,9 +1211,7 @@ mod tests {
                 .contains("pub fn declared_assets")
         );
         let server = read_to_string(root.as_path().join("server.rs")).unwrap();
-        assert!(
-            server.contains("application::http(state)?.serve(listener, shutdown).await")
-        );
+        assert!(server.contains("application::http(state)?.serve(listener, shutdown).await"));
         let application = read_to_string(root.as_path().join("application.rs")).unwrap();
         assert!(application.contains("NativeApplication::new("));
         assert!(!server.contains("server::mount_http("));
@@ -1078,7 +1248,11 @@ mod tests {
         generate_router(root.as_path(), "comments", false, &mut stdout).unwrap();
         let contract = read_to_string(root.join("api/controllers/comments.rs")).unwrap();
         assert!(contract.contains("#[forklaunch_core::contract::api]"));
-        assert!(read_to_string(root.as_path().join("api/routes/comments.rs")).unwrap().contains("List::bind(handle)"));
+        assert!(
+            read_to_string(root.as_path().join("api/routes/comments.rs"))
+                .unwrap()
+                .contains("List::bind(handle)")
+        );
         let controller = root.as_path().join("api/controllers/comments.rs");
         let customized = read_to_string(&controller)
             .unwrap()
@@ -1086,7 +1260,14 @@ mod tests {
         write(&controller, &customized).unwrap();
         generate_router(root.as_path(), "comments", false, &mut stdout).unwrap();
         assert_eq!(read_to_string(&controller).unwrap(), customized);
-        change_router(root.as_path(), "comments", Some("replies"), false, &mut stdout).unwrap();
+        change_router(
+            root.as_path(),
+            "comments",
+            Some("replies"),
+            false,
+            &mut stdout,
+        )
+        .unwrap();
         assert!(
             read_to_string(root.as_path().join("api/controllers/replies.rs"))
                 .unwrap()
@@ -1097,7 +1278,8 @@ mod tests {
                 .unwrap()
                 .contains("replies::contract::registry()")
         );
-        let aggregate = read_to_string(contracts_layout::new_host_directory(&root).join("lib.rs")).unwrap();
+        let aggregate =
+            read_to_string(contracts_layout::new_host_directory(&root).join("lib.rs")).unwrap();
         assert_eq!(aggregate.matches("pub fn binding_manifest()").count(), 1);
         assert!(aggregate.contains("replies::contract::binding_manifest()?"));
         assert!(aggregate.contains("health::contract::binding_manifest()?"));
@@ -1128,25 +1310,42 @@ mod tests {
             let mut stdout = StandardStream::stdout(ColorChoice::Never);
             generate_router(root.path(), "users", false, &mut stdout).unwrap();
             let controller = read_to_string(root.path().join("api/controllers/users.rs")).unwrap();
-            let compact: String = controller.chars().filter(|character| !character.is_whitespace()).collect();
+            let compact: String = controller
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
             assert!(compact.contains("state.repository.count().await"));
             assert!(controller.contains("EndpointError::Unavailable"));
             assert!(controller.contains("explicit audited disclosure"));
             assert!(controller.contains("pub fn summary()"));
             assert!(controller.contains("Summarize Users"));
-            for forbidden in ["repository.list()", "protected_name(", ".reveal(", "records:"] {
+            for forbidden in [
+                "repository.list()",
+                "protected_name(",
+                ".reveal(",
+                "records:",
+            ] {
                 assert!(!compact.contains(forbidden), "{forbidden}");
             }
             let schema = read_to_string(root.path().join("domain/schemas/users.rs")).unwrap();
             assert!(schema.contains("pub summary: super::RecordSummary"));
             assert!(!schema.contains("records"));
             let route = read_to_string(root.path().join("api/routes/users.rs")).unwrap();
-            let route: String = route.chars().filter(|character| !character.is_whitespace()).collect();
-            assert!(route.contains("summary:crate::api::controllers::users::contract::Summary::bind(handle)"));
-            let custom = format!("{controller}\n// Application-owned audited projection belongs here.\n");
+            let route: String = route
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
+            assert!(route.contains(
+                "summary:crate::api::controllers::users::contract::Summary::bind(handle)"
+            ));
+            let custom =
+                format!("{controller}\n// Application-owned audited projection belongs here.\n");
             write(root.path().join("api/controllers/users.rs"), &custom).unwrap();
             generate_router(root.path(), "users", false, &mut stdout).unwrap();
-            assert_eq!(read_to_string(root.path().join("api/controllers/users.rs")).unwrap(), custom);
+            assert_eq!(
+                read_to_string(root.path().join("api/controllers/users.rs")).unwrap(),
+                custom
+            );
             change_router(root.path(), "users", Some("members"), false, &mut stdout).unwrap();
             let renamed = read_to_string(root.path().join("api/controllers/members.rs")).unwrap();
             assert!(renamed.contains("Summarize Members"));
@@ -1158,7 +1357,10 @@ mod tests {
     #[test]
     fn postgres_router_rejects_legacy_memory_handler_without_overwriting_sources() {
         let root = tempfile::tempdir().unwrap();
-        materialize(root.path(), service_templates(root.path(), "notes", "Notes"));
+        materialize(
+            root.path(),
+            service_templates(root.path(), "notes", "Notes"),
+        );
         let mut stdout = StandardStream::stdout(ColorChoice::Never);
         generate_router(root.path(), "users", false, &mut stdout).unwrap();
         let templates = service_templates(root.path(), "notes", "Notes");
@@ -1167,16 +1369,31 @@ mod tests {
             service_database::templates(root.path(), "notes", templates).unwrap(),
         );
         let files = [
-            "api/controllers/users.rs", "domain/schemas/users.rs", "api/routes/users.rs",
-            "api/controllers/mod.rs", "domain/schemas/mod.rs", "api/routes/mod.rs",
+            "api/controllers/users.rs",
+            "domain/schemas/users.rs",
+            "api/routes/users.rs",
+            "api/controllers/mod.rs",
+            "domain/schemas/mod.rs",
+            "api/routes/mod.rs",
             ".forklaunch/contracts/lib.rs",
         ];
-        let before: Vec<_> = files.iter().map(|path| read_to_string(root.path().join(path)).unwrap()).collect();
+        let before: Vec<_> = files
+            .iter()
+            .map(|path| read_to_string(root.path().join(path)).unwrap())
+            .collect();
         let error = generate_router(root.path(), "users", false, &mut stdout).unwrap_err();
-        assert!(error.to_string().contains("in-memory repository list method"));
+        assert!(
+            error
+                .to_string()
+                .contains("in-memory repository list method")
+        );
         assert!(error.to_string().contains("source was preserved"));
         for (path, original) in files.iter().zip(before) {
-            assert_eq!(read_to_string(root.path().join(path)).unwrap(), original, "{path}");
+            assert_eq!(
+                read_to_string(root.path().join(path)).unwrap(),
+                original,
+                "{path}"
+            );
         }
     }
 
@@ -1228,7 +1445,11 @@ pub(super) fn convert_shape(dir: &Path, name: &str, kind: RustProjectKind) -> Re
     let description = cargo_description(&dir.join("Cargo.toml"))?.unwrap_or_default();
     let templates = if kind == RustProjectKind::Service {
         let relative = dir.strip_prefix(&root)?;
-        add_cargo_member(&root, &format!("{}/.forklaunch/contracts", relative.display()), false)?;
+        add_cargo_member(
+            &root,
+            &format!("{}/.forklaunch/contracts", relative.display()),
+            false,
+        )?;
         add_cargo_member(&root, &format!("{}/sdk/rust", relative.display()), false)?;
         service_templates(dir, name, &description)
     } else {
@@ -1249,7 +1470,11 @@ pub(super) fn apply_conversion(
 ) -> Result<()> {
     let previous: toml::Value = toml::from_str(&read_to_string(dir.join("Cargo.toml"))?)?;
     for mut file in templates {
-        let relative = file.path.strip_prefix(dir).unwrap_or(&file.path).to_string_lossy();
+        let relative = file
+            .path
+            .strip_prefix(dir)
+            .unwrap_or(&file.path)
+            .to_string_lossy();
         if relative == "Cargo.toml" {
             let mut cargo: toml::Value = toml::from_str(&file.content)?;
             if let Some(metadata) = previous

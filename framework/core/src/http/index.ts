@@ -14,6 +14,8 @@ export * from './whatsappClient';
 export * from './voiceClient';
 export * from './paymentsClient';
 export * from './discriminateAuthMethod';
+export * from './hmacReplayProtection';
+export * from './jwtAlgorithms';
 export * from './guards/isForklaunchRequest';
 export * from './guards/isForklaunchRouter';
 export * from './handlers/delete';

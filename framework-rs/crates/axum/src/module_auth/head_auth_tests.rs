@@ -10,6 +10,7 @@ use forklaunch_core::contract::{HmacAuth, RouteContract};
 use forklaunch_core::http::{FrameworkResponse, LocalRouter};
 use tower::ServiceExt;
 const SECRET: &[u8] = b"head-hmac-fixture-secret";
+static NONCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 fn route() -> RouteContract {
     RouteContract::get("Read", "Read", "/read")
         .with_auth(AuthConfig::Hmac(HmacAuth::new()))
@@ -25,7 +26,11 @@ fn sign(method: &str) -> String {
         "/read",
         SignedBody::Absent,
         &now,
-        "nonce",
+        // A fresh nonce per request: a signed request is accepted only once.
+        &format!(
+            "nonce-{}",
+            NONCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ),
     )
     .unwrap()
 }

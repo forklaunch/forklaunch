@@ -380,7 +380,8 @@ impl Resolver {
                 package == "forklaunch-axum" && path[1..] == ["native", expected]
             }
             "routing::with_openapi" | "routing::with_docs" => {
-                package == "forklaunch-axum" && path[1..] == ["native", expected.strip_prefix("routing::").unwrap()]
+                package == "forklaunch-axum"
+                    && path[1..] == ["native", expected.strip_prefix("routing::").unwrap()]
             }
             _ => expected
                 .strip_prefix("routing::")

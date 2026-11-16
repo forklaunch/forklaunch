@@ -21,10 +21,12 @@ fn retired_production_script(script: &str) -> bool {
 /// beside a Rust image, otherwise `Dockerfile`, when it carries a ForkLaunch
 /// stamp. `Some(false)` means it was edited after generation.
 pub(crate) fn managed_image(root: &Path) -> Option<(PathBuf, bool)> {
-    ["Dockerfile.typescript", "Dockerfile"].into_iter().find_map(|name| {
-        let path = root.join(name);
-        forklaunch_state::file_stamped(&path).map(|unchanged| (path, unchanged))
-    })
+    ["Dockerfile.typescript", "Dockerfile"]
+        .into_iter()
+        .find_map(|name| {
+            let path = root.join(name);
+            forklaunch_state::file_stamped(&path).map(|unchanged| (path, unchanged))
+        })
 }
 
 /// The production plan embedded in a generated Dockerfile.
@@ -41,7 +43,13 @@ fn plan_services(plan: &JsonValue) -> BTreeMap<String, (String, String)> {
         .into_iter()
         .flatten()
         .filter_map(|(name, process)| {
-            Some((name.clone(), (process["directory"].as_str()?.to_owned(), process["entry"].as_str()?.to_owned())))
+            Some((
+                name.clone(),
+                (
+                    process["directory"].as_str()?.to_owned(),
+                    process["entry"].as_str()?.to_owned(),
+                ),
+            ))
         })
         .collect()
 }
@@ -62,25 +70,45 @@ pub(crate) fn planned_processes(root: &Path) -> BTreeMap<String, (String, String
 pub(crate) fn summary(root: &Path) -> Option<(JsonValue, Option<JsonValue>, bool)> {
     let (path, unchanged) = managed_image(root)?;
     let manifest = read_manifest_value(&root.join(".forklaunch/manifest.toml")).ok()?;
-    let runtime = manifest.get("runtime").and_then(Value::as_str).unwrap_or("node").to_owned();
+    let runtime = manifest
+        .get("runtime")
+        .and_then(Value::as_str)
+        .unwrap_or("node")
+        .to_owned();
     let image = format!("{}-typescript:local", rust_app_name(root).ok()?);
-    let plan = read_to_string(&path).ok().and_then(|source| embedded_plan(&source));
-    let processes = plan.as_ref().map_or_else(|| json!({}), |plan| plan["services"].clone());
-    Some((json!({"image": image, "runtime": runtime, "processes": processes}), plan, unchanged))
+    let plan = read_to_string(&path)
+        .ok()
+        .and_then(|source| embedded_plan(&source));
+    let processes = plan
+        .as_ref()
+        .map_or_else(|| json!({}), |plan| plan["services"].clone());
+    Some((
+        json!({"image": image, "runtime": runtime, "processes": processes}),
+        plan,
+        unchanged,
+    ))
 }
 
 /// Compose services running the generated image, by name, with the workspace
 /// directory and entry (`server`, `worker` or `migrate`) of each.
-pub(crate) fn managed_processes(compose: &JsonValue, runtimes: &[&str]) -> BTreeMap<String, (String, String)> {
+pub(crate) fn managed_processes(
+    compose: &JsonValue,
+    runtimes: &[&str],
+) -> BTreeMap<String, (String, String)> {
     let mut processes = BTreeMap::new();
     let Some(services) = compose["services"].as_object() else {
         return processes;
     };
     for (name, service) in services {
-        let Some(command) = service["command"].as_array().filter(|command| command.len() == 3) else {
+        let Some(command) = service["command"]
+            .as_array()
+            .filter(|command| command.len() == 3)
+        else {
             continue;
         };
-        if !command[0].as_str().is_some_and(|runtime| runtimes.contains(&runtime))
+        if !command[0]
+            .as_str()
+            .is_some_and(|runtime| runtimes.contains(&runtime))
             || command[1] != "--enable-source-maps"
         {
             continue;
@@ -93,7 +121,9 @@ pub(crate) fn managed_processes(compose: &JsonValue, runtimes: &[&str]) -> BTree
         else {
             continue;
         };
-        if matches!(entry, "server" | "worker" | "migrate") && service["working_dir"] == format!("/app/{directory}") {
+        if matches!(entry, "server" | "worker" | "migrate")
+            && service["working_dir"] == format!("/app/{directory}")
+        {
             processes.insert(name.clone(), (directory.to_owned(), entry.to_owned()));
         }
     }
@@ -111,11 +141,16 @@ fn safe_bun_workspace_path(relative: &str) -> bool {
 }
 
 fn bun_sdk_runtime_copy(relative: &str) -> Result<String> {
-    anyhow::ensure!(safe_bun_workspace_path(relative), "Unsupported Bun SDK workspace path");
+    anyhow::ensure!(
+        safe_bun_workspace_path(relative),
+        "Unsupported Bun SDK workspace path"
+    );
     // Discover packages emitted after image planning, while copying only their
     // manifests and compiled artifacts. Source and installed dependencies stay
     // out of the production assembly, just as for the static package inventory.
-    Ok(format!(r#"find {relative} -type d -name node_modules -prune -o -type f -name package.json -print | while IFS= read -r manifest; do directory="${{manifest%/package.json}}"; mkdir -p "/out/$directory"; cp "$manifest" "/out/$directory/"; for artifact in dist lib production; do if [ -d "$directory/$artifact" ]; then cp -R "$directory/$artifact" "/out/$directory/"; fi; done; done"#))
+    Ok(format!(
+        r#"find {relative} -type d -name node_modules -prune -o -type f -name package.json -print | while IFS= read -r manifest; do directory="${{manifest%/package.json}}"; mkdir -p "/out/$directory"; cp "$manifest" "/out/$directory/"; for artifact in dist lib production; do if [ -d "$directory/$artifact" ]; then cp -R "$directory/$artifact" "/out/$directory/"; fi; done; done"#
+    ))
 }
 
 pub(super) fn preflight(root: &Path) -> Result<()> {
@@ -124,7 +159,10 @@ pub(super) fn preflight(root: &Path) -> Result<()> {
             unchanged,
             "Generated TypeScript Dockerfile was modified; reconcile it before changing projects"
         );
-        let ignore = path.with_file_name(format!("{}.dockerignore", path.file_name().unwrap().to_string_lossy()));
+        let ignore = path.with_file_name(format!(
+            "{}.dockerignore",
+            path.file_name().unwrap().to_string_lossy()
+        ));
         anyhow::ensure!(
             forklaunch_state::file_stamped(&ignore) != Some(false),
             "Generated TypeScript ignore rules were modified; reconcile before changing projects"
@@ -169,7 +207,12 @@ pub(super) fn preflight_runtime(root: &Path) -> Result<()> {
     for (name, (directory, entry)) in &processes {
         let service = &compose["services"][name];
         anyhow::ensure!(
-            service["command"] == json!([runtime, "--enable-source-maps", format!("/app/{directory}/production/{entry}.mjs")])
+            service["command"]
+                == json!([
+                    runtime,
+                    "--enable-source-maps",
+                    format!("/app/{directory}/production/{entry}.mjs")
+                ])
                 && service["working_dir"] == format!("/app/{directory}")
                 && service.get("entrypoint").is_none(),
             "Customized production process {name} must be reconciled before changing runtime"
@@ -177,14 +220,23 @@ pub(super) fn preflight_runtime(root: &Path) -> Result<()> {
         let migration = format!("{directory}-migrate");
         if let Some(service) = compose["services"].get(&migration) {
             anyhow::ensure!(
-                service["command"] == json!([runtime, "--enable-source-maps", format!("/app/{directory}/production/migrate.mjs")]),
+                service["command"]
+                    == json!([
+                        runtime,
+                        "--enable-source-maps",
+                        format!("/app/{directory}/production/migrate.mjs")
+                    ]),
                 "Customized migration process must be reconciled before changing runtime"
             );
         }
     }
     let migrations: BTreeSet<(String, String)> = processes
         .values()
-        .filter(|(directory, _)| compose["services"].get(format!("{directory}-migrate")).is_some())
+        .filter(|(directory, _)| {
+            compose["services"]
+                .get(format!("{directory}-migrate"))
+                .is_some()
+        })
         .map(|(directory, _)| (directory.clone(), "migrate".to_owned()))
         .collect();
     for (directory, entry) in processes.into_values().chain(migrations) {
@@ -197,7 +249,8 @@ pub(super) fn preflight_runtime(root: &Path) -> Result<()> {
             (format!("start:production:{entry}"), entry.as_str())
         };
         anyhow::ensure!(
-            package["scripts"][&key] == format!("{runtime} --enable-source-maps production/{file}.mjs"),
+            package["scripts"][&key]
+                == format!("{runtime} --enable-source-maps production/{file}.mjs"),
             "Customized production script {key} in {directory} must be reconciled before changing runtime"
         );
     }
@@ -455,16 +508,26 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
         // Entries this reconcile generated for dependencies that are gone
         // (a renamed scope, a deleted project) go with them.
         let mut pruned = false;
-        if let Some(metadata) = package.get_mut("dependenciesMeta").and_then(JsonValue::as_object_mut) {
+        if let Some(metadata) = package
+            .get_mut("dependenciesMeta")
+            .and_then(JsonValue::as_object_mut)
+        {
             let before = metadata.len();
-            metadata.retain(|name, value| local.contains(name) || *value != json!({"injected": false}));
+            metadata
+                .retain(|name, value| local.contains(name) || *value != json!({"injected": false}));
             pruned = metadata.len() != before;
             if metadata.is_empty() && local.is_empty() {
-                package.as_object_mut().context("package.json must be an object")?.remove("dependenciesMeta");
+                package
+                    .as_object_mut()
+                    .context("package.json must be an object")?
+                    .remove("dependenciesMeta");
             }
         }
         if local.is_empty() && pruned {
-            workspace_package_updates.push((directory.join("package.json"), serde_json::to_string_pretty(package)?));
+            workspace_package_updates.push((
+                directory.join("package.json"),
+                serde_json::to_string_pretty(package)?,
+            ));
         }
         if local.is_empty() {
             continue;
@@ -505,7 +568,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
         .filter(|_| managed)
         .and_then(|source| embedded_plan(&source))
         .map(|plan| plan_services(&plan))
-        .unwrap_or_else(|| managed_processes(&json!({"services": services.clone()}), &["node", "bun"]));
+        .unwrap_or_else(|| {
+            managed_processes(&json!({"services": services.clone()}), &["node", "bun"])
+        });
     let prior_runtime = previous_processes
         .keys()
         .find_map(|name| services.get(name)?["command"][0].as_str())
@@ -524,52 +589,52 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
         if !generated || name.ends_with("-migrate") {
             continue;
         }
-        let (mut directory, entry) =
-            if let Some((directory, entry)) = previous_processes.get(name) {
-                (directory.clone(), entry.clone())
-            } else if service["command"].as_array().is_some_and(|command| {
-                command.len() == 3 && command[0] == runtime && command[1] == "--enable-source-maps"
-            }) {
-                let command = service["command"][2]
-                    .as_str()
-                    .context("Invalid generated TypeScript process")?;
-                let relative = command
-                    .strip_prefix("/app/")
-                    .context("Generated TypeScript process path missing")?;
-                let (directory, entry) = relative
-                    .split_once("/production/")
-                    .context("Generated TypeScript process path missing")?;
-                let entry = entry
-                    .strip_suffix(".mjs")
-                    .context("Generated TypeScript process extension missing")?;
-                anyhow::ensure!(
-                    matches!(entry, "server" | "worker"),
-                    "Unsupported generated TypeScript process"
-                );
-                (directory.to_owned(), entry.to_owned())
-            } else {
-                let working = service["working_dir"]
-                    .as_str()
-                    .context("Generated TypeScript process working directory missing")?;
-                let directory = Path::new(working)
-                    .file_name()
-                    .and_then(|name| name.to_str())
-                    .context("Invalid process working directory")?
-                    .to_owned();
-                let command = service["entrypoint"]
-                    .as_array()
-                    .context("Custom TypeScript command requires a custom Dockerfile")?;
-                anyhow::ensure!(
-                    command.len() == 3 && command[0] == package_manager && command[1] == "run",
-                    "Custom TypeScript command requires a custom Dockerfile"
-                );
-                let entry = match command[2].as_str() {
-                    Some("dev" | "dev:server" | "start" | "start:server") => "server",
-                    Some("dev:worker" | "start:worker") => "worker",
-                    _ => bail!("Custom TypeScript process script requires a custom Dockerfile"),
-                };
-                (directory, entry.to_owned())
+        let (mut directory, entry) = if let Some((directory, entry)) = previous_processes.get(name)
+        {
+            (directory.clone(), entry.clone())
+        } else if service["command"].as_array().is_some_and(|command| {
+            command.len() == 3 && command[0] == runtime && command[1] == "--enable-source-maps"
+        }) {
+            let command = service["command"][2]
+                .as_str()
+                .context("Invalid generated TypeScript process")?;
+            let relative = command
+                .strip_prefix("/app/")
+                .context("Generated TypeScript process path missing")?;
+            let (directory, entry) = relative
+                .split_once("/production/")
+                .context("Generated TypeScript process path missing")?;
+            let entry = entry
+                .strip_suffix(".mjs")
+                .context("Generated TypeScript process extension missing")?;
+            anyhow::ensure!(
+                matches!(entry, "server" | "worker"),
+                "Unsupported generated TypeScript process"
+            );
+            (directory.to_owned(), entry.to_owned())
+        } else {
+            let working = service["working_dir"]
+                .as_str()
+                .context("Generated TypeScript process working directory missing")?;
+            let directory = Path::new(working)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .context("Invalid process working directory")?
+                .to_owned();
+            let command = service["entrypoint"]
+                .as_array()
+                .context("Custom TypeScript command requires a custom Dockerfile")?;
+            anyhow::ensure!(
+                command.len() == 3 && command[0] == package_manager && command[1] == "run",
+                "Custom TypeScript command requires a custom Dockerfile"
+            );
+            let entry = match command[2].as_str() {
+                Some("dev" | "dev:server" | "start" | "start:server") => "server",
+                Some("dev:worker" | "start:worker") => "worker",
+                _ => bail!("Custom TypeScript process script requires a custom Dockerfile"),
             };
+            (directory, entry.to_owned())
+        };
         if !workspace.join(&directory).is_dir() {
             directory = packages
                 .values()
@@ -677,8 +742,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
                     for service in services.values_mut() {
                         // `get_mut`, not indexing: indexing inserts a null
                         // `depends_on` into every service without one.
-                        if let Some(dependencies) =
-                            service.get_mut("depends_on").and_then(JsonValue::as_object_mut)
+                        if let Some(dependencies) = service
+                            .get_mut("depends_on")
+                            .and_then(JsonValue::as_object_mut)
                         {
                             dependencies.remove(&migration);
                         }
@@ -711,15 +777,26 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     }
     let sdk_root = root.join(crate::sdk::sdk_base(&root)?);
     let sdk_workspace = if sdk_root.exists() && sdk_root.starts_with(&workspace) {
-        anyhow::ensure!(sdk_root.is_dir() && sdk_root.canonicalize()? == sdk_root,
-            "Generated SDK image input must be a directory without symbolic aliases");
-        inputs.insert(format!("{}/", sdk_root.strip_prefix(&root)?.to_string_lossy()));
-        Some(sdk_root.strip_prefix(&workspace)?.to_string_lossy().into_owned())
+        anyhow::ensure!(
+            sdk_root.is_dir() && sdk_root.canonicalize()? == sdk_root,
+            "Generated SDK image input must be a directory without symbolic aliases"
+        );
+        inputs.insert(format!(
+            "{}/",
+            sdk_root.strip_prefix(&root)?.to_string_lossy()
+        ));
+        Some(
+            sdk_root
+                .strip_prefix(&workspace)?
+                .to_string_lossy()
+                .into_owned(),
+        )
     } else {
         None
     };
     let ignore_path = root.join(format!("{docker_name}.dockerignore"));
-    let mut ignore = forklaunch_state::unstamped(&read_to_string(&ignore_path).unwrap_or_default()).to_owned();
+    let mut ignore =
+        forklaunch_state::unstamped(&read_to_string(&ignore_path).unwrap_or_default()).to_owned();
     // Required exclusions must come after custom negations; retaining an earlier
     // duplicate is insufficient because Docker evaluates the last matching rule.
     const REQUIRED_IGNORE: &str = "\n# Forklaunch shared image exclusions\n.git/\n**/node_modules/\n**/target/\n**/.env*\n!**/.env.example\n**/dist/\n**/lib/\n**/.forklaunch-runtime/\n**/production/\n";
@@ -771,7 +848,10 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
             existing.as_str().is_some_and(retired_production_script),
             "Custom production build script requires a custom Dockerfile"
         );
-        package["scripts"].as_object_mut().unwrap().remove("build:production");
+        package["scripts"]
+            .as_object_mut()
+            .unwrap()
+            .remove("build:production");
     }
     let mut runtime_packages = workspace_package_updates;
     for project in projects.values() {
@@ -825,7 +905,11 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     // Native declarations are compiled without the server so the first Node image
     // build has the same service-local type packages as a normal Cargo build.
     let mut native_sdks = Vec::new();
-    if let Some(entries) = manifest.get("projects").and_then(Value::as_array).filter(|_| !processes.is_empty()) {
+    if let Some(entries) = manifest
+        .get("projects")
+        .and_then(Value::as_array)
+        .filter(|_| !processes.is_empty())
+    {
         for project in entries {
             let metadata = project.get("metadata");
             if metadata
@@ -860,13 +944,17 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     let mut docker = "# Generated shared TypeScript production image. Install once to commit pnpm-lock.yaml.\nFROM node:22-bookworm-slim AS builder\nRUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*\nRUN corepack enable && corepack prepare pnpm@11.28.7 --activate\nWORKDIR /app\n".to_owned();
     docker = docker.replace("pnpm@11.28.7", &pnpm_pin);
     if bun {
-        docker = format!("# Generated shared Bun production image. Commit bun.lock before building.\nFROM oven/bun:{BUN_VERSION} AS builder\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\n");
+        docker = format!(
+            "# Generated shared Bun production image. Commit bun.lock before building.\nFROM oven/bun:{BUN_VERSION} AS builder\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\n"
+        );
     }
     let native_stage = "native-sdk-compiler";
     if !native_sdks.is_empty() {
         let (_, native_inputs, _) = super::language_images::plan(&root)?;
         let (stages, copies) = super::language_images::framework_inputs(&root)?;
-        let mut generation = format!("{stages}FROM rust:1.98.0-slim-bookworm AS native-sdk-compiler\nWORKDIR /app\nARG CARGO_BUILD_JOBS=2\nRUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*\n{copies}");
+        let mut generation = format!(
+            "{stages}FROM rust:1.98.0-slim-bookworm AS native-sdk-compiler\nWORKDIR /app\nARG CARGO_BUILD_JOBS=2\nRUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*\n{copies}"
+        );
         for input in native_inputs {
             generation.push_str(&format!(
                 "COPY {}\n",
@@ -902,10 +990,18 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     let production_plan = json!({"workspace":format!("/app/{modules}"),"packages":packages.values().map(|(path,_)|path.strip_prefix(&workspace).unwrap().to_string_lossy().into_owned()).collect::<Vec<_>>(),"output":".forklaunch-runtime","packageOutputs":true,"processes":projects.values().collect::<Vec<_>>(),"services":processes});
     for (path, content) in [
         (BUILD_TOOL, PRODUCTION_BUILD_SOURCE.to_owned()),
-        (BUILD_PLAN, format!("{}\n", serde_json::to_string_pretty(&production_plan)?)),
+        (
+            BUILD_PLAN,
+            format!("{}\n", serde_json::to_string_pretty(&production_plan)?),
+        ),
     ] {
-        anyhow::ensure!(!content.lines().any(|line| line == "FORKLAUNCH_EOF"), "Heredoc delimiter in generated content");
-        docker.push_str(&format!("COPY <<\"FORKLAUNCH_EOF\" {path}\n{content}FORKLAUNCH_EOF\n"));
+        anyhow::ensure!(
+            !content.lines().any(|line| line == "FORKLAUNCH_EOF"),
+            "Heredoc delimiter in generated content"
+        );
+        docker.push_str(&format!(
+            "COPY <<\"FORKLAUNCH_EOF\" {path}\n{content}FORKLAUNCH_EOF\n"
+        ));
     }
     docker.push_str(&format!("WORKDIR /app/{modules}\nRUN {package_manager} install --frozen-lockfile{}\nRUN {package_manager} run build\nRUN {runtime} {BUILD_TOOL} {BUILD_PLAN}\nRUN mkdir -p /out\n", if bun { " --ignore-scripts" } else { "" }));
     for project in projects.values() {
@@ -1051,7 +1147,10 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     write(ignore_path, forklaunch_state::stamp(&ignore))?;
     write_compose(&compose_path, &compose)?;
     // Files the bundler and its plan once lived in are no longer read.
-    for retired in [".forklaunch/tools/production-build.mjs", ".forklaunch/typescript-build.mjs"] {
+    for retired in [
+        ".forklaunch/tools/production-build.mjs",
+        ".forklaunch/typescript-build.mjs",
+    ] {
         let path = root.join(retired);
         if path.is_file() {
             remove_file(path)?;
@@ -1074,16 +1173,29 @@ mod tests {
         assert!(docker.contains(&format!("RUN node {BUILD_TOOL} {BUILD_PLAN}\n")));
         let plan = embedded_plan(&docker).unwrap();
         assert_eq!(plan["workspace"], "/app/modules");
-        assert!(plan["processes"].as_array().is_some_and(|processes| !processes.is_empty()));
-        for retired in [".forklaunch/build.json", ".forklaunch/generated.json", ".forklaunch/tools"] {
+        assert!(
+            plan["processes"]
+                .as_array()
+                .is_some_and(|processes| !processes.is_empty())
+        );
+        for retired in [
+            ".forklaunch/build.json",
+            ".forklaunch/generated.json",
+            ".forklaunch/tools",
+        ] {
             assert!(!root.path().join(retired).exists(), "{retired}");
         }
-        let package: JsonValue =
-            serde_json::from_str(&read_to_string(root.path().join("modules/package.json")).unwrap()).unwrap();
+        let package: JsonValue = serde_json::from_str(
+            &read_to_string(root.path().join("modules/package.json")).unwrap(),
+        )
+        .unwrap();
         assert!(package["scripts"].get("build:production").is_none());
         // Regenerating an unchanged image is a no-op.
         reconcile(root.path()).unwrap();
-        assert_eq!(read_to_string(root.path().join("Dockerfile.typescript")).unwrap(), docker);
+        assert_eq!(
+            read_to_string(root.path().join("Dockerfile.typescript")).unwrap(),
+            docker
+        );
     }
 
     #[test]
@@ -1098,19 +1210,23 @@ mod tests {
             original.replace("production/server.mjs", "production/custom.mjs"),
         )
         .unwrap();
-        assert!(preflight_runtime(root.path())
-            .unwrap_err()
-            .to_string()
-            .contains("Customized production process"));
+        assert!(
+            preflight_runtime(root.path())
+                .unwrap_err()
+                .to_string()
+                .contains("Customized production process")
+        );
         write(&path, original).unwrap();
         let path = root.path().join("Dockerfile.typescript");
         let generated = read_to_string(&path).unwrap();
         let custom = generated.replace("\"output\"", "\"custom\"");
         write(&path, &custom).unwrap();
-        assert!(preflight_runtime(root.path())
-            .unwrap_err()
-            .to_string()
-            .contains("Generated TypeScript Dockerfile was modified"));
+        assert!(
+            preflight_runtime(root.path())
+                .unwrap_err()
+                .to_string()
+                .contains("Generated TypeScript Dockerfile was modified")
+        );
         assert_eq!(read_to_string(path).unwrap(), custom);
     }
 
@@ -1129,9 +1245,11 @@ mod tests {
         let package: JsonValue =
             serde_json::from_str(&read_to_string(&package_path).unwrap()).unwrap();
         assert_eq!(package["packageManager"], "pnpm@10.33.2");
-        assert!(read_to_string(root.path().join("Dockerfile.typescript"))
-            .unwrap()
-            .contains("corepack prepare pnpm@10.33.2"));
+        assert!(
+            read_to_string(root.path().join("Dockerfile.typescript"))
+                .unwrap()
+                .contains("corepack prepare pnpm@10.33.2")
+        );
         // Returning to Express need not invalidate a supported existing lockfile.
         write(&manifest, format!("{original}http_framework='express'\n")).unwrap();
         reconcile(root.path()).unwrap();
@@ -1147,14 +1265,24 @@ mod tests {
         write(&path, format!("{}\n[[projects]]\nname='native'\ntype='Service'\n[projects.metadata]\nlanguage='rust'\nsdkLayout='project-local-v1'\ncratePath='src/native'\n", read_to_string(&path).unwrap())).unwrap();
         let sdk = root.path().join("src/native/sdk/rust");
         create_dir_all(&sdk).unwrap();
-        write(sdk.join("Cargo.toml"), "[package]\nname='native-sdk'\nversion='0.1.0'\n[lib]\npath='lib.rs'\n").unwrap();
+        write(
+            sdk.join("Cargo.toml"),
+            "[package]\nname='native-sdk'\nversion='0.1.0'\n[lib]\npath='lib.rs'\n",
+        )
+        .unwrap();
         write(sdk.join("lib.rs"), "").unwrap();
-        write(root.path().join("Cargo.toml"), "[workspace]\nmembers=['src/native/sdk/rust']\n").unwrap();
+        write(
+            root.path().join("Cargo.toml"),
+            "[workspace]\nmembers=['src/native/sdk/rust']\n",
+        )
+        .unwrap();
         reconcile(root.path()).unwrap();
         let docker = read_to_string(root.path().join("Dockerfile.typescript")).unwrap();
         assert!(docker.contains("AS native-sdk-compiler"));
         assert!(docker.contains("RUN cargo check --locked -p native-sdk"));
-        assert!(docker.contains("COPY --from=native-sdk-compiler [\"/app/src/native/sdk/typescript/\""));
+        assert!(
+            docker.contains("COPY --from=native-sdk-compiler [\"/app/src/native/sdk/typescript/\"")
+        );
         assert!(!docker.contains("FORKLAUNCH_CONTRACT_COMPILER="));
     }
 
@@ -1163,35 +1291,84 @@ mod tests {
         let root = fixture();
         let manifest = root.path().join(".forklaunch/manifest.toml");
         write(&manifest, format!("{}\n[[projects]]\nname='native'\ntype='Service'\n[projects.metadata]\nlanguage='rust'\nsdkLayout='project-local-v1'\ncratePath='src/native'\n", read_to_string(&manifest).unwrap())).unwrap();
-        write(&manifest, format!("{}\n[framework]\nversion='0.1.1'\n", read_to_string(&manifest).unwrap())).unwrap();
+        write(
+            &manifest,
+            format!(
+                "{}\n[framework]\nversion='0.1.1'\n",
+                read_to_string(&manifest).unwrap()
+            ),
+        )
+        .unwrap();
         let sdk = root.path().join("src/native/sdk/rust");
         create_dir_all(&sdk).unwrap();
-        write(sdk.join("Cargo.toml"), "[package]\nname='native-sdk'\nversion='0.1.0'\n[lib]\npath='lib.rs'\n").unwrap();
+        write(
+            sdk.join("Cargo.toml"),
+            "[package]\nname='native-sdk'\nversion='0.1.0'\n[lib]\npath='lib.rs'\n",
+        )
+        .unwrap();
         write(sdk.join("lib.rs"), "").unwrap();
-        write(root.path().join("Cargo.toml"), "[workspace]\nmembers=['src/native/sdk/rust']\n").unwrap();
+        write(
+            root.path().join("Cargo.toml"),
+            "[workspace]\nmembers=['src/native/sdk/rust']\n",
+        )
+        .unwrap();
         let sdk_root = crate::sdk::sdk_base(root.path()).unwrap();
         create_dir_all(root.path().join(&sdk_root)).unwrap();
         reconcile(root.path()).unwrap();
         let typescript_before = read_to_string(root.path().join("Dockerfile.typescript")).unwrap();
         let rust_before = super::super::language_images::plan(root.path()).unwrap();
-        let copy = format!("COPY {}", serde_json::to_string(&[format!("{}/", sdk_root.display()), format!("/app/{}/", sdk_root.display())]).unwrap());
+        let copy = format!(
+            "COPY {}",
+            serde_json::to_string(&[
+                format!("{}/", sdk_root.display()),
+                format!("/app/{}/", sdk_root.display())
+            ])
+            .unwrap()
+        );
         assert!(typescript_before.contains(&copy));
         assert!(rust_before.0.contains(&copy));
         assert!(!rust_before.0.contains("modules/api/") && !rust_before.0.contains("COPY . ."));
 
         // Exercise the actual watcher's socket generator after image planning.
-        let artifact = root.path().join("src/native/sdk/typescript/socket-contract.json");
+        let artifact = root
+            .path()
+            .join("src/native/sdk/typescript/socket-contract.json");
         create_dir_all(artifact.parent().unwrap()).unwrap();
-        write(artifact, include_str!("../../../tests/fixtures/rust_socket_contract.json")).unwrap();
+        write(
+            artifact,
+            include_str!("../../../tests/fixtures/rust_socket_contract.json"),
+        )
+        .unwrap();
         let mut stdout = termcolor::StandardStream::stdout(termcolor::ColorChoice::Never);
-        crate::sdk::websocket::generate_from(root.path(), "rust", "socket-contract", Some("native"), false, &mut stdout, false).unwrap();
+        crate::sdk::websocket::generate_from(
+            root.path(),
+            "rust",
+            "socket-contract",
+            Some("native"),
+            false,
+            &mut stdout,
+            false,
+        )
+        .unwrap();
         let member = sdk_root.join("rust/native-websocket-sdk");
         assert!(root.path().join(&member).join("Cargo.toml").is_file());
-        let cargo: Value = toml::from_str(&read_to_string(root.path().join("Cargo.toml")).unwrap()).unwrap();
-        assert!(cargo["workspace"]["members"].as_array().unwrap().contains(&Value::String(member.to_string_lossy().into_owned())));
-        assert_eq!(super::super::language_images::plan(root.path()).unwrap(), rust_before);
+        let cargo: Value =
+            toml::from_str(&read_to_string(root.path().join("Cargo.toml")).unwrap()).unwrap();
+        assert!(
+            cargo["workspace"]["members"]
+                .as_array()
+                .unwrap()
+                .contains(&Value::String(member.to_string_lossy().into_owned()))
+        );
+        assert_eq!(
+            super::super::language_images::plan(root.path()).unwrap(),
+            rust_before
+        );
         reconcile(root.path()).unwrap();
-        assert_eq!(read_to_string(root.path().join("Dockerfile.typescript")).unwrap(), typescript_before);
+        assert_eq!(
+            read_to_string(root.path().join("Dockerfile.typescript")).unwrap(),
+            typescript_before
+        );
     }
 
     fn fixture() -> tempfile::TempDir {
@@ -1322,13 +1499,30 @@ mod tests {
         write(path.join("Dockerfile.typescript"), template).unwrap();
         reconcile(path).unwrap();
         let docker = read_to_string(path.join("Dockerfile.typescript")).unwrap();
-        assert!(docker.contains(&format!("FROM oven/bun:{} AS runtime", crate::constants::BUN_VERSION)));
-        assert!(docker.contains(&format!("FROM oven/bun:{} AS builder", crate::constants::BUN_VERSION)));
+        assert!(docker.contains(&format!(
+            "FROM oven/bun:{} AS runtime",
+            crate::constants::BUN_VERSION
+        )));
+        assert!(docker.contains(&format!(
+            "FROM oven/bun:{} AS builder",
+            crate::constants::BUN_VERSION
+        )));
         assert!(docker.contains("bun install --production --frozen-lockfile --ignore-scripts"));
-        assert!(docker.contains("cp .forklaunch/universal-sdk/package.json /out/.forklaunch/universal-sdk/"));
-        assert!(docker.contains("cp -R .forklaunch/universal-sdk/lib /out/.forklaunch/universal-sdk/"));
+        assert!(
+            docker.contains(
+                "cp .forklaunch/universal-sdk/package.json /out/.forklaunch/universal-sdk/"
+            )
+        );
+        assert!(
+            docker.contains("cp -R .forklaunch/universal-sdk/lib /out/.forklaunch/universal-sdk/")
+        );
         let config = embedded_plan(&docker).unwrap();
-        assert!(config["packages"].as_array().unwrap().contains(&json!(".forklaunch/universal-sdk")));
+        assert!(
+            config["packages"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(".forklaunch/universal-sdk"))
+        );
         assert!(docker.contains(&format!("RUN bun {BUILD_TOOL} {BUILD_PLAN}\n")));
         assert!(!docker.contains("pnpm"));
         assert!(!path.join("modules/pnpm-workspace.yaml").exists());
@@ -1348,12 +1542,35 @@ mod tests {
 
     #[test]
     fn bun_workspace_paths_allow_hidden_packages_without_traversal_or_shell_options() {
-        for path in ["api", ".forklaunch/universal-sdk", "domain.v1/sdk-typescript"] {
-            assert!(safe_bun_workspace_path(path), "safe package rejected: {path}");
+        for path in [
+            "api",
+            ".forklaunch/universal-sdk",
+            "domain.v1/sdk-typescript",
+        ] {
+            assert!(
+                safe_bun_workspace_path(path),
+                "safe package rejected: {path}"
+            );
         }
-        for path in ["", ".", "..", "../outside", "api/../outside", "/absolute", "api//sdk",
-            "-rf", "api;touch", "api$(touch)", "api\\sdk", "api sdk", "api\nsdk"] {
-            assert!(!safe_bun_workspace_path(path), "unsafe package accepted: {path}");
+        for path in [
+            "",
+            ".",
+            "..",
+            "../outside",
+            "api/../outside",
+            "/absolute",
+            "api//sdk",
+            "-rf",
+            "api;touch",
+            "api$(touch)",
+            "api\\sdk",
+            "api sdk",
+            "api\nsdk",
+        ] {
+            assert!(
+                !safe_bun_workspace_path(path),
+                "unsafe package accepted: {path}"
+            );
         }
     }
 
@@ -1364,25 +1581,53 @@ mod tests {
         // afterwards, exactly as the development SDK preparation does.
         let root = tempfile::tempdir().unwrap();
         create_dir_all(root.path().join("client-sdk")).unwrap();
-        write(root.path().join("client-sdk/package.json"), r#"{"name":"@demo/client-sdk","version":"1.0.0"}"#).unwrap();
+        write(
+            root.path().join("client-sdk/package.json"),
+            r#"{"name":"@demo/client-sdk","version":"1.0.0"}"#,
+        )
+        .unwrap();
         let planned = bun_sdk_runtime_copy("client-sdk").unwrap();
         let socket = root.path().join("client-sdk/typescript-websocket/native");
         for directory in ["dist", "lib", "production", "node_modules/private"] {
             create_dir_all(socket.join(directory)).unwrap();
         }
-        write(socket.join("package.json"), r#"{"name":"native-websocket-sdk","version":"1.0.0","main":"dist/index.js"}"#).unwrap();
+        write(
+            socket.join("package.json"),
+            r#"{"name":"native-websocket-sdk","version":"1.0.0","main":"dist/index.js"}"#,
+        )
+        .unwrap();
         write(socket.join("index.ts"), "export const source = true;\n").unwrap();
-        write(socket.join("dist/index.js"), "export const compiled = true;\n").unwrap();
+        write(
+            socket.join("dist/index.js"),
+            "export const compiled = true;\n",
+        )
+        .unwrap();
         write(socket.join("lib/index.js"), "module.exports = {};\n").unwrap();
         write(socket.join("production/client.mjs"), "export {};\n").unwrap();
-        write(socket.join("node_modules/private/package.json"), r#"{"name":"private-dependency"}"#).unwrap();
+        write(
+            socket.join("node_modules/private/package.json"),
+            r#"{"name":"private-dependency"}"#,
+        )
+        .unwrap();
         let out = root.path().join("assembled");
-        let status = std::process::Command::new("sh").args(["-eu", "-c", &planned.replace("/out/", "$OUTPUT/")])
-            .env("OUTPUT", &out).current_dir(root.path()).status().unwrap();
+        let status = std::process::Command::new("sh")
+            .args(["-eu", "-c", &planned.replace("/out/", "$OUTPUT/")])
+            .env("OUTPUT", &out)
+            .current_dir(root.path())
+            .status()
+            .unwrap();
         assert!(status.success());
         let emitted = out.join("client-sdk/typescript-websocket/native");
-        for file in ["package.json", "dist/index.js", "lib/index.js", "production/client.mjs"] {
-            assert_eq!(std::fs::read(emitted.join(file)).unwrap(), std::fs::read(socket.join(file)).unwrap());
+        for file in [
+            "package.json",
+            "dist/index.js",
+            "lib/index.js",
+            "production/client.mjs",
+        ] {
+            assert_eq!(
+                std::fs::read(emitted.join(file)).unwrap(),
+                std::fs::read(socket.join(file)).unwrap()
+            );
         }
         assert!(out.join("client-sdk/package.json").is_file());
         assert!(!emitted.join("index.ts").exists());
@@ -1419,9 +1664,11 @@ mod tests {
         adopt_image(root.path()).unwrap();
         assert!(root.path().join("Dockerfile").is_file());
         assert!(!root.path().join("modules/Dockerfile").exists());
-        assert!(read_to_string(manifest)
-            .unwrap()
-            .contains("language='typescript'"));
+        assert!(
+            read_to_string(manifest)
+                .unwrap()
+                .contains("language='typescript'")
+        );
         let compose: JsonValue = serde_yml::from_str(&read_to_string(compose).unwrap()).unwrap();
         assert_eq!(
             compose["services"]["api"]["build"]["dockerfile"],
@@ -1481,7 +1728,10 @@ mod tests {
         write(&path, serde_json::to_string(&package).unwrap()).unwrap();
         reconcile(root.path()).unwrap();
         let package: JsonValue = serde_json::from_str(&read_to_string(&path).unwrap()).unwrap();
-        assert_eq!(package["dependenciesMeta"], json!({"@demo/api":{"injected":false},"custom":{"injected":true}}));
+        assert_eq!(
+            package["dependenciesMeta"],
+            json!({"@demo/api":{"injected":false},"custom":{"injected":true}})
+        );
     }
 
     #[test]
@@ -1513,7 +1763,11 @@ mod tests {
         reconcile(root.path()).unwrap();
         let docker = read_to_string(root.path().join("Dockerfile.typescript")).unwrap();
         assert!(!docker.contains("COPY . .") && !docker.contains("src/native"));
-        assert!(docker.contains("--frozen-lockfile") && docker.contains("--prod deploy --frozen-lockfile") && !docker.contains("--offline"));
+        assert!(
+            docker.contains("--frozen-lockfile")
+                && docker.contains("--prod deploy --frozen-lockfile")
+                && !docker.contains("--offline")
+        );
         assert!(docker.contains("USER node"));
         let compose: JsonValue =
             serde_yml::from_str(&read_to_string(root.path().join("docker-compose.yaml")).unwrap())
@@ -1548,7 +1802,11 @@ mod tests {
             read_to_string(root.path().join("Dockerfile.typescript")).unwrap(),
             docker
         );
-        write(root.path().join("Dockerfile.typescript"), docker.replace("FROM node", "FROM custom-node")).unwrap();
+        write(
+            root.path().join("Dockerfile.typescript"),
+            docker.replace("FROM node", "FROM custom-node"),
+        )
+        .unwrap();
         assert!(preflight(root.path()).is_err());
     }
 
@@ -1563,10 +1821,12 @@ mod tests {
         .unwrap();
         let compose = read_to_string(root.path().join("docker-compose.yaml")).unwrap();
         let root_package = read_to_string(root.path().join("modules/package.json")).unwrap();
-        assert!(reconcile(root.path())
-            .unwrap_err()
-            .to_string()
-            .contains("Custom TypeScript build"));
+        assert!(
+            reconcile(root.path())
+                .unwrap_err()
+                .to_string()
+                .contains("Custom TypeScript build")
+        );
         assert_eq!(
             read_to_string(root.path().join("docker-compose.yaml")).unwrap(),
             compose
@@ -1610,9 +1870,11 @@ mod tests {
         let compose: JsonValue =
             serde_yml::from_str(&read_to_string(&compose_path).unwrap()).unwrap();
         assert!(compose["services"].get("api-migrate").is_none());
-        assert!(compose["services"]["renamed"]["depends_on"]
-            .get("api-migrate")
-            .is_none());
+        assert!(
+            compose["services"]["renamed"]["depends_on"]
+                .get("api-migrate")
+                .is_none()
+        );
         assert_eq!(
             compose["services"]["renamed"]["depends_on"]["renamed-migrate"]["condition"],
             "service_completed_successfully"

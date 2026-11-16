@@ -29,7 +29,12 @@ fn application_dependencies(actual: &Value, generated: &Value) -> Map<String, Va
     let mut extra = Map::new();
     for section in ["dependencies", "build-dependencies", "dev-dependencies"] {
         let known = generated.get(section).and_then(Value::as_table);
-        for (key, value) in actual.get(section).and_then(Value::as_table).into_iter().flatten() {
+        for (key, value) in actual
+            .get(section)
+            .and_then(Value::as_table)
+            .into_iter()
+            .flatten()
+        {
             if !known.is_some_and(|known| known.contains_key(key)) {
                 extra
                     .entry(section.to_owned())
@@ -59,7 +64,10 @@ fn next_cargo(path: &Path, before: &RenderedTemplate, after: &RenderedTemplate) 
     let extra = application_dependencies(&actual, &generated);
     let mut actual_generated = actual.clone();
     for (section, entries) in &extra {
-        if let Some(table) = actual_generated.get_mut(section.as_str()).and_then(Value::as_table_mut) {
+        if let Some(table) = actual_generated
+            .get_mut(section.as_str())
+            .and_then(Value::as_table_mut)
+        {
             for key in entries.as_table().expect("dependency table").keys() {
                 table.remove(key);
             }
@@ -71,12 +79,15 @@ fn next_cargo(path: &Path, before: &RenderedTemplate, after: &RenderedTemplate) 
         path.display()
     );
     // The target as `init` writes it, plus the application's entries.
-    let mut next: toml_edit::DocumentMut = dependencies::render_for_path(path, &after.content)?.parse()?;
+    let mut next: toml_edit::DocumentMut =
+        dependencies::render_for_path(path, &after.content)?.parse()?;
     for (section, entries) in extra {
         if !next.contains_key(&section) {
             next[&section] = toml_edit::Item::Table(toml_edit::Table::new());
         }
-        let table = next[&section].as_table_like_mut().context("Cargo dependency table")?;
+        let table = next[&section]
+            .as_table_like_mut()
+            .context("Cargo dependency table")?;
         for (key, value) in entries.as_table().expect("dependency table") {
             if table.get(key).is_none() {
                 let item: toml_edit::DocumentMut = format!("value = {value}").parse()?;
@@ -84,11 +95,19 @@ fn next_cargo(path: &Path, before: &RenderedTemplate, after: &RenderedTemplate) 
             }
         }
     }
-    if let Some(description) = actual.get("package").and_then(|package| package.get("description")).and_then(Value::as_str) {
+    if let Some(description) = actual
+        .get("package")
+        .and_then(|package| package.get("description"))
+        .and_then(Value::as_str)
+    {
         next["package"]["description"] = toml_edit::value(description);
     }
-    if let Some(metadata) = actual.get("package").and_then(|package| package.get("metadata")) {
-        let item: toml_edit::DocumentMut = format!("[package.metadata]\n{}", toml::to_string(metadata)?).parse()?;
+    if let Some(metadata) = actual
+        .get("package")
+        .and_then(|package| package.get("metadata"))
+    {
+        let item: toml_edit::DocumentMut =
+            format!("[package.metadata]\n{}", toml::to_string(metadata)?).parse()?;
         next["package"]["metadata"] = item["package"]["metadata"].clone();
     }
     Ok(next.to_string())
@@ -103,8 +122,10 @@ pub(super) fn replace_generated(
     target: Vec<RenderedTemplate>,
     dryrun: bool,
 ) -> Result<Vec<String>> {
-    let current: BTreeMap<PathBuf, RenderedTemplate> = current.into_iter().map(|t| (t.path.clone(), t)).collect();
-    let target: BTreeMap<PathBuf, RenderedTemplate> = target.into_iter().map(|t| (t.path.clone(), t)).collect();
+    let current: BTreeMap<PathBuf, RenderedTemplate> =
+        current.into_iter().map(|t| (t.path.clone(), t)).collect();
+    let target: BTreeMap<PathBuf, RenderedTemplate> =
+        target.into_iter().map(|t| (t.path.clone(), t)).collect();
     let mut writes = Vec::new();
     let mut removals = Vec::new();
     let mut cargo = Vec::new();
@@ -114,16 +135,28 @@ pub(super) fn replace_generated(
             continue;
         }
         let is_cargo = path.file_name().is_some_and(|file| file == "Cargo.toml");
-        if is_cargo && path.exists() && let (Some(before), Some(after)) = (before, after) {
-            cargo.push(RenderedTemplate { content: next_cargo(path, before, after)?, ..after.clone() });
+        if is_cargo
+            && path.exists()
+            && let (Some(before), Some(after)) = (before, after)
+        {
+            cargo.push(RenderedTemplate {
+                content: next_cargo(path, before, after)?,
+                ..after.clone()
+            });
             continue;
         }
         if path.exists() {
             let expected = before.map(generated_on_disk).transpose()?;
             let actual = native_layout::conversion_source(path, &read_to_string(path)?);
-            let unchanged = expected.as_ref().is_some_and(|expected| expected.contains(&actual));
+            let unchanged = expected
+                .as_ref()
+                .is_some_and(|expected| expected.contains(&actual));
             // Documentation the application edited stays as written.
-            if !unchanged && path.file_name().is_some_and(|file| file == "README.md" || file == ".env.example") {
+            if !unchanged
+                && path
+                    .file_name()
+                    .is_some_and(|file| file == "README.md" || file == ".env.example")
+            {
                 continue;
             }
             anyhow::ensure!(
@@ -138,10 +171,19 @@ pub(super) fn replace_generated(
             None => {}
         }
     }
-    let relative = |path: &Path| path.strip_prefix(root).unwrap_or(path).display().to_string();
+    let relative = |path: &Path| {
+        path.strip_prefix(root)
+            .unwrap_or(path)
+            .display()
+            .to_string()
+    };
     let mut planned: Vec<String> = writes.iter().map(|t| relative(&t.path)).collect();
     planned.extend(cargo.iter().map(|template| relative(&template.path)));
-    planned.extend(removals.iter().map(|path| format!("{} (removed)", relative(path))));
+    planned.extend(
+        removals
+            .iter()
+            .map(|path| format!("{} (removed)", relative(path))),
+    );
     if dryrun {
         return Ok(planned);
     }
@@ -149,8 +191,16 @@ pub(super) fn replace_generated(
         template.content = dependencies::render_for_path(&template.path, &template.content)?;
         template.content = native_layout::format_source(&template.path, &template.content);
     }
-    write_rendered_templates(&writes, false, &mut StandardStream::stdout(ColorChoice::Always))?;
-    write_rendered_templates(&cargo, false, &mut StandardStream::stdout(ColorChoice::Always))?;
+    write_rendered_templates(
+        &writes,
+        false,
+        &mut StandardStream::stdout(ColorChoice::Always),
+    )?;
+    write_rendered_templates(
+        &cargo,
+        false,
+        &mut StandardStream::stdout(ColorChoice::Always),
+    )?;
     for path in removals {
         remove_file(&path)?;
         remove_empty_parents(&path, dir);
@@ -169,10 +219,21 @@ fn remove_empty_parents(path: &Path, stop: &Path) {
 }
 
 /// A native service's generated files, as `init service` writes them.
-pub(super) fn service_templates(root: &Path, dir: &Path, name: &str, description: &str, postgres: bool) -> Result<Vec<RenderedTemplate>> {
+pub(super) fn service_templates(
+    root: &Path,
+    dir: &Path,
+    name: &str,
+    description: &str,
+    postgres: bool,
+) -> Result<Vec<RenderedTemplate>> {
     let files = native_layout::service_templates(dir, name, description);
-    let files = if postgres { service_database::templates(dir, name, files)? } else { files };
-    let files = native_mappers::templates(dir, dir.join("domain/mappers/health.rs").is_file(), files)?;
+    let files = if postgres {
+        service_database::templates(dir, name, files)?
+    } else {
+        files
+    };
+    let files =
+        native_mappers::templates(dir, dir.join("domain/mappers/health.rs").is_file(), files)?;
     Ok(native_layout::framework_paths(root, files))
 }
 
@@ -183,8 +244,19 @@ fn process_settings(root: &Path, name: &str) -> Result<BTreeSet<String>> {
         .services
         .iter()
         .filter(|(key, service)| *key == name || worker::producer_owner(service) == Some(name))
-        .flat_map(|(_, service)| service.environment.iter().flatten().map(|(key, _)| key.clone()))
-        .chain(["MIGRATION_DATABASE_URL".to_owned(), "SQLX_OFFLINE".to_owned(), "PUBLIC_ORIGIN".to_owned(), "MCP_ALLOWED_HOSTS".to_owned()])
+        .flat_map(|(_, service)| {
+            service
+                .environment
+                .iter()
+                .flatten()
+                .map(|(key, _)| key.clone())
+        })
+        .chain([
+            "MIGRATION_DATABASE_URL".to_owned(),
+            "SQLX_OFFLINE".to_owned(),
+            "PUBLIC_ORIGIN".to_owned(),
+            "MCP_ALLOWED_HOSTS".to_owned(),
+        ])
         .collect())
 }
 
@@ -203,11 +275,17 @@ const WORKER_EVENT_OUTPUTS: &[&str] = &[
 
 /// Turn a native service into a producer worker on `backend`, or (with
 /// `backend` None) a producer worker into a service.
-pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backend>, dryrun: bool) -> Result<Vec<String>> {
+pub(super) fn change_kind(
+    root: &Path,
+    name: &str,
+    backend: Option<worker::Backend>,
+    dryrun: bool,
+) -> Result<Vec<String>> {
     let manifest_path = root.join(".forklaunch/manifest.toml");
     let manifest = read_manifest_value(&manifest_path)?;
     let project = project_table(&manifest, name).context("Project missing from the manifest")?;
-    let dir = root.join(crate_path_for_project(&manifest, name).context("Project crate path missing")?);
+    let dir =
+        root.join(crate_path_for_project(&manifest, name).context("Project crate path missing")?);
     let description = cargo_description(&dir.join("Cargo.toml"))?.unwrap_or_default();
     let routers: Vec<String> = project
         .get("routers")
@@ -224,16 +302,32 @@ pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backe
     );
     let (current, target) = match backend {
         Some(backend) => {
-            let postgres = project.get("metadata").and_then(|m| m.get("persistence")).and_then(Value::as_str) == Some("postgresql");
-            (service_templates(root, &dir, name, &description, postgres)?, worker::producer_templates(root, &dir, name, &description, backend)?)
+            let postgres = project
+                .get("metadata")
+                .and_then(|m| m.get("persistence"))
+                .and_then(Value::as_str)
+                == Some("postgresql");
+            (
+                service_templates(root, &dir, name, &description, postgres)?,
+                worker::producer_templates(root, &dir, name, &description, backend)?,
+            )
         }
         None => {
-            let backend = worker::backend(root, name)?.context("Worker backend could not be determined")?;
-            (worker::producer_templates(root, &dir, name, &description, backend)?, service_templates(root, &dir, name, &description, false)?)
+            let backend =
+                worker::backend(root, name)?.context("Worker backend could not be determined")?;
+            (
+                worker::producer_templates(root, &dir, name, &description, backend)?,
+                service_templates(root, &dir, name, &description, false)?,
+            )
         }
     };
     let mut planned = replace_generated(root, &dir, current, target, dryrun)?;
-    planned.extend([".forklaunch/manifest.toml".into(), "docker-compose.yaml".into(), ".env".into(), "package.json (scripts)".into()]);
+    planned.extend([
+        ".forklaunch/manifest.toml".into(),
+        "docker-compose.yaml".into(),
+        ".env".into(),
+        "package.json (scripts)".into(),
+    ]);
     if dryrun {
         return Ok(planned);
     }
@@ -242,8 +336,13 @@ pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backe
     remove_rust_package_scripts(root, name)?;
     let mut manifest = read_manifest_value(&manifest_path)?;
     {
-        let project = project_table_mut(&mut manifest, name).context("Project missing from the manifest")?;
-        let metadata = project.entry("metadata").or_insert_with(|| Value::Table(Map::new())).as_table_mut().context("Project metadata")?;
+        let project =
+            project_table_mut(&mut manifest, name).context("Project missing from the manifest")?;
+        let metadata = project
+            .entry("metadata")
+            .or_insert_with(|| Value::Table(Map::new()))
+            .as_table_mut()
+            .context("Project metadata")?;
         match backend {
             Some(_) => {
                 metadata.remove("persistence");
@@ -252,13 +351,29 @@ pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backe
                 metadata.insert("workerRuntime".into(), Value::String("leased".into()));
             }
             None => {
-                for key in ["workerService", "workerRuntime", "workerType", "workerControlService", "contractExport"] {
+                for key in [
+                    "workerService",
+                    "workerRuntime",
+                    "workerType",
+                    "workerControlService",
+                    "contractExport",
+                ] {
                     metadata.remove(key);
                 }
                 metadata.insert("persistence".into(), Value::String("memory".into()));
             }
         }
-        project.insert("type".into(), Value::String(if backend.is_some() { "Worker" } else { "Service" }.into()));
+        project.insert(
+            "type".into(),
+            Value::String(
+                if backend.is_some() {
+                    "Worker"
+                } else {
+                    "Service"
+                }
+                .into(),
+            ),
+        );
         if backend.is_none() {
             project.remove("variant");
             if let Some(resources) = project.get_mut("resources").and_then(Value::as_table_mut) {
@@ -278,7 +393,11 @@ pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backe
             }
         }
     }
-    let kind = if backend.is_some() { RustProjectKind::Worker } else { RustProjectKind::Service };
+    let kind = if backend.is_some() {
+        RustProjectKind::Worker
+    } else {
+        RustProjectKind::Service
+    };
     ensure_rust_docker_compose_project(root, kind, name, false)?;
     ensure_rust_package_scripts(root, kind, name, false)?;
     // Listener settings follow the new process layout.
@@ -286,7 +405,12 @@ pub(super) fn change_kind(root: &Path, name: &str, backend: Option<worker::Backe
     if let Ok(existing) = read_to_string(&local) {
         let kept: String = existing
             .split_inclusive('\n')
-            .filter(|line| !matches!(line.split('=').next().map(str::trim), Some("PORT" | "PUBLIC_ORIGIN")))
+            .filter(|line| {
+                !matches!(
+                    line.split('=').next().map(str::trim),
+                    Some("PORT" | "PUBLIC_ORIGIN")
+                )
+            })
             .collect();
         write(&local, kept)?;
     }

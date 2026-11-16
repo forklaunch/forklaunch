@@ -32,7 +32,11 @@ impl CliCommand for UnlinkCommand {
         let _token = require_auth()?;
         let id = matches.get_one::<String>("id").context("id is required")?;
 
-        let url = format!("{}/cloud-accounts/{}", get_platform_management_api_url(), urlencoding::encode(id));
+        let url = format!(
+            "{}/cloud-accounts/{}",
+            get_platform_management_api_url(),
+            urlencoding::encode(id)
+        );
         let response = http_client::delete(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
         if !response.status().is_success() {
@@ -67,6 +71,10 @@ mod tests {
     #[test]
     fn requires_id() {
         assert!(unlink_cmd().try_get_matches_from(["unlink"]).is_err());
-        assert!(unlink_cmd().try_get_matches_from(["unlink", "ca-1"]).is_ok());
+        assert!(
+            unlink_cmd()
+                .try_get_matches_from(["unlink", "ca-1"])
+                .is_ok()
+        );
     }
 }

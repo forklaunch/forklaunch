@@ -120,8 +120,7 @@ impl Verifier {
                         "Docs metadata touches tracked assembly state"
                     );
                     ensure!(
-                        self.resolver
-                            .routing_method(source, &path.path, &name)?,
+                        self.resolver.routing_method(source, &path.path, &name)?,
                         "Unresolved framework docs adapter"
                     );
                     return self.expression(

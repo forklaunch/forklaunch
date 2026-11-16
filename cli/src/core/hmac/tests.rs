@@ -27,8 +27,7 @@ fn test_generate_hmac_auth_header_with_body() {
 
 #[test]
 fn test_generate_hmac_auth_header_without_body() {
-    let header =
-        generate_hmac_auth_header("test-secret", "GET", "/deployments/123", None).unwrap();
+    let header = generate_hmac_auth_header("test-secret", "GET", "/deployments/123", None).unwrap();
 
     assert!(header.starts_with("HMAC keyId=default ts="));
     assert!(header.contains("nonce="));

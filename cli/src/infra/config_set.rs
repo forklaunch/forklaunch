@@ -122,7 +122,11 @@ impl CliCommand for ConfigSetCommand {
 
         let requested_config = ResourceConfig {
             engine: matches.get_one::<String>("engine").cloned(),
-            multi_az: if matches.get_flag("multi_az") { Some(true) } else { None },
+            multi_az: if matches.get_flag("multi_az") {
+                Some(true)
+            } else {
+                None
+            },
             queue_type: matches.get_one::<String>("queue_type").cloned(),
             visibility_timeout: matches.get_one::<u32>("visibility_timeout").copied(),
             message_retention_seconds: matches.get_one::<u32>("message_retention_seconds").copied(),

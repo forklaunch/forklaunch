@@ -59,6 +59,14 @@ has agent-app/docker-compose.yaml 'MY_LINEAR_MCP_URL: https://mcp.linear.app/mcp
 # A second agent with the same name is refused.
 if $FL init agent assistant -p agent-app/src/modules 2>/dev/null; then fail "init agent reused a project name"; fi
 
+# In a mixed TypeScript/Rust app a project without a language reads as native,
+# so a TypeScript agent must record its language and join the TypeScript image.
+RUST_BACKTRACE=1 $FL init application agent-mixed -p agent-mixed -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m iam-better-auth -D "Agent test" -A "Rohin Bhargava" -L 'MIT'
+RUST_BACKTRACE=1 $FL init service native --language rust -p agent-mixed/src/modules -D "Native"
+RUST_BACKTRACE=1 $FL init agent helper -p agent-mixed/src/modules -D "Helper"
+python3 -c 'import sys,tomllib; p=[p for p in tomllib.load(open(sys.argv[1],"rb"))["projects"] if p["name"]=="helper"][0]; sys.exit(p.get("metadata",{}).get("language")!="typescript")' agent-mixed/.forklaunch/manifest.toml || fail "the mixed-app agent has no TypeScript language"
+has agent-mixed/Dockerfile.typescript 'src/modules/helper/'
+
 if [ -n "${FORKLAUNCH_AGENT_CORE_TARBALL:-}" ]; then
     cd agent-app/src/modules
     sed -i.bak "s#^  '@forklaunch/core': .*#  '@forklaunch/core': file:${FORKLAUNCH_AGENT_CORE_TARBALL}#" pnpm-workspace.yaml

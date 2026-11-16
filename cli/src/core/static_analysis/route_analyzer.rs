@@ -8,7 +8,8 @@
 //! none of that applies to it: it is listed so a person can confirm it is meant to be open.
 //!
 //! The scan reads production TypeScript under the modules directory (tests, fixtures and build
-//! output are skipped) with the same parser the rest of the CLI uses.
+//! output are skipped) with the same parser the rest of the CLI uses. Rust services are read
+//! by `rust_route_analyzer` into the same shape.
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -89,7 +90,7 @@ fn is_production_ts(path: &Path) -> bool {
         && !name.contains(".spec.")
 }
 
-fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
@@ -114,16 +115,42 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// The routes found under a root, and the files the parser could not fully read (their routes
-/// may be missing, so a scan with any is incomplete).
+/// A route declaration the scan found but could not decide: listing it as protected or as
+/// unprotected would both be guesses.
+#[derive(Debug, Clone)]
+pub struct UndecidedRoute {
+    /// Path relative to the scanned root, with `/` separators.
+    pub file: String,
+    pub line: usize,
+    /// What was found, e.g. `POST /notes`.
+    pub what: String,
+    /// Why the scan could not decide it.
+    pub why: String,
+}
+
+/// The routes found under a root, the files the parser could not fully read (their routes
+/// may be missing, so a scan with any is incomplete), and the declarations it read but could
+/// not decide.
 #[derive(Debug, Default)]
 pub struct RouteScan {
     pub routes: Vec<StaticRoute>,
     pub unreadable: Vec<String>,
+    pub undecided: Vec<UndecidedRoute>,
 }
 
-/// Every route under `root`, sorted by file and line.
+/// Every route under `root`: the TypeScript routes sorted by file and line, then the Rust
+/// routes sorted the same way.
 pub fn scan_routes(root: &Path) -> RouteScan {
+    let mut scan = scan_typescript_routes(root);
+    let rust = super::rust_route_analyzer::scan_rust_routes(root);
+    scan.routes.extend(rust.routes);
+    scan.unreadable.extend(rust.unreadable);
+    scan.undecided.extend(rust.undecided);
+    scan
+}
+
+/// Every TypeScript route under `root`, sorted by file and line.
+fn scan_typescript_routes(root: &Path) -> RouteScan {
     let mut files = Vec::new();
     walk(root, &mut files);
     let mut scan = RouteScan::default();

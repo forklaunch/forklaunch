@@ -111,7 +111,9 @@ fn marker_with(
     metadata: Option<&toml::Table>,
 ) -> Result<PathBuf> {
     if target == "asyncapi" {
-        return Ok(crate::core::artifact_paths::socket_receipt(name, metadata, target));
+        return Ok(crate::core::artifact_paths::socket_receipt(
+            name, metadata, target,
+        ));
     }
     let package = package_at(root, name, target)?;
     let file = package
@@ -654,14 +656,11 @@ mod tests {
                 "service": {"name": "old", "version": "1.0.0"},
                 "sockets": {"chat": {"path": "/chat"}},
             });
-            crate::core::openapi_export::export_registered_sockets(
-                &root, "old", None, &artifact,
-            )
-            .unwrap();
+            crate::core::openapi_export::export_registered_sockets(&root, "old", None, &artifact)
+                .unwrap();
             artifact["service"]["name"] = json!("new");
-            let contract = root.join(
-                configured.unwrap_or(".forklaunch/contracts/new/contract.json"),
-            );
+            let contract =
+                root.join(configured.unwrap_or(".forklaunch/contracts/new/contract.json"));
             fs::create_dir_all(contract.parent().unwrap()).unwrap();
             let content = serde_json::to_vec(&artifact).unwrap();
             fs::write(&contract, &content).unwrap();
@@ -700,10 +699,8 @@ mod tests {
                 "service": {"name": "old", "version": "1.0.0"},
                 "sockets": {"chat": {"path": "/chat"}},
             });
-            crate::core::openapi_export::export_registered_sockets(
-                &root, "old", None, &artifact,
-            )
-            .unwrap();
+            crate::core::openapi_export::export_registered_sockets(&root, "old", None, &artifact)
+                .unwrap();
             fs::write(
                 root.join(".forklaunch/contracts/new/contract.json"),
                 serde_json::to_vec(&artifact).unwrap(),
@@ -711,13 +708,15 @@ mod tests {
             .unwrap();
             let marker = root.join(".forklaunch/socket-contracts/old/registry-export.json");
             let before = fs::read(&marker).unwrap();
-            assert!(rename_service(
-                &root,
-                "old",
-                "new",
-                &mut StandardStream::stdout(termcolor::ColorChoice::Never),
-            )
-            .is_err());
+            assert!(
+                rename_service(
+                    &root,
+                    "old",
+                    "new",
+                    &mut StandardStream::stdout(termcolor::ColorChoice::Never),
+                )
+                .is_err()
+            );
             assert_eq!(fs::read(marker).unwrap(), before);
             assert!(!root.join(".forklaunch/socket-contracts/new").exists());
         }
