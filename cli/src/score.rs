@@ -135,6 +135,19 @@ impl CliCommand for ScoreCommand {
                 .default_value("both"),
         )
         .arg(
+            Arg::new("share")
+                .long("share")
+                .value_name("SCOPE")
+                .help(
+                    "What the share link shows: scores (the default: scores, counts and \
+                     requirement titles, no findings or code) or full (the report as you see it \
+                     signed in: overview, findings, data flows; expires sooner). Ignored with \
+                     --no-share and --offline.",
+                )
+                .value_parser(["scores", "full"])
+                .default_value("scores"),
+        )
+        .arg(
             Arg::new("job")
                 .long("job")
                 .value_name("JOB_ID")
@@ -154,6 +167,12 @@ impl CliCommand for ScoreCommand {
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let workspace = Workspace::locate(matches)?;
+        // What the share link shows; None when no link is wanted.
+        let share_scope = if matches.get_flag("no_share") {
+            None
+        } else {
+            matches.get_one::<String>("share").map(String::as_str)
+        };
         let app_root = workspace.root.clone();
         let json_out = matches.get_flag("json");
         let pretty = matches.get_flag("pretty");
@@ -170,7 +189,7 @@ impl CliCommand for ScoreCommand {
             collect_job(
                 &AuthMode::detect(),
                 job_id,
-                !matches.get_flag("no_share"),
+                share_scope,
                 json_out || prompt_out,
                 matches
                     .get_one::<String>("prompt_scope")
@@ -182,7 +201,7 @@ impl CliCommand for ScoreCommand {
                 &app_root,
                 &workspace.app_name,
                 workspace.platform_application_id.as_deref(),
-                !matches.get_flag("no_share"),
+                share_scope,
                 json_out || prompt_out,
                 matches
                     .get_one::<String>("prompt_scope")
@@ -361,7 +380,8 @@ fn score_via_api(
     // The platform application this project is bound to: its deployed instance
     // counts decide the card's hosting criteria (read server-side as the caller).
     application_id: Option<&str>,
-    want_share: bool,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
     quiet: bool,
     // What the platform's remediation prompt covers: not-met, undecided or both.
     prompt_scope: &str,
@@ -411,7 +431,7 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    collect_job(&auth, &job_id, want_share, quiet, prompt_scope)
+    collect_job(&auth, &job_id, share_scope, quiet, prompt_scope)
 }
 
 /// Wait for an analysis job and return its card, share link and prompt. Also
@@ -420,7 +440,8 @@ fn score_via_api(
 fn collect_job(
     auth: &AuthMode,
     job_id: &str,
-    want_share: bool,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
     quiet: bool,
     prompt_scope: &str,
 ) -> Result<(Value, Option<String>, Option<String>)> {
@@ -434,8 +455,8 @@ fn collect_job(
         .and_then(Value::as_str)
         .map(str::to_string);
 
-    let share_url = if want_share {
-        mint_share(auth, job_id).unwrap_or(None)
+    let share_url = if let Some(scope) = share_scope {
+        mint_share(auth, job_id, scope).unwrap_or(None)
     } else {
         None
     };
@@ -666,8 +687,8 @@ fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> R
 
 /// Mint a revocable share link. Best-effort: a scored card the caller can see
 /// is worth more than an error because the link step failed.
-fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
-    let response = post_with_auth(auth, &studio_url("/share"), json!({ "jobId": job_id }))?;
+fn mint_share(auth: &AuthMode, job_id: &str, scope: &str) -> Result<Option<String>> {
+    let response = post_with_auth(auth, &studio_url("/share"), share_request(job_id, scope))?;
     if !response.status().is_success() {
         return Ok(None);
     }
@@ -676,6 +697,13 @@ fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
         .get("sharePath")
         .and_then(Value::as_str)
         .map(|path| format!("{}{}", get_platform_ui_url(), path)))
+}
+
+/// The share request. `scores` is the redacted card (scores, counts and
+/// requirement titles); `full` is the card its owner sees, findings and data
+/// flows included, which the platform expires sooner.
+fn share_request(job_id: &str, scope: &str) -> Value {
+    json!({ "jobId": job_id, "scope": scope })
 }
 
 /// Turn the API's status codes into something a person can act on. The tiering
@@ -1082,6 +1110,15 @@ mod tests {
 
     /// A rail the CLI cannot judge must stay "not assessed" — never 0/100, and
     /// never carry an outstanding count it did not compute.
+    /// The link's scope is sent as chosen: the platform treats anything but
+    /// exactly "full" as the redacted card.
+    #[test]
+    fn the_share_request_carries_its_scope() {
+        assert_eq!(share_request("j1", "full")["scope"], "full");
+        assert_eq!(share_request("j1", "scores")["scope"], "scores");
+        assert_eq!(share_request("j1", "full")["jobId"], "j1");
+    }
+
     /// A folder with no manifest is named after its directory.
     #[test]
     fn an_unmanifested_folder_is_named_after_its_directory() {
