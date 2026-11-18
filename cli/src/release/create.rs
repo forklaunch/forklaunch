@@ -198,15 +198,7 @@ struct CreateReleaseRequest {
     field_inventory: Option<FieldInventory>,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct FieldInventory {
-    generated_at: String,
-    entities: Vec<crate::compliance::audit::EntityReport>,
-    /// Cache and object-store writes found in the code: what each service keeps in a
-    /// cache (and for how long) or a bucket, and whether it is encrypted per tenant.
-    storage: Vec<crate::core::static_analysis::storage_analyzer::StorageUsage>,
-}
+use crate::compliance::scan::FieldInventory;
 
 /// Scan the release's source for its field inventory. Never fails the release:
 /// a scan error is reported and the release goes out without an inventory.
@@ -214,14 +206,8 @@ fn scan_release_field_inventory(
     modules_path: &std::path::Path,
     stdout: &mut termcolor::StandardStream,
 ) -> Result<Option<FieldInventory>> {
-    match crate::compliance::audit::scan_field_inventory(modules_path) {
-        Ok(entities) => Ok(Some(FieldInventory {
-            generated_at: chrono::Utc::now().to_rfc3339(),
-            entities,
-            storage: crate::core::static_analysis::storage_analyzer::scan_storage_usage(
-                modules_path,
-            ),
-        })),
+    match crate::compliance::scan::scan_field_inventory(modules_path) {
+        Ok(inventory) => Ok(Some(inventory)),
         Err(e) => {
             log_warn!(
                 stdout,
