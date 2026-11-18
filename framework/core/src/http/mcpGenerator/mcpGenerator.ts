@@ -12,6 +12,7 @@ import {
   discriminateResponseBodies
 } from '../router/discriminateBody';
 import { unpackRouters } from '../router/unpackRouters';
+import { getMcpTransportHeaders } from './mcpHttpHandler';
 import {
   Body,
   HeadersObject,
@@ -80,6 +81,48 @@ function generateInputSchema(
       : {})
   });
 }
+/**
+ * Builds the headers for a tool's call to its route. Like the Rust runtime,
+ * the MCP request's `Authorization` is forwarded so routes apply their own
+ * auth to the caller, a tool-supplied header of the same name wins over it,
+ * and correlation and trace context always come from the MCP request.
+ */
+function buildRouteHeaders(
+  toolHeaders: Record<string, unknown> | undefined,
+  contentType: string | undefined
+) {
+  const transportHeaders = getMcpTransportHeaders();
+  const routeHeaders = new Headers();
+
+  const authorization = transportHeaders?.get('authorization');
+  if (authorization) {
+    routeHeaders.set('authorization', authorization);
+  }
+  for (const [name, value] of Object.entries(toolHeaders ?? {})) {
+    if (value != null) {
+      routeHeaders.set(name, String(value));
+    }
+  }
+  const correlationId = transportHeaders?.get('x-correlation-id');
+  if (correlationId) {
+    routeHeaders.set('x-correlation-id', correlationId);
+  }
+  const traceparent = transportHeaders?.get('traceparent');
+  if (traceparent) {
+    routeHeaders.set('traceparent', traceparent);
+    routeHeaders.delete('tracestate');
+    const tracestate = transportHeaders?.get('tracestate');
+    if (tracestate) {
+      routeHeaders.set('tracestate', tracestate);
+    }
+  }
+  if (contentType !== undefined) {
+    routeHeaders.set('content-type', contentType);
+  }
+
+  return routeHeaders;
+}
+
 /**
  * Generates a ModelContextProtocol server from given routers.
  *
@@ -200,7 +243,9 @@ export function generateMcpServer<
             let bodySchema;
             let responsesSchemas;
             if (route.contractDetails.versions) {
-              const version = Object.values(route.contractDetails.versions)[index];
+              const version = Object.values(route.contractDetails.versions)[
+                index
+              ];
               responsesSchemas = version.responses;
               if (version.body && schemaValidator.parse(inputSchema, args).ok) {
                 bodySchema = version.body;
@@ -220,7 +265,8 @@ export function generateMcpServer<
                 case 'json': {
                   // Tool arguments contain schema values, including JSON strings.
                   // Raw signed bytes use the explicit text/file body contracts.
-                  parsedBody = body === undefined ? undefined : JSON.stringify(body);
+                  parsedBody =
+                    body === undefined ? undefined : JSON.stringify(body);
                   break;
                 }
                 case 'text': {
@@ -293,16 +339,12 @@ export function generateMcpServer<
 
             const response = await fetch(url, {
               method: route.method.toUpperCase(),
-              headers: {
-                ...headers,
-                ...(discriminatedBody?.contentType != 'multipart/form-data' &&
-                  (contentType ?? discriminatedBody?.contentType) !== undefined
-                  ? {
-                      'Content-Type':
-                        contentType ?? discriminatedBody?.contentType
-                    }
-                  : {})
-              },
+              headers: buildRouteHeaders(
+                headers,
+                discriminatedBody?.contentType != 'multipart/form-data'
+                  ? (contentType ?? discriminatedBody?.contentType)
+                  : undefined
+              ),
               body: parsedBody as BodyInit | null | undefined
             });
 

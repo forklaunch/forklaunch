@@ -37,7 +37,13 @@ type = "Service"
     // Applications select their framework crates; nothing is vendored.
     let manifest_path = root.path().join(".forklaunch/manifest.toml");
     let manifest_source = read_to_string(&manifest_path).unwrap();
-    write(&manifest_path, format!("{manifest_source}\n[framework]\nversion = \"0.1.2\"\nblueprint_version = \"0.1.0\"\n")).unwrap();
+    write(
+        &manifest_path,
+        format!(
+            "{manifest_source}\n[framework]\nversion = \"0.1.2\"\nblueprint_version = \"0.1.0\"\n"
+        ),
+    )
+    .unwrap();
     write(root.path().join(".forklaunch/contracts/native-api/contract.json"), json!({
         "routes":[{"method":"GET","path":"/native","operationName":"getNative","responses":[{"statusCode":200,"body":{"schema":{"jsonSchema":{"type":"object","properties":{"origin":{"type":"string"}},"required":["origin"]}}}}]}]
     }).to_string()).unwrap();

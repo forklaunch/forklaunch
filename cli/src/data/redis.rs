@@ -101,12 +101,22 @@ impl CliCommand for KeysCommand {
     fn command(&self) -> Command {
         command("keys", "List keys, optionally by glob pattern")
             .arg(resource_arg())
-            .arg(Arg::new("pattern").long("pattern").help("Glob pattern (e.g. session:*)"))
+            .arg(
+                Arg::new("pattern")
+                    .long("pattern")
+                    .help("Glob pattern (e.g. session:*)"),
+            )
             .arg(Arg::new("cursor").long("cursor").help("Pagination cursor"))
-            .arg(Arg::new("count").long("count").help("Approximate scan count"))
+            .arg(
+                Arg::new("count")
+                    .long("count")
+                    .help("Approximate scan count"),
+            )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
         let mut url = explorer_url(resource, "/keys");
         let mut params = Vec::new();
         if let Some(v) = matches.get_one::<String>("pattern") {
@@ -142,8 +152,12 @@ impl CliCommand for GetCommand {
             .arg(Arg::new("key").required(true).help("The Redis key"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let key = matches.get_one::<String>("key").context("key is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let key = matches
+            .get_one::<String>("key")
+            .context("key is required")?;
         let url = explorer_url(resource, &format!("/keys/{}", urlencoding::encode(key)));
         print_pretty(&check(
             get(&url).with_context(|| "Failed to reach observability API")?,
@@ -172,15 +186,23 @@ impl CliCommand for SetCommand {
             )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let key = matches.get_one::<String>("key").context("key is required")?;
-        let value = matches.get_one::<String>("value").context("value is required")?;
-        let r#type = matches.get_one::<String>("type").map(String::as_str).unwrap_or("string");
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let key = matches
+            .get_one::<String>("key")
+            .context("key is required")?;
+        let value = matches
+            .get_one::<String>("value")
+            .context("value is required")?;
+        let r#type = matches
+            .get_one::<String>("type")
+            .map(String::as_str)
+            .unwrap_or("string");
         let body = serde_json::json!({ "key": key, "type": r#type, "value": value });
         let url = explorer_url(resource, "/keys");
         print_pretty(&check(
-            post(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            post(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -199,12 +221,15 @@ impl CliCommand for DeleteCommand {
             .arg(Arg::new("key").required(true).help("The Redis key"))
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let key = matches.get_one::<String>("key").context("key is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let key = matches
+            .get_one::<String>("key")
+            .context("key is required")?;
         let url = explorer_url(resource, &format!("/keys/{}", urlencoding::encode(key)));
         print_pretty(&check(
-            delete(&url)
-                .with_context(|| "Failed to reach observability API")?,
+            delete(&url).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -240,8 +265,12 @@ impl CliCommand for TtlCommand {
             )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
-        let key = matches.get_one::<String>("key").context("key is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
+        let key = matches
+            .get_one::<String>("key")
+            .context("key is required")?;
         let seconds: Option<i64> = matches
             .get_one::<String>("seconds")
             .map(|s| s.parse())
@@ -250,8 +279,7 @@ impl CliCommand for TtlCommand {
         let body = build_ttl_body(seconds);
         let url = explorer_url(resource, &format!("/keys/{}/ttl", urlencoding::encode(key)));
         print_pretty(&check(
-            patch(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            patch(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }
@@ -267,7 +295,11 @@ impl CliCommand for RunCommand {
     fn command(&self) -> Command {
         command("command", "Run an arbitrary Redis command")
             .arg(resource_arg())
-            .arg(Arg::new("redis_command").required(true).help("The Redis command, e.g. INFO"))
+            .arg(
+                Arg::new("redis_command")
+                    .required(true)
+                    .help("The Redis command, e.g. INFO"),
+            )
             .arg(
                 Arg::new("arg")
                     .action(ArgAction::Append)
@@ -275,7 +307,9 @@ impl CliCommand for RunCommand {
             )
     }
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let resource = matches.get_one::<String>("resource").context("--resource is required")?;
+        let resource = matches
+            .get_one::<String>("resource")
+            .context("--resource is required")?;
         let redis_command = matches
             .get_one::<String>("redis_command")
             .context("command is required")?;
@@ -286,8 +320,7 @@ impl CliCommand for RunCommand {
         let body = serde_json::json!({ "command": redis_command, "args": args });
         let url = explorer_url(resource, "/redis-command");
         print_pretty(&check(
-            post(&url, body)
-                .with_context(|| "Failed to reach observability API")?,
+            post(&url, body).with_context(|| "Failed to reach observability API")?,
         )?)
     }
 }

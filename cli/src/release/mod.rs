@@ -9,12 +9,12 @@ use crate::{CliCommand, core::command::command};
 
 mod create;
 mod eject;
+mod git;
 mod info;
 mod list;
-mod set_current;
-mod git;
 mod manifest_generator;
 pub(crate) mod s3_upload;
+mod set_current;
 mod shared;
 
 #[derive(Debug)]

@@ -694,13 +694,19 @@ impl<'de> Deserialize<'de> for DockerService {
                                 parse_environment_value(value).map_err(serde::de::Error::custom)?;
                         }
                         "ports" => {
-                            service.ports = service.parse_structured_field("ports",value).map_err(serde::de::Error::custom)?
+                            service.ports = service
+                                .parse_structured_field("ports", value)
+                                .map_err(serde::de::Error::custom)?
                         }
                         "networks" => {
-                            service.networks = service.parse_structured_field("networks",value).map_err(serde::de::Error::custom)?
+                            service.networks = service
+                                .parse_structured_field("networks", value)
+                                .map_err(serde::de::Error::custom)?
                         }
                         "volumes" => {
-                            service.volumes = service.parse_structured_field("volumes",value).map_err(serde::de::Error::custom)?
+                            service.volumes = service
+                                .parse_structured_field("volumes", value)
+                                .map_err(serde::de::Error::custom)?
                         }
                         // Lenient fields — store raw value on parse failure
                         "restart" => match from_value(value.clone()) {
@@ -875,7 +881,11 @@ pub(crate) fn minio_buckets(docker_compose: &DockerCompose) -> Vec<String> {
 
 /// The one-shot MinIO job creates every bucket the stack needs (telemetry and
 /// each service's `S3_BUCKET`), so object stores never have to create their own.
-pub(crate) fn ensure_minio_buckets(docker_compose: &mut DockerCompose, app_name: &str, buckets: &[&str]) {
+pub(crate) fn ensure_minio_buckets(
+    docker_compose: &mut DockerCompose,
+    app_name: &str,
+    buckets: &[&str],
+) {
     let mut all = minio_buckets(docker_compose);
     for bucket in buckets {
         if !bucket.is_empty() && !all.iter().any(|existing| existing == bucket) {
@@ -887,23 +897,29 @@ pub(crate) fn ensure_minio_buckets(docker_compose: &mut DockerCompose, app_name:
         .iter()
         .map(|bucket| format!("mc mb --ignore-existing local/{bucket}"))
         .collect();
-    let mut service = docker_compose.services.get(MINIO_INIT).cloned().unwrap_or_else(|| DockerService {
-        image: Some(MINIO_IMAGE.to_string()),
-        networks: Some(vec![format!("{}-network", app_name)]),
-        depends_on: Some(IndexMap::from([(
-            "minio".to_string(),
-            DependsOn {
-                condition: DependencyCondition::ServiceHealthy,
-                ..Default::default()
-            },
-        )])),
-        ..Default::default()
-    });
+    let mut service = docker_compose
+        .services
+        .get(MINIO_INIT)
+        .cloned()
+        .unwrap_or_else(|| DockerService {
+            image: Some(MINIO_IMAGE.to_string()),
+            networks: Some(vec![format!("{}-network", app_name)]),
+            depends_on: Some(IndexMap::from([(
+                "minio".to_string(),
+                DependsOn {
+                    condition: DependencyCondition::ServiceHealthy,
+                    ..Default::default()
+                },
+            )])),
+            ..Default::default()
+        });
     service.entrypoint = Some(Command::Simple(format!(
         "/bin/sh -c \"mc alias set local http://minio:9000 minioadmin minioadmin && {}\"",
         create.join(" && ")
     )));
-    docker_compose.services.insert(MINIO_INIT.to_string(), service);
+    docker_compose
+        .services
+        .insert(MINIO_INIT.to_string(), service);
 }
 
 /// Local PostgreSQL shared by every project. Per-project roles and databases are
@@ -973,7 +989,10 @@ pub(crate) fn kafka_service(app_name: &str) -> DockerService {
         image: Some("confluentinc/cp-kafka:latest".to_string()),
         hostname: Some("kafka".to_string()),
         container_name: Some(format!("{}-kafka", app_name)),
-        ports: Some(vec!["127.0.0.1:9092:9092".to_string(), "127.0.0.1:29092:29092".to_string()]),
+        ports: Some(vec![
+            "127.0.0.1:9092:9092".to_string(),
+            "127.0.0.1:29092:29092".to_string(),
+        ]),
         environment: Some(IndexMap::from([
             ("KAFKA_BROKER_ID".to_string(), "1".to_string()),
             ("KAFKA_NODE_ID".to_string(), "1".to_string()),
@@ -983,25 +1002,56 @@ pub(crate) fn kafka_service(app_name: &str) -> DockerService {
             ),
             (
                 "KAFKA_LISTENERS".to_string(),
-                "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9092".to_string(),
+                "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093,PLAINTEXT_HOST://0.0.0.0:9092"
+                    .to_string(),
             ),
             (
                 // IPv4 literal: macOS resolves `localhost` to ::1 first.
                 "KAFKA_ADVERTISED_LISTENERS".to_string(),
                 "PLAINTEXT://kafka:29092,PLAINTEXT_HOST://127.0.0.1:9092".to_string(),
             ),
-            ("KAFKA_INTER_BROKER_LISTENER_NAME".to_string(), "PLAINTEXT".to_string()),
-            ("KAFKA_CONTROLLER_LISTENER_NAMES".to_string(), "CONTROLLER".to_string()),
-            ("KAFKA_PROCESS_ROLES".to_string(), "broker,controller".to_string()),
-            ("KAFKA_CONTROLLER_QUORUM_VOTERS".to_string(), "1@localhost:9093".to_string()),
+            (
+                "KAFKA_INTER_BROKER_LISTENER_NAME".to_string(),
+                "PLAINTEXT".to_string(),
+            ),
+            (
+                "KAFKA_CONTROLLER_LISTENER_NAMES".to_string(),
+                "CONTROLLER".to_string(),
+            ),
+            (
+                "KAFKA_PROCESS_ROLES".to_string(),
+                "broker,controller".to_string(),
+            ),
+            (
+                "KAFKA_CONTROLLER_QUORUM_VOTERS".to_string(),
+                "1@localhost:9093".to_string(),
+            ),
             ("KAFKA_CLUSTER_ID".to_string(), cluster_id),
-            ("KAFKA_LOG_DIRS".to_string(), "/tmp/kraft-combined-logs".to_string()),
-            ("KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR".to_string(), "1".to_string()),
-            ("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR".to_string(), "1".to_string()),
-            ("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR".to_string(), "1".to_string()),
+            (
+                "KAFKA_LOG_DIRS".to_string(),
+                "/tmp/kraft-combined-logs".to_string(),
+            ),
+            (
+                "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR".to_string(),
+                "1".to_string(),
+            ),
+            (
+                "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR".to_string(),
+                "1".to_string(),
+            ),
+            (
+                "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR".to_string(),
+                "1".to_string(),
+            ),
             ("KAFKA_NUM_PARTITIONS".to_string(), "1".to_string()),
-            ("KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS".to_string(), "0".to_string()),
-            ("KAFKA_AUTO_CREATE_TOPICS_ENABLE".to_string(), "true".to_string()),
+            (
+                "KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS".to_string(),
+                "0".to_string(),
+            ),
+            (
+                "KAFKA_AUTO_CREATE_TOPICS_ENABLE".to_string(),
+                "true".to_string(),
+            ),
         ])),
         networks: Some(vec![format!("{}-network", app_name)]),
         healthcheck: Some(Healthcheck {
@@ -1065,7 +1115,10 @@ pub(crate) fn add_otel_to_docker_compose<'a>(
                 container_name: Some(format!("{}-minio", app_name)),
                 restart: Some(Restart::Always),
                 environment: Some(minio_environment),
-                ports: Some(vec!["127.0.0.1:9000:9000".to_string(), "127.0.0.1:9001:9001".to_string()]),
+                ports: Some(vec![
+                    "127.0.0.1:9000:9000".to_string(),
+                    "127.0.0.1:9001:9001".to_string(),
+                ]),
                 networks: Some(vec![format!("{}-network", app_name)]),
                 volumes: Some(vec!["minio-data:/data".to_string()]),
                 command: Some(Command::Simple(
@@ -1440,7 +1493,10 @@ pub(crate) fn add_s3_to_docker_compose<'a>(
                 container_name: Some(format!("{}-minio", app_name)),
                 restart: Some(Restart::Always),
                 environment: Some(minio_environment),
-                ports: Some(vec!["127.0.0.1:9000:9000".to_string(), "127.0.0.1:9001:9001".to_string()]),
+                ports: Some(vec![
+                    "127.0.0.1:9000:9000".to_string(),
+                    "127.0.0.1:9001:9001".to_string(),
+                ]),
                 networks: Some(vec![format!("{}-network", app_name)]),
                 volumes: Some(vec!["minio-data:/data".to_string()]),
                 command: Some(Command::Simple(
@@ -1953,7 +2009,8 @@ pub(crate) fn clean_up_unused_infrastructure_services(
         // module can reach Redis without declaring a cache. Removing it would
         // break that service, so only drop what nothing else references.
         // Services removed along with it (MongoDB's `mongo-init`) do not count.
-        if service_still_referenced_outside(docker_compose, &infrastructure, &unused_infrastructure) {
+        if service_still_referenced_outside(docker_compose, &infrastructure, &unused_infrastructure)
+        {
             continue;
         }
         let removed = docker_compose
@@ -1967,7 +2024,9 @@ pub(crate) fn clean_up_unused_infrastructure_services(
             let mounted = |volume: &str| {
                 docker_compose.services.values().any(|service| {
                     service.volumes.as_ref().is_some_and(|volumes| {
-                        volumes.iter().any(|mount| mount.split(':').next() == Some(volume))
+                        volumes
+                            .iter()
+                            .any(|mount| mount.split(':').next() == Some(volume))
                     })
                 })
             };
@@ -2462,17 +2521,33 @@ pub(crate) fn add_service_definition_to_docker_compose(
 
 /// Use the mixed application's named TypeScript sibling without changing the
 /// build context. A context-local Dockerfile remains an explicit customization.
-pub(crate) fn route_typescript_dockerfiles(root: &Path, compose_path: &Path, compose: &mut DockerCompose) {
+pub(crate) fn route_typescript_dockerfiles(
+    root: &Path,
+    compose_path: &Path,
+    compose: &mut DockerCompose,
+) {
     let sibling = root.join("Dockerfile.typescript");
-    if !sibling.is_file() { return; }
-    let Ok(sibling) = sibling.canonicalize() else { return; };
+    if !sibling.is_file() {
+        return;
+    }
+    let Ok(sibling) = sibling.canonicalize() else {
+        return;
+    };
     let base = compose_path.parent().unwrap_or(root);
     for service in compose.services.values_mut() {
-        let Some(build) = service.build.as_mut() else { continue; };
-        if !matches!(build.dockerfile.as_str(), "Dockerfile" | "./Dockerfile") { continue; }
+        let Some(build) = service.build.as_mut() else {
+            continue;
+        };
+        if !matches!(build.dockerfile.as_str(), "Dockerfile" | "./Dockerfile") {
+            continue;
+        }
         let context = base.join(&build.context);
-        if context.join("Dockerfile").exists() { continue; }
-        let Ok(context) = context.canonicalize() else { continue; };
+        if context.join("Dockerfile").exists() {
+            continue;
+        }
+        let Ok(context) = context.canonicalize() else {
+            continue;
+        };
         if let Some(relative) = pathdiff::diff_paths(&sibling, &context) {
             build.dockerfile = relative.to_string_lossy().into_owned();
         }
@@ -2485,14 +2560,19 @@ fn get_relative_context_path(
 ) -> PathBuf {
     let context_rel = if let Some(raw) = docker_compose_path {
         let compose_dir = Path::new(raw).parent().unwrap_or(Path::new(""));
-        let depth = compose_dir.components().filter(|component| !matches!(component, std::path::Component::CurDir)).count();
+        let depth = compose_dir
+            .components()
+            .filter(|component| !matches!(component, std::path::Component::CurDir))
+            .count();
         let mut up = PathBuf::new();
         for _ in 0..depth {
             up.push("..");
         }
         // Short-form Compose binds require an explicit relative-path prefix.
         // A root-level custom Compose filename otherwise produces a named volume.
-        if up.as_os_str().is_empty() { up.push("."); }
+        if up.as_os_str().is_empty() {
+            up.push(".");
+        }
         up
     } else {
         PathBuf::from(".")
@@ -3015,47 +3095,91 @@ depends_on:
 
     #[test]
     fn structured_compose_fields_round_trip_without_losing_options() {
-        let mut service: DockerService=from_str(STRUCTURED_SERVICE).unwrap();
-        let before:Value=from_str(STRUCTURED_SERVICE).unwrap();
-        assert_eq!(serde_yml::to_value(&service).unwrap(),before);
-        service.environment.get_or_insert_with(Default::default).insert("ADDED".into(),"setting".into());
-        service.networks.as_mut().unwrap().push("other-network".into());
+        let mut service: DockerService = from_str(STRUCTURED_SERVICE).unwrap();
+        let before: Value = from_str(STRUCTURED_SERVICE).unwrap();
+        assert_eq!(serde_yml::to_value(&service).unwrap(), before);
+        service
+            .environment
+            .get_or_insert_with(Default::default)
+            .insert("ADDED".into(), "setting".into());
+        service
+            .networks
+            .as_mut()
+            .unwrap()
+            .push("other-network".into());
         service.ports.as_mut().unwrap().push("9001:9001".into());
-        service.volumes.as_mut().unwrap().push("./extra:/extra:ro".into());
-        let after=serde_yml::to_value(service).unwrap();
-        assert_eq!(after["networks"]["demo-network"],before["networks"]["demo-network"]);
-        assert_eq!(after["ports"][0],before["ports"][0]);
-        assert_eq!(after["volumes"][0],before["volumes"][0]);
-        assert_eq!(after["depends_on"],before["depends_on"]);
-        assert_eq!(after["build"],before["build"]);
+        service
+            .volumes
+            .as_mut()
+            .unwrap()
+            .push("./extra:/extra:ro".into());
+        let after = serde_yml::to_value(service).unwrap();
+        assert_eq!(
+            after["networks"]["demo-network"],
+            before["networks"]["demo-network"]
+        );
+        assert_eq!(after["ports"][0], before["ports"][0]);
+        assert_eq!(after["volumes"][0], before["volumes"][0]);
+        assert_eq!(after["depends_on"], before["depends_on"]);
+        assert_eq!(after["build"], before["build"]);
     }
 
     #[test]
     fn app_rename_retains_network_and_mount_options() {
-        let mut service:DockerService=from_str(STRUCTURED_SERVICE).unwrap();
-        service.structured_fields=service.renamed_structured_fields("demo","renamed");
-        for field in [&mut service.networks,&mut service.volumes] {
-            for value in field.as_mut().unwrap() { *value=value.replace("demo","renamed"); }
+        let mut service: DockerService = from_str(STRUCTURED_SERVICE).unwrap();
+        service.structured_fields = service.renamed_structured_fields("demo", "renamed");
+        for field in [&mut service.networks, &mut service.volumes] {
+            for value in field.as_mut().unwrap() {
+                *value = value.replace("demo", "renamed");
+            }
         }
-        let after=serde_yml::to_value(service).unwrap();
-        assert_eq!(after["networks"]["renamed-network"]["aliases"][0].as_str(),Some("custom-alias"));
-        assert_eq!(after["volumes"][0]["source"].as_str(),Some("./renamed-data"));
-        assert_eq!(after["volumes"][0]["bind"]["create_host_path"].as_bool(),Some(false));
+        let after = serde_yml::to_value(service).unwrap();
+        assert_eq!(
+            after["networks"]["renamed-network"]["aliases"][0].as_str(),
+            Some("custom-alias")
+        );
+        assert_eq!(
+            after["volumes"][0]["source"].as_str(),
+            Some("./renamed-data")
+        );
+        assert_eq!(
+            after["volumes"][0]["bind"]["create_host_path"].as_bool(),
+            Some(false)
+        );
     }
 
     #[test]
     fn short_dependencies_can_gain_an_owned_dependency() {
-        let mut service:DockerService=from_str("image: fixture\ndepends_on: [database]\n").unwrap();
-        service.depends_on.as_mut().unwrap().insert("gateway-mock".into(),DependsOn::default());
-        let after=serde_yml::to_value(service).unwrap();
-        assert_eq!(after["depends_on"]["database"]["condition"].as_str(),Some("service_started"));
-        assert!(after["depends_on"].as_mapping().unwrap().contains_key(Value::String("gateway-mock".into())));
+        let mut service: DockerService =
+            from_str("image: fixture\ndepends_on: [database]\n").unwrap();
+        service
+            .depends_on
+            .as_mut()
+            .unwrap()
+            .insert("gateway-mock".into(), DependsOn::default());
+        let after = serde_yml::to_value(service).unwrap();
+        assert_eq!(
+            after["depends_on"]["database"]["condition"].as_str(),
+            Some("service_started")
+        );
+        assert!(
+            after["depends_on"]
+                .as_mapping()
+                .unwrap()
+                .contains_key(Value::String("gateway-mock".into()))
+        );
     }
 
     #[test]
     fn host_port_allocation_handles_addresses_protocols_and_ranges() {
-        for (value,expected) in [("8000:8080",8000),("127.0.0.1:8001:8080/tcp",8001),("[::1]:8002:8080/udp",8002),("8003-8010:8080-8087",8010),("8080",8080)] {
-            assert_eq!(compose_host_port(value),Some(expected));
+        for (value, expected) in [
+            ("8000:8080", 8000),
+            ("127.0.0.1:8001:8080/tcp", 8001),
+            ("[::1]:8002:8080/udp", 8002),
+            ("8003-8010:8080-8087", 8010),
+            ("8080", 8080),
+        ] {
+            assert_eq!(compose_host_port(value), Some(expected));
         }
     }
 
@@ -3427,11 +3551,22 @@ mod relative_compose_context_tests {
 
     #[test]
     fn root_and_nested_compose_paths_keep_bind_mount_prefixes() {
-        for compose in [None, Some("docker-compose.yaml".into()), Some("./docker-compose.yaml".into())] {
-            assert_eq!(get_relative_context_path(&compose, &"modules".into()).to_string_lossy(), "./modules");
+        for compose in [
+            None,
+            Some("docker-compose.yaml".into()),
+            Some("./docker-compose.yaml".into()),
+        ] {
+            assert_eq!(
+                get_relative_context_path(&compose, &"modules".into()).to_string_lossy(),
+                "./modules"
+            );
         }
         for compose in ["infra/docker-compose.yaml", "./infra/docker-compose.yaml"] {
-            assert_eq!(get_relative_context_path(&Some(compose.into()), &"modules".into()).to_string_lossy(), "../modules");
+            assert_eq!(
+                get_relative_context_path(&Some(compose.into()), &"modules".into())
+                    .to_string_lossy(),
+                "../modules"
+            );
         }
     }
 }

@@ -28,22 +28,35 @@ pub(super) fn setting(name: &str, suffix: &str) -> String {
 
 pub(super) fn mcp_servers(matches: &ArgMatches) -> Result<Vec<McpServer>> {
     let mut servers: Vec<McpServer> = Vec::new();
-    for value in matches.get_many::<String>("mcp_servers").into_iter().flatten() {
-        let (name, url) = value
-            .split_once('=')
-            .context("--mcp expects <name>=<url>, for example --mcp linear=https://mcp.linear.app/mcp")?;
+    for value in matches
+        .get_many::<String>("mcp_servers")
+        .into_iter()
+        .flatten()
+    {
+        let (name, url) = value.split_once('=').context(
+            "--mcp expects <name>=<url>, for example --mcp linear=https://mcp.linear.app/mcp",
+        )?;
         anyhow::ensure!(
             valid_tool_prefix(name),
             "MCP server name {name:?} must match ^[a-z][a-z0-9_]*$ (it prefixes tool names)"
         );
-        let parsed = url::Url::parse(url).with_context(|| format!("Invalid MCP server URL for {name}"))?;
+        let parsed =
+            url::Url::parse(url).with_context(|| format!("Invalid MCP server URL for {name}"))?;
         anyhow::ensure!(
-            matches!(parsed.scheme(), "https" | "http") && parsed.username().is_empty() && parsed.password().is_none(),
+            matches!(parsed.scheme(), "https" | "http")
+                && parsed.username().is_empty()
+                && parsed.password().is_none(),
             "MCP server {name} needs an http(s) URL without credentials; put tokens in {}",
             setting(name, "MCP_TOKEN")
         );
-        anyhow::ensure!(!servers.iter().any(|s| s.name == name), "Duplicate MCP server {name}");
-        servers.push(McpServer { name: name.to_owned(), url: url.to_owned() });
+        anyhow::ensure!(
+            !servers.iter().any(|s| s.name == name),
+            "Duplicate MCP server {name}"
+        );
+        servers.push(McpServer {
+            name: name.to_owned(),
+            url: url.to_owned(),
+        });
     }
     Ok(servers)
 }
@@ -54,12 +67,16 @@ pub(super) fn services(matches: &ArgMatches, app_root: &Path) -> Result<Vec<(Str
     let compose = read_or_create_rust_docker_compose(&app_root.join("docker-compose.yaml"))?;
     let mut resolved = Vec::new();
     for name in matches.get_many::<String>("services").into_iter().flatten() {
-        let project = project_table(&manifest, name).with_context(|| format!("No project named {name}"))?;
+        let project =
+            project_table(&manifest, name).with_context(|| format!("No project named {name}"))?;
         anyhow::ensure!(
             project.get("type").and_then(Value::as_str) == Some("Service"),
             "--service {name} must name a service project"
         );
-        anyhow::ensure!(valid_tool_prefix(name), "Service {name} cannot prefix tool names; rename it to snake_case");
+        anyhow::ensure!(
+            valid_tool_prefix(name),
+            "Service {name} cannot prefix tool names; rename it to snake_case"
+        );
         let port = compose
             .services
             .get(name)
@@ -81,15 +98,30 @@ pub(super) fn compose(
 ) -> Result<()> {
     let path = app_root.join("docker-compose.yaml");
     let mut compose = read_or_create_rust_docker_compose(&path)?;
-    let service = compose.services.get_mut(name).context("Expected agent Compose service")?;
+    let service = compose
+        .services
+        .get_mut(name)
+        .context("Expected agent Compose service")?;
     let env = service.environment.get_or_insert_with(IndexMap::new);
     let mut set = |key: String, value: String| {
         env.entry(key).or_insert(value);
     };
     let prefix = name.to_case(Case::UpperSnake);
-    set("HMAC_SECRET_KEY".into(), format!("${{{prefix}_HMAC_SECRET_KEY:?Configure the agent continuation secret}}"));
-    set("JWKS_PUBLIC_KEY_URL".into(), format!("${{{prefix}_JWKS_PUBLIC_KEY_URL:?Configure trusted JWKS}}"));
-    for key in ["AGENT_MODEL", "PLATFORM_GATEWAY_URL", "INSTANCE_ID", "INSTANCE_HMAC_KEY", "FORKLAUNCH_MODEL_STREAMING"] {
+    set(
+        "HMAC_SECRET_KEY".into(),
+        format!("${{{prefix}_HMAC_SECRET_KEY:?Configure the agent continuation secret}}"),
+    );
+    set(
+        "JWKS_PUBLIC_KEY_URL".into(),
+        format!("${{{prefix}_JWKS_PUBLIC_KEY_URL:?Configure trusted JWKS}}"),
+    );
+    for key in [
+        "AGENT_MODEL",
+        "PLATFORM_GATEWAY_URL",
+        "INSTANCE_ID",
+        "INSTANCE_HMAC_KEY",
+        "FORKLAUNCH_MODEL_STREAMING",
+    ] {
         set(key.into(), format!("${{{key}:-}}"));
     }
     for (service, url) in services {
@@ -164,24 +196,44 @@ pub(super) fn routes_with_agent(source: &str) -> Result<String> {
     if source.contains("agent::mount(") {
         return Ok(source.to_owned());
     }
-    let at = source.rfind(".finish()").context("Unexpected api/routes/mod.rs layout")?;
+    let at = source
+        .rfind(".finish()")
+        .context("Unexpected api/routes/mod.rs layout")?;
     let head = &source[..at];
-    let statement_start = head.rfind('{').context("Unexpected api/routes/mod.rs layout")? + 1;
+    let statement_start = head
+        .rfind('{')
+        .context("Unexpected api/routes/mod.rs layout")?
+        + 1;
     let (before, body) = head.split_at(statement_start);
     // `router()` ends in `<expression>.finish()`; wrap that expression.
     let trimmed = body.trim_start();
     let leading = &body[..body.len() - trimmed.len()];
-    let (bindings, expression) = trimmed.rsplit_once(';').map_or(("", trimmed), |(b, e)| (b, e));
-    let bindings = if bindings.is_empty() { String::new() } else { format!("{bindings};") };
+    let (bindings, expression) = trimmed
+        .rsplit_once(';')
+        .map_or(("", trimmed), |(b, e)| (b, e));
+    let bindings = if bindings.is_empty() {
+        String::new()
+    } else {
+        format!("{bindings};")
+    };
     Ok(format!(
         "{before}{leading}{bindings} agent::mount({})?{}",
         expression.trim(),
         &source[at..]
     )
-    .replacen("use crate::registrations::AppState;", "use crate::{agent, registrations::AppState};", 1))
+    .replacen(
+        "use crate::registrations::AppState;",
+        "use crate::{agent, registrations::AppState};",
+        1,
+    ))
 }
 
-fn edit_features(cargo: &mut toml_edit::DocumentMut, table: &str, dependency: &str, features: &[&str]) -> Result<()> {
+fn edit_features(
+    cargo: &mut toml_edit::DocumentMut,
+    table: &str,
+    dependency: &str,
+    features: &[&str],
+) -> Result<()> {
     let entry = cargo[table][dependency]
         .as_table_like_mut()
         .with_context(|| format!("Expected {dependency} in [{table}]"))?;
@@ -200,7 +252,8 @@ fn edit_features(cargo: &mut toml_edit::DocumentMut, table: &str, dependency: &s
 }
 
 fn patch(path: &Path, edit: impl FnOnce(&str) -> Result<String>) -> Result<()> {
-    let source = read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
+    let source =
+        read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
     let next = edit(&source)?;
     if next != source {
         write(path, native_layout::format_source(path, &next))
@@ -244,7 +297,9 @@ pub(super) fn sources(
         has_services: !services.is_empty(),
         services: services
             .iter()
-            .map(|(service, _)| ServiceSource { service: service.clone() })
+            .map(|(service, _)| ServiceSource {
+                service: service.clone(),
+            })
             .collect(),
         has_servers: !servers.is_empty(),
         servers: servers
@@ -260,7 +315,10 @@ pub(super) fn sources(
     for (template, output) in [
         ("rust/agent/mod.rs", "agent/mod.rs"),
         ("rust/agent/tools/mod.rs", "agent/tools/mod.rs"),
-        ("rust/agent/tools/current_time.rs", "agent/tools/current_time.rs"),
+        (
+            "rust/agent/tools/current_time.rs",
+            "agent/tools/current_time.rs",
+        ),
         ("rust/agent/__test__/agent.rs", "__test__/agent.rs"),
     ] {
         let path = dir.join(output);
@@ -271,16 +329,38 @@ pub(super) fn sources(
         })?;
         write_text_file(&path, &content, false, &mut stdout)?;
     }
-    patch(&dir.join("lib.rs"), |source| insert_before_line(source, "pub mod api;", "pub mod agent;\n", "lib.rs"))?;
+    patch(&dir.join("lib.rs"), |source| {
+        insert_before_line(source, "pub mod api;", "pub mod agent;\n", "lib.rs")
+    })?;
     patch(&dir.join("registrations.rs"), |source| {
-        let source = insert_after(source, "pub struct AppState {\n", "    pub agent: AgentRuntime,\n", "registrations.rs")?;
+        let source = insert_after(
+            source,
+            "pub struct AppState {\n",
+            "    pub agent: AgentRuntime,\n",
+            "registrations.rs",
+        )?;
         // The service template builds its state on one line or across several.
         let source = if source.contains("Ok(AppState {\n") {
-            insert_after(&source, "Ok(AppState {\n", "        agent: AgentRuntime::from_env()?,\n", "registrations.rs")?
+            insert_after(
+                &source,
+                "Ok(AppState {\n",
+                "        agent: AgentRuntime::from_env()?,\n",
+                "registrations.rs",
+            )?
         } else {
-            insert_after(&source, "Ok(AppState { ", "agent: AgentRuntime::from_env()?, ", "registrations.rs")?
+            insert_after(
+                &source,
+                "Ok(AppState { ",
+                "agent: AgentRuntime::from_env()?, ",
+                "registrations.rs",
+            )?
         };
-        insert_before_line(&source, "use ", "use crate::agent::AgentRuntime;\n", "registrations.rs")
+        insert_before_line(
+            &source,
+            "use ",
+            "use crate::agent::AgentRuntime;\n",
+            "registrations.rs",
+        )
     })?;
     patch(&dir.join("bootstrapper.rs"), |source| {
         insert_after(
@@ -294,13 +374,20 @@ pub(super) fn sources(
     let host = contracts_layout::new_host_directory(&dir);
     patch(&host.join("lib.rs"), host_with_agent)?;
     for (path, edits) in [
-        (dir.join("Cargo.toml"), vec![
-            ("dependencies", "forklaunch-core", vec!["agent"]),
-            ("dependencies", "forklaunch-axum", vec!["agent"]),
-        ]),
-        (host.join("Cargo.toml"), vec![("dependencies", "forklaunch-core", vec!["agent-contract"])]),
+        (
+            dir.join("Cargo.toml"),
+            vec![
+                ("dependencies", "forklaunch-core", vec!["agent"]),
+                ("dependencies", "forklaunch-axum", vec!["agent"]),
+            ],
+        ),
+        (
+            host.join("Cargo.toml"),
+            vec![("dependencies", "forklaunch-core", vec!["agent-contract"])],
+        ),
     ] {
-        let original = read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
+        let original =
+            read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
         let mut cargo: toml_edit::DocumentMut = original.parse()?;
         for (table, dependency, features) in edits {
             edit_features(&mut cargo, table, dependency, &features)?;
@@ -308,10 +395,15 @@ pub(super) fn sources(
         if path == dir.join("Cargo.toml") {
             let tests = cargo
                 .entry("test")
-                .or_insert(toml_edit::Item::ArrayOfTables(toml_edit::ArrayOfTables::new()))
+                .or_insert(toml_edit::Item::ArrayOfTables(
+                    toml_edit::ArrayOfTables::new(),
+                ))
                 .as_array_of_tables_mut()
                 .context("Expected [[test]] tables")?;
-            if !tests.iter().any(|test| test.get("name").and_then(|n| n.as_str()) == Some("agent")) {
+            if !tests
+                .iter()
+                .any(|test| test.get("name").and_then(|n| n.as_str()) == Some("agent"))
+            {
                 let mut test = toml_edit::Table::new();
                 test["name"] = toml_edit::value("agent");
                 test["path"] = toml_edit::value("__test__/agent.rs");
@@ -362,18 +454,28 @@ mod tests {
         assert_eq!(host_with_agent(&joined).unwrap(), joined);
         let generated = "use crate::registrations::AppState;\npub fn router() -> Result<Router<AppState>, String> {\n    health::mount(ContractRouter::new(contracts::registry()))?.finish()\n}\n";
         let mounted = routes_with_agent(generated).unwrap();
-        assert!(mounted.contains("agent::mount(health::mount(ContractRouter::new(contracts::registry()))?)?.finish()"));
+        assert!(mounted.contains(
+            "agent::mount(health::mount(ContractRouter::new(contracts::registry()))?)?.finish()"
+        ));
         assert!(mounted.contains("use crate::{agent, registrations::AppState};"));
         let regenerated = "use crate::registrations::AppState;\npub fn router() -> Result<Router<AppState>, String> { let router = ContractRouter::new(contracts::registry()); let router = health::mount(router)?;\n router.finish() }\n";
-        assert!(routes_with_agent(regenerated).unwrap().contains("agent::mount(router)?.finish()"));
+        assert!(
+            routes_with_agent(regenerated)
+                .unwrap()
+                .contains("agent::mount(router)?.finish()")
+        );
         assert_eq!(routes_with_agent(&mounted).unwrap(), mounted);
     }
 
     #[test]
     fn imports_are_inserted_once_before_the_first_use() {
         let source = "/*\n * header\n */\n\nuse crate::config::ServiceConfig;\n";
-        let once = insert_before_line(source, "use ", "use crate::agent::AgentRuntime;\n", "x").unwrap();
+        let once =
+            insert_before_line(source, "use ", "use crate::agent::AgentRuntime;\n", "x").unwrap();
         assert!(once.contains("*/\n\nuse crate::agent::AgentRuntime;\nuse crate::config"));
-        assert_eq!(insert_before_line(&once, "use ", "use crate::agent::AgentRuntime;\n", "x").unwrap(), once);
+        assert_eq!(
+            insert_before_line(&once, "use ", "use crate::agent::AgentRuntime;\n", "x").unwrap(),
+            once
+        );
     }
 }

@@ -25,7 +25,7 @@ async fn per_route_keys_do_not_authorize_other_methods_paths_or_default_keys() {
         .unwrap();
     let now = chrono::DateTime::<chrono::Utc>::from(SystemTime::now())
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    for (method, path, id, secret, allowed) in [
+    for (case, (method, path, id, secret, allowed)) in [
         (
             HttpMethod::Post,
             "/relay/session-ingest",
@@ -68,7 +68,13 @@ async fn per_route_keys_do_not_authorize_other_methods_paths_or_default_keys() {
             "default-secret",
             true,
         ),
-    ] {
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        // A fresh nonce per request, so a rejection is the key policy's and
+        // never the replay check's.
+        let nonce = format!("nonce-{case}");
         let signature = generate_hmac_auth_header(
             secret.as_bytes(),
             id,
@@ -76,7 +82,7 @@ async fn per_route_keys_do_not_authorize_other_methods_paths_or_default_keys() {
             path,
             SignedBody::Text("{}"),
             &now,
-            "nonce",
+            &nonce,
         )
         .unwrap();
         let request = FrameworkRequest::new(method, path, RequestContext::new("route-key-fixture"))

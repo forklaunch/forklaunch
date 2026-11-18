@@ -131,7 +131,12 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let directory = root.path().join("release-openapi");
         let registered = root.path().join("schemas/api.json");
-        let plan = Outputs::plan(root.path(), Some(&directory), [("api", registered.to_str())]).unwrap();
+        let plan = Outputs::plan(
+            root.path(),
+            Some(&directory),
+            [("api", registered.to_str())],
+        )
+        .unwrap();
         fs::create_dir_all(directory.join("api")).unwrap();
         let fresh = serde_json::json!({"openapi":"3.1.0","info":{"title":"fresh"}});
         fs::write(directory.join("api/openapi.json"), fresh.to_string()).unwrap();
@@ -158,12 +163,19 @@ mod tests {
         let plan = Outputs::plan(
             root.path(),
             None,
-            [("api", Some("src/api/sdk/typescript/openapi.json")), ("legacy", None)],
+            [
+                ("api", Some("src/api/sdk/typescript/openapi.json")),
+                ("legacy", None),
+            ],
         )
         .unwrap();
         let api = plan.exported("api").unwrap();
         assert!(api.ends_with("src/api/sdk/typescript/openapi.json"));
-        assert!(plan.exported("legacy").unwrap().ends_with(".forklaunch/openapi/legacy/openapi.json"));
+        assert!(
+            plan.exported("legacy")
+                .unwrap()
+                .ends_with(".forklaunch/openapi/legacy/openapi.json")
+        );
         fs::create_dir_all(api.parent().unwrap()).unwrap();
         fs::write(api, "{}").unwrap();
         plan.refresh("api").unwrap();
@@ -230,8 +242,12 @@ mod tests {
             )
         });
         let output = root.path().join("exports");
-        let plan =
-            Outputs::plan(root.path(), Some(&output), [("items", Some("sdk/openapi.json"))]).unwrap();
+        let plan = Outputs::plan(
+            root.path(),
+            Some(&output),
+            [("items", Some("sdk/openapi.json"))],
+        )
+        .unwrap();
         let mut openapi: serde_json::Value = serde_json::from_slice(&original[1].0).unwrap();
         write_json(&output.join("items/openapi.json"), &openapi).unwrap();
         write_json(&contract_path, &contract).unwrap();
@@ -318,7 +334,8 @@ mod tests {
         let exported = directory.join("api/openapi.json");
         fs::write(&exported, "original").unwrap();
         symlink(&exported, root.path().join("alias.json")).unwrap();
-        let plan = Outputs::plan(root.path(), Some(&directory), [("api", Some("alias.json"))]).unwrap();
+        let plan =
+            Outputs::plan(root.path(), Some(&directory), [("api", Some("alias.json"))]).unwrap();
         plan.refresh("api").unwrap();
         assert_eq!(fs::read_to_string(exported).unwrap(), "original");
     }

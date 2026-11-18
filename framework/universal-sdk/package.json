@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Rohin Bhargava",
@@ -46,14 +46,14 @@
   },
   "dependencies": {
     "@forklaunch/common": "workspace:^",
+    "@types/qs": "^6.15.1",
     "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1",
     "ajv-draft-04": "^1.0.0",
-    "qs": "^6.16.0",
-    "@types/qs": "^6.15.1"
+    "ajv-formats": "^3.0.1",
+    "qs": "^6.17.1"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "fetch-mock": "^12.6.0",
     "jest": "^30.5.2",
     "openapi3-ts": "^4.6.2",

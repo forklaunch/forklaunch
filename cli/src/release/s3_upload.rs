@@ -339,7 +339,11 @@ mod tests {
             "export const sdk = {};\n",
         )
         .unwrap();
-        fs::write(app_root.join("target").join("debug").join("ignored"), "ignored").unwrap();
+        fs::write(
+            app_root.join("target").join("debug").join("ignored"),
+            "ignored",
+        )
+        .unwrap();
         fs::write(
             app_root
                 .join("node_modules")
@@ -358,14 +362,7 @@ mod tests {
         let mut entries = archive
             .entries()
             .unwrap()
-            .map(|entry| {
-                entry
-                    .unwrap()
-                    .path()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string()
-            })
+            .map(|entry| entry.unwrap().path().unwrap().to_string_lossy().to_string())
             .collect::<Vec<_>>();
         entries.sort();
 
@@ -374,6 +371,10 @@ mod tests {
         assert!(entries.contains(&"sdks/rust/accounts-sdk/src/lib.rs".to_string()));
         assert!(entries.contains(&"sdks/typescript/src/index.ts".to_string()));
         assert!(!entries.iter().any(|entry| entry.starts_with("target/")));
-        assert!(!entries.iter().any(|entry| entry.starts_with("node_modules/")));
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| entry.starts_with("node_modules/"))
+        );
     }
 }

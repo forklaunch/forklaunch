@@ -130,7 +130,9 @@ fn plan_typescript_sibling(
             continue;
         }
         if destination.exists() && read_to_string(&destination)?.trim_end() != actual.trim_end() {
-            bail!("TypeScript sibling Dockerfile conflicts with the generated source; reconcile it before adding projects");
+            bail!(
+                "TypeScript sibling Dockerfile conflicts with the generated source; reconcile it before adding projects"
+            );
         }
         return Ok(Some((source, destination, actual)));
     }
@@ -225,13 +227,23 @@ pub(super) fn ensure_workspace(root: &Path, dryrun: bool) -> Result<()> {
                 yaml_from_str::<DockerCompose>(&read_to_string(compose_path)?)?,
             ));
         }
-        let specific_ignore = source.with_file_name(format!("{}.dockerignore", source.file_name().unwrap().to_string_lossy()));
-        let ignore = if specific_ignore.is_file() { specific_ignore } else { source.parent().unwrap().join(".dockerignore") };
+        let specific_ignore = source.with_file_name(format!(
+            "{}.dockerignore",
+            source.file_name().unwrap().to_string_lossy()
+        ));
+        let ignore = if specific_ignore.is_file() {
+            specific_ignore
+        } else {
+            source.parent().unwrap().join(".dockerignore")
+        };
         let target = output_path(root, Path::new("Dockerfile.typescript.dockerignore"))?;
         if ignore.is_file() {
             let content = read_to_string(&ignore)?;
             if target.exists() {
-                anyhow::ensure!(read_to_string(&target)? == content, "TypeScript sibling ignore rules conflict with the owned source");
+                anyhow::ensure!(
+                    read_to_string(&target)? == content,
+                    "TypeScript sibling ignore rules conflict with the owned source"
+                );
             } else {
                 outputs.push((target, content));
             }
@@ -243,7 +255,10 @@ pub(super) fn ensure_workspace(root: &Path, dryrun: bool) -> Result<()> {
             "Dockerfile.rust.dockerignore",
             "rust/application/dockerignore",
         ),
-        ("rust-toolchain.toml", "rust/application/rust-toolchain.toml"),
+        (
+            "rust-toolchain.toml",
+            "rust/application/rust-toolchain.toml",
+        ),
         ("rustfmt.toml", "rust/application/rustfmt.toml"),
         ("clippy.toml", "rust/application/clippy.toml"),
     ] {
@@ -284,8 +299,13 @@ pub(super) fn ensure_workspace(root: &Path, dryrun: bool) -> Result<()> {
         let generated = crate::core::forklaunch_state::stamped(&content) == Some(true);
         write(&destination, content)?;
         if generated {
-            let old_ignore = source.with_file_name(format!("{}.dockerignore", source.file_name().unwrap().to_string_lossy()));
-            if old_ignore.is_file() { remove_file(old_ignore)?; }
+            let old_ignore = source.with_file_name(format!(
+                "{}.dockerignore",
+                source.file_name().unwrap().to_string_lossy()
+            ));
+            if old_ignore.is_file() {
+                remove_file(old_ignore)?;
+            }
         }
         remove_file(source)?;
         if let Some((compose_path, mut compose)) = compose_migration {
@@ -314,13 +334,25 @@ pub(super) fn ensure_root_ignore_rules(root: &Path) -> Result<()> {
     let present: std::collections::HashSet<&str> = existing.lines().map(str::trim).collect();
     let missing: Vec<&str> = rules
         .lines()
-        .filter(|rule| !rule.trim().is_empty() && !rule.starts_with('#') && !present.contains(rule.trim()))
+        .filter(|rule| {
+            !rule.trim().is_empty() && !rule.starts_with('#') && !present.contains(rule.trim())
+        })
         .collect();
     if missing.is_empty() {
         return Ok(());
     }
-    let separator = if existing.is_empty() || existing.ends_with('\n') { "" } else { "\n" };
-    write(path, format!("{existing}{separator}\n# ForkLaunch build outputs\n{}\n", missing.join("\n")))?;
+    let separator = if existing.is_empty() || existing.ends_with('\n') {
+        ""
+    } else {
+        "\n"
+    };
+    write(
+        path,
+        format!(
+            "{existing}{separator}\n# ForkLaunch build outputs\n{}\n",
+            missing.join("\n")
+        ),
+    )?;
     Ok(())
 }
 
@@ -334,38 +366,72 @@ mod tests {
         ensure_root_ignore_rules(root.path()).unwrap();
         let generated = read_to_string(root.path().join(".gitignore")).unwrap();
         assert!(generated.lines().any(|rule| rule == "**/target/"));
-        assert!(generated.lines().any(|rule| rule == "**/.forklaunch/compliance.json"));
+        assert!(
+            generated
+                .lines()
+                .any(|rule| rule == "**/.forklaunch/compliance.json")
+        );
         write(root.path().join(".gitignore"), "**/target/\ncoverage/").unwrap();
         ensure_root_ignore_rules(root.path()).unwrap();
         let merged = read_to_string(root.path().join(".gitignore")).unwrap();
         assert!(merged.starts_with("**/target/\ncoverage/\n\n# ForkLaunch build outputs\n"));
         assert_eq!(merged.matches("**/target/").count(), 1);
         ensure_root_ignore_rules(root.path()).unwrap();
-        assert_eq!(read_to_string(root.path().join(".gitignore")).unwrap(), merged, "Reconciliation is idempotent");
+        assert_eq!(
+            read_to_string(root.path().join(".gitignore")).unwrap(),
+            merged,
+            "Reconciliation is idempotent"
+        );
     }
 
     #[test]
     fn owned_contract_image_moves_to_language_sibling() {
         for runtime in ["node", "bun"] {
             let root = fixture();
-            write(root.path().join(".forklaunch/manifest.toml"), format!("runtime='{runtime}'\napp_name='demo'\nmodules_path='modules'\n")).unwrap();
+            write(
+                root.path().join(".forklaunch/manifest.toml"),
+                format!("runtime='{runtime}'\napp_name='demo'\nmodules_path='modules'\n"),
+            )
+            .unwrap();
             let generated = crate::core::forklaunch_state::stamp("# generated compiler image\n");
             write(root.path().join("Dockerfile"), &generated).unwrap();
-            write(root.path().join("Dockerfile.dockerignore"), crate::core::forklaunch_state::stamp("node_modules\n")).unwrap();
-            let manifest_before = read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap();
-            write(root.path().join("Dockerfile"), generated.replace("compiler image", "user customization")).unwrap();
+            write(
+                root.path().join("Dockerfile.dockerignore"),
+                crate::core::forklaunch_state::stamp("node_modules\n"),
+            )
+            .unwrap();
+            let manifest_before =
+                read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap();
+            write(
+                root.path().join("Dockerfile"),
+                generated.replace("compiler image", "user customization"),
+            )
+            .unwrap();
             assert!(ensure_workspace(root.path(), false).is_err());
-            assert_eq!(read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap(), manifest_before);
+            assert_eq!(
+                read_to_string(root.path().join(".forklaunch/manifest.toml")).unwrap(),
+                manifest_before
+            );
             assert!(!root.path().join("Dockerfile.typescript").exists());
             write(root.path().join("Dockerfile"), &generated).unwrap();
-            write(root.path().join("Dockerfile.typescript"), "# custom sibling\n").unwrap();
+            write(
+                root.path().join("Dockerfile.typescript"),
+                "# custom sibling\n",
+            )
+            .unwrap();
             assert!(ensure_workspace(root.path(), false).is_err());
-            assert_eq!(read_to_string(root.path().join("Dockerfile.typescript")).unwrap(), "# custom sibling\n");
+            assert_eq!(
+                read_to_string(root.path().join("Dockerfile.typescript")).unwrap(),
+                "# custom sibling\n"
+            );
             remove_file(root.path().join("Dockerfile.typescript")).unwrap();
             ensure_workspace(root.path(), false).unwrap();
             assert!(!root.path().join("Dockerfile").exists());
             assert!(!root.path().join("Dockerfile.dockerignore").exists());
-            assert_eq!(read_to_string(root.path().join("Dockerfile.typescript")).unwrap(), generated);
+            assert_eq!(
+                read_to_string(root.path().join("Dockerfile.typescript")).unwrap(),
+                generated
+            );
             super::super::typescript_image::preflight(root.path()).unwrap();
         }
     }

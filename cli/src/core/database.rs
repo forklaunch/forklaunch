@@ -282,7 +282,11 @@ pub(crate) fn set_database_in_application_scripts(
             return;
         }
         let prefix = compose_up_command(&services);
-        *script = Some(if rest.is_empty() { prefix } else { format!("{prefix} && {rest}") });
+        *script = Some(if rest.is_empty() {
+            prefix
+        } else {
+            format!("{prefix} && {rest}")
+        });
     };
     update(&mut scripts.migrate_init);
     update(&mut scripts.migrate_create);
@@ -308,7 +312,9 @@ pub(crate) fn set_core_database(
         return Ok(());
     };
     let changed = if present {
-        dependencies.mikro_orm_database.get_or_insert_with(|| MIKRO_ORM_DATABASE_VERSION.to_string());
+        dependencies
+            .mikro_orm_database
+            .get_or_insert_with(|| MIKRO_ORM_DATABASE_VERSION.to_string());
         dependencies.databases.insert(database.clone())
     } else {
         dependencies.databases.remove(database)
@@ -318,7 +324,10 @@ pub(crate) fn set_core_database(
         cache.insert(
             path.to_string_lossy().to_string(),
             RenderedTemplate {
-                content: super::package_json::preserve_json_layout(&original, &to_string_pretty(&package)?),
+                content: super::package_json::preserve_json_layout(
+                    &original,
+                    &to_string_pretty(&package)?,
+                ),
                 path,
                 context: None,
             },
@@ -354,7 +363,12 @@ pub(crate) fn release_database(
     let application_database = match cache.get(&core_path)? {
         Some(core) => {
             let package: ProjectPackageJson = from_str(&core.content)?;
-            package.dependencies.map(|d| d.databases).unwrap_or_default().len() <= 1
+            package
+                .dependencies
+                .map(|d| d.databases)
+                .unwrap_or_default()
+                .len()
+                <= 1
         }
         None => false,
     };
@@ -377,7 +391,12 @@ pub(crate) fn release_database(
     });
     let entity_path = workspace.join("core").join("persistence").join(filename);
     let template = TEMPLATES_DIR
-        .get_file(Path::new("project").join("core").join("persistence").join(filename))
+        .get_file(
+            Path::new("project")
+                .join("core")
+                .join("persistence")
+                .join(filename),
+        )
         .and_then(|file| file.contents_utf8());
     let generated = template.map(|content| {
         super::watermark::apply_watermark(&RenderedTemplate {
@@ -388,18 +407,28 @@ pub(crate) fn release_database(
     });
     let unmodified = read_to_string(&entity_path).ok().is_some_and(|text| {
         Some(text.as_str()) == template
-            || generated.as_ref().is_some_and(|generated| generated.as_ref().ok() == Some(&text))
+            || generated
+                .as_ref()
+                .is_some_and(|generated| generated.as_ref().ok() == Some(&text))
     });
     if !kind_in_use && unmodified {
         let index_path = workspace.join("core").join("persistence").join("index.ts");
         if let Some(index) = cache.get(&index_path)? {
             let export = format!("export * from './{}'", filename.trim_end_matches(".ts"));
-            let kept: Vec<&str> = index.content.split('\n').filter(|line| line.trim() != export).collect();
+            let kept: Vec<&str> = index
+                .content
+                .split('\n')
+                .filter(|line| line.trim() != export)
+                .collect();
             let content = kept.join("\n");
             if content != index.content {
                 cache.insert(
                     index_path.to_string_lossy().to_string(),
-                    RenderedTemplate { path: index_path, content, context: None },
+                    RenderedTemplate {
+                        path: index_path,
+                        content,
+                        context: None,
+                    },
                 );
                 removals.push(entity_path);
             }
@@ -418,7 +447,11 @@ pub(crate) fn release_database(
         if laid_out != staged.content {
             cache.insert(
                 path.to_string_lossy().to_string(),
-                RenderedTemplate { path, content: laid_out, context: staged.context },
+                RenderedTemplate {
+                    path,
+                    content: laid_out,
+                    context: staged.context,
+                },
             );
         }
     }
@@ -452,7 +485,9 @@ fn release_compose_database(
             for service in &services {
                 compose.services.shift_remove(service);
             }
-            compose.volumes.shift_remove(&format!("{app_name}-{}-data", database.to_string()));
+            compose
+                .volumes
+                .shift_remove(&format!("{app_name}-{}-data", database.to_string()));
         }
     }
 }
@@ -489,7 +524,9 @@ mod release_tests {
     #[test]
     fn scripts_gain_and_lose_only_the_database_services() {
         let mut scripts = ApplicationScripts {
-            migrate_up: Some("docker compose up -d --wait postgresql redis && pnpm -r run migrate:up".into()),
+            migrate_up: Some(
+                "docker compose up -d --wait postgresql redis && pnpm -r run migrate:up".into(),
+            ),
             seed: Some("pnpm -r run seed".into()),
             ..Default::default()
         };
@@ -497,7 +534,9 @@ mod release_tests {
         set_database_in_application_scripts(&mut scripts, &Database::MongoDB, true);
         assert_eq!(
             scripts.migrate_up.as_deref(),
-            Some("docker compose up -d --wait mongodb postgresql redis && docker compose up mongo-init && pnpm -r run migrate:up")
+            Some(
+                "docker compose up -d --wait mongodb postgresql redis && docker compose up mongo-init && pnpm -r run migrate:up"
+            )
         );
         set_database_in_application_scripts(&mut scripts, &Database::MongoDB, false);
         assert_eq!(scripts.migrate_up, original);
@@ -515,22 +554,74 @@ mod release_tests {
 
         let mut cache = RenderedTemplatesCache::new();
         set_core_database(root.path(), &Database::MySQL, true, &mut cache).unwrap();
-        let added = cache.get(root.path().join("core/package.json")).unwrap().unwrap().content;
+        let added = cache
+            .get(root.path().join("core/package.json"))
+            .unwrap()
+            .unwrap()
+            .content;
         assert_eq!(added.matches("@mikro-orm/migrations").count(), 1, "{added}");
         assert!(added.contains("\"@mikro-orm/mysql\": \"7"));
         std::fs::write(root.path().join("core/package.json"), &added).unwrap();
 
         let mut cache = RenderedTemplatesCache::new();
         let remaining = [project("other", "mysql")];
-        release_database(root.path(), "app", &remaining, &Database::MySQL, "gone", None, &mut cache).unwrap();
-        assert_eq!(cache.get(root.path().join("core/package.json")).unwrap().unwrap().content, added);
+        release_database(
+            root.path(),
+            "app",
+            &remaining,
+            &Database::MySQL,
+            "gone",
+            None,
+            &mut cache,
+        )
+        .unwrap();
+        assert_eq!(
+            cache
+                .get(root.path().join("core/package.json"))
+                .unwrap()
+                .unwrap()
+                .content,
+            added
+        );
 
-        release_database(root.path(), "app", &[], &Database::MySQL, "gone", None, &mut cache).unwrap();
-        assert_eq!(cache.get(root.path().join("core/package.json")).unwrap().unwrap().content, core);
+        release_database(
+            root.path(),
+            "app",
+            &[],
+            &Database::MySQL,
+            "gone",
+            None,
+            &mut cache,
+        )
+        .unwrap();
+        assert_eq!(
+            cache
+                .get(root.path().join("core/package.json"))
+                .unwrap()
+                .unwrap()
+                .content,
+            core
+        );
         // PostgreSQL is now core's only database (the application's own): kept.
         std::fs::write(root.path().join("core/package.json"), core).unwrap();
         let mut cache = RenderedTemplatesCache::new();
-        release_database(root.path(), "app", &[], &Database::PostgreSQL, "gone", None, &mut cache).unwrap();
-        assert_eq!(cache.get(root.path().join("core/package.json")).unwrap().unwrap().content, core);
+        release_database(
+            root.path(),
+            "app",
+            &[],
+            &Database::PostgreSQL,
+            "gone",
+            None,
+            &mut cache,
+        )
+        .unwrap();
+        assert_eq!(
+            cache
+                .get(root.path().join("core/package.json"))
+                .unwrap()
+                .unwrap()
+                .content,
+            core
+        );
     }
 }

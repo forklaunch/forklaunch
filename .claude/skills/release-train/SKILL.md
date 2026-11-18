@@ -201,7 +201,51 @@ FORKLAUNCH_CLI=$PWD/target/release/forklaunch bash tests/init_billing_stripe.sh
 ```
 
 The CLI release itself is a tag, `cli-vX.Y.Z` (`cli_release.yml` reads the
-version from the tag; `Cargo.toml` stays `0.0.0`).
+version from the tag; `Cargo.toml` stays `0.0.0`). Prefer letting the workflow
+make the tag (next section).
+
+## Rust crates and the CLI (CI)
+
+Rust crates go through **Rust Crate Release** (`rust_release.yml`), the CLI
+through **CLI Release** (`cli_release.yml`). framework-rs and blueprint-rs
+share one version: the blueprint pins exact framework versions, so every
+framework release needs a blueprint release that repins it.
+
+1. `gh workflow run rust_release.yml -f stage=version -f version=X.Y.Z`
+   (from main). It runs `scripts/rust_release.py bump --version X.Y.Z`, which
+   moves both workspaces and every path pin (keeping `=`); refreshes the
+   lockfiles; checks nothing else changed; pushes `release/rust-X.Y.Z` and opens
+   the PR. If Actions may not open PRs in the repository, the run prints the
+   compare link: open the PR from it. The CLI stays on the published version:
+   packaging it and generating apps resolve crates on crates.io, so moving it
+   here would fail until the crates exist. `check_blueprint_deps` lets
+   `FRAMEWORK_VERSION` and `BLUEPRINT_VERSION` trail the workspaces for this
+   reason. PR checks stage the framework beside the blueprint.
+2. Review and merge the PR. **Merging publishes.** The push to main starts the
+   framework release, which verifies, creates `rust-vX.Y.Z` and its GitHub
+   release on the verified commit, then uploads in dependency order with
+   `CARGO_REGISTRY_TOKEN` (falls back to the organization's `CARGO_TOKEN`).
+   Crates whose version did not change (the vendored ones) are not
+   re-uploaded: `prepare` downloads their crates.io archive, proves the fresh
+   packaging has the same files (ignoring Cargo's lockfile and VCS info), and
+   carries the registry's bytes. Changed content at an unchanged version fails
+   with "bump its version".
+3. The framework run starts the blueprint run, which verifies against the
+   framework now on crates.io and creates `rust-blueprint-vX.Y.Z`.
+4. The blueprint run pushes `release/cli-rust-X.Y.Z`, moving `cli/Cargo.toml`
+   and the CLI's generated Cargo versions to the published crates, and opens the
+   PR (or prints the link). Review and merge it.
+5. `gh workflow run cli_release.yml -f version=A.B.C -f release=true` from
+   main. Preflight fails unless the commit is on main, `check_blueprint_deps`
+   passes, and `rust_release.py check-published --scope all` finds every
+   generated crate version on crates.io. After the five builds pass it creates
+   `cli-vA.B.C`, the GitHub release, and publishes npm and crates.io. Without
+   `release=true` a dispatch only builds. Pushing a `cli-v*` tag still works and
+   runs the same preflight.
+
+A half-finished publish is resumed by dispatching
+`rust_release.yml -f stage=release -f scope=framework|blueprint -f publish=true`
+from main: versions crates.io already has are verified and skipped.
 
 ## Traps
 

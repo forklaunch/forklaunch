@@ -1,5 +1,26 @@
 # @forklaunch/core
 
+## 3.5.0
+
+### Minor Changes
+
+- f047dec: Serve MCP at `/mcp` (or `mcp.path`) on the application port, the way Rust services do, instead of a second listener on `MCP_PORT` / `PORT + 2000`. A separate listener is still used when `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` is set; set `MCP_LISTENER=separate` to keep MCP clients that point at `PORT + 2000` working. Sessions are stateless by default so any worker or task can answer; `mcp.sessions: 'stateful'` keeps in-memory sessions (single worker only) that close after `sessionIdleTimeoutMs` (default 15 minutes) idle. A failed `authenticate` returns 401 with `WWW-Authenticate: Bearer`, and hyper-express now applies `authenticate`. Tools forward the caller's `Authorization`, `x-correlation-id` and trace headers to the routes they call; a header the tool supplies wins.
+
+### Patch Changes
+
+- eb7c292: Pass the OpenTelemetry metric reader through `metricReaders`, which replaces the removed `metricReader` option
+
+## 3.4.0
+
+### Minor Changes
+
+- ba5099d: Add `@forklaunch/core/agent`: the runtime behind `forklaunch init agent`. Tools in the MCP shape (`toolFactory`, `localTools`), app services as tools from their OpenAPI documents (`serviceTools`), external MCP servers over streamable HTTP (`mcpServer`), a tool-calling loop over the model gateway with streaming events, and stateless approvals for tools that are not read-only (AES-GCM sealed continuations).
+- ee4ac9e: Add a server-side local model client that uses a desktop relay or the CLI's selected account to obtain app-scoped credentials. Explicit ForkLaunch API keys take precedence; credentials stay in memory. Add bounded text streaming to the preview client, with interruption detection and cancellation.
+
+### Patch Changes
+
+- d0d3049: Payments: `createPaymentsClient()` gains `payouts({ limit })` (the connected account's balance, recent payouts, bank and payout schedule; read-only, empty before onboarding) and `dashboardLink()` (Stripe's own page for changing the bank and getting tax forms; 409 before onboarding), with the `PaymentsPayouts`, `PaymentsPayout` and `PaymentsMoney` types. The gateway mock serves both routes.
+
 ## 3.3.0
 
 ### Minor Changes

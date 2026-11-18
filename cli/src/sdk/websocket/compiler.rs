@@ -151,7 +151,15 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path();
         fs::create_dir(root.join(".forklaunch")).unwrap();
-        { let manifest = root.join(".forklaunch/manifest.toml"); let prior = std::fs::read_to_string(&manifest).unwrap_or_default(); std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", "version = '0.1.0'")).unwrap(); }
+        {
+            let manifest = root.join(".forklaunch/manifest.toml");
+            let prior = std::fs::read_to_string(&manifest).unwrap_or_default();
+            std::fs::write(
+                &manifest,
+                format!("{prior}\n[framework]\n{}\n", "version = '0.1.0'"),
+            )
+            .unwrap();
+        }
         let artifact = SocketContractArtifact::new("Fixture", "1").with_socket(
             "chat",
             SocketContract::new("/chat")
@@ -195,19 +203,37 @@ mod tests {
                 .unwrap();
             }
             if selection == "registry" {
-                { let manifest = root.join(".forklaunch/manifest.toml"); let prior = std::fs::read_to_string(&manifest).unwrap_or_default(); std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", "version='0.1.0'")).unwrap(); }
+                {
+                    let manifest = root.join(".forklaunch/manifest.toml");
+                    let prior = std::fs::read_to_string(&manifest).unwrap_or_default();
+                    std::fs::write(
+                        &manifest,
+                        format!("{prior}\n[framework]\n{}\n", "version='0.1.0'"),
+                    )
+                    .unwrap();
+                }
             } else {
-                { let manifest = root.join(".forklaunch/manifest.toml"); let prior = std::fs::read_to_string(&manifest).unwrap_or_default(); std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", format!(
-                        "path={}",
-                        toml::Value::String(
-                            root.join("custom/framework").to_string_lossy().into_owned()
-                        )
-                    ))).unwrap(); }
+                {
+                    let manifest = root.join(".forklaunch/manifest.toml");
+                    let prior = std::fs::read_to_string(&manifest).unwrap_or_default();
+                    std::fs::write(
+                        &manifest,
+                        format!(
+                            "{prior}\n[framework]\n{}\n",
+                            format!(
+                                "path={}",
+                                toml::Value::String(
+                                    root.join("custom/framework").to_string_lossy().into_owned()
+                                )
+                            )
+                        ),
+                    )
+                    .unwrap();
+                }
             }
-            let document: toml::Value = toml::from_str(
-                &compiler_manifest(root, &["zod-checks", "zod-regex"]).unwrap(),
-            )
-            .unwrap();
+            let document: toml::Value =
+                toml::from_str(&compiler_manifest(root, &["zod-checks", "zod-regex"]).unwrap())
+                    .unwrap();
             let dependency = &document["dependencies"]["forklaunch-core"];
             if selection == "registry" {
                 assert_eq!(dependency["version"].as_str(), Some("=0.1.0"));
@@ -223,7 +249,10 @@ mod tests {
                         .any(|feature| feature.as_str() == Some(expected))
                 );
             }
-            assert!(document.get("patch").is_none(), "Compilers use upstream serde_json");
+            assert!(
+                document.get("patch").is_none(),
+                "Compilers use upstream serde_json"
+            );
             assert!(
                 !root.join(".forklaunch/socket-compiler").exists(),
                 "Planning must not change app files"

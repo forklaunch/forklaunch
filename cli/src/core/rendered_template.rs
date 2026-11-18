@@ -63,13 +63,14 @@ pub(crate) fn write_rendered_templates(
                     content = super::manifest::preserve_manifest_layout(&original, &content);
                 }
             }
-            write(&rendered_template.path, content)
-            .with_context(|| match &rendered_template.context {
-                Some(context) => context.clone(),
-                None => format!(
-                    "Failed to write {}. Please check your target directory is writable",
-                    rendered_template.path.display()
-                ),
+            write(&rendered_template.path, content).with_context(|| {
+                match &rendered_template.context {
+                    Some(context) => context.clone(),
+                    None => format!(
+                        "Failed to write {}. Please check your target directory is writable",
+                        rendered_template.path.display()
+                    ),
+                }
             })?;
         } else {
             writeln!(stdout, "Would write {}", rendered_template.path.display())?;
@@ -80,7 +81,10 @@ pub(crate) fn write_rendered_templates(
 
 /// The dry-run plan of a native change that edits files in place: the same
 /// "Would write" lines rendered templates print.
-pub(crate) fn log_dryrun_plan<S: AsRef<str>>(stdout: &mut StandardStream, paths: &[S]) -> Result<()> {
+pub(crate) fn log_dryrun_plan<S: AsRef<str>>(
+    stdout: &mut StandardStream,
+    paths: &[S],
+) -> Result<()> {
     for path in paths {
         match path.as_ref().strip_suffix(" (removed)") {
             Some(removed) => writeln!(stdout, "Would remove {removed}")?,

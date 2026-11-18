@@ -123,10 +123,9 @@ Tool shape matches MCP `tools/list`: `name`, `title`, `description`,
    DELETE destructive; PUT idempotent; anything else not read-only. Health,
    docs, OpenAPI, compliance, MCP and agent routes, and operations whose body
    is not JSON, are skipped.
-   Why not the services' MCP endpoints: TypeScript services serve MCP on
-   `port + 2000` and Rust services on the main port, and Service Connect only
-   routes the main port, so MCP between services is not reachable in
-   production. OpenAPI over the main port works the same for both languages.
+   Why not the services' MCP endpoints: OpenAPI over the main port works the
+   same for both languages and for services still on frameworks that served
+   TypeScript MCP on `port + 2000`, which Service Connect never routed.
 3. **External MCP servers**: `mcpServer({ url, headers })` over streamable
    HTTP. Their tools are namespaced `<server>__<tool>` and treated as
    open-world. stdio servers are not supported in deployed agents.
@@ -200,7 +199,8 @@ The existing `{ "type": "status" | "delta" | "done" | "error" }` events stay
 compatible with today's Test agent page.
 
 Because the agent is a ForkLaunch service, the framework also exposes these
-routes over MCP at `port + 2000`, so other MCP clients can run the agent.
+routes over MCP at `/mcp` on its own port, so other MCP clients can run the
+agent.
 
 ## Model calls
 

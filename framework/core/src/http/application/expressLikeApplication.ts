@@ -1,12 +1,18 @@
 import { EmptyObject } from '@forklaunch/common';
 import { AnySchemaValidator } from '@forklaunch/validator';
 import { ExpressLikeRouter } from '../interfaces/expressLikeRouter.interface';
-import { cors } from '../middleware/request/cors.middleware';
+import {
+  cors,
+  resolveCorsOptions
+} from '../middleware/request/cors.middleware';
 import { ForklaunchExpressLikeRouter } from '../router/expressLikeRouter';
 import { OpenTelemetryCollector } from '../telemetry/openTelemetryCollector';
 import { SessionObject } from '../types/contractDetails.types';
 import { ExpressLikeApplicationOptions } from '../types/expressLikeOptions';
 import { MetricsDefinition } from '../types/openTelemetryCollector.types';
+
+// One startup warning per process, however many applications are built.
+let warnedAboutCorsDefaults = false;
 
 /**
  * ForklaunchExpressLikeApplication class that sets up routes and middleware for an Express-like application, for use with controller/routes pattern.
@@ -61,7 +67,16 @@ export abstract class ForklaunchExpressLikeApplication<
       }
     );
 
-    this.internal.use(cors(this.appOptions?.cors ?? {}) as RouterHandler);
+    // Cross-origin access is denied unless the app names its origins (the
+    // `cors` option or CORS_ORIGINS); the cors package's own default is `*`.
+    const { options: corsOptions, warning: corsWarning } = resolveCorsOptions(
+      this.appOptions?.cors
+    );
+    if (corsWarning && !warnedAboutCorsDefaults) {
+      warnedAboutCorsDefaults = true;
+      this.openTelemetryCollector.warn(corsWarning);
+    }
+    this.internal.use(cors(corsOptions) as RouterHandler);
   }
 
   /**

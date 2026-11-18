@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Dependency preferences on neutral init activate only when a Rust project is added."""
-import json, os, pathlib, shutil, subprocess, tempfile, tomllib
+import json, os, pathlib, re, shutil, subprocess, tempfile, tomllib
 repo = pathlib.Path(__file__).resolve().parents[3]
 cli = pathlib.Path(os.environ.get('FORKLAUNCH_CLI', repo / 'cli/target/debug/forklaunch'))
 root = pathlib.Path(tempfile.mkdtemp(prefix='forklaunch-neutral-dependencies-'))
-# The CLI's defaults track the workspace versions (enforced by CLI unit tests).
 framework_version = tomllib.loads((repo / 'framework-rs/Cargo.toml').read_text())['workspace']['package']['version']
-blueprint_version = tomllib.loads((repo / 'blueprint-rs/Cargo.toml').read_text())['workspace']['package']['version']
+# The CLI defaults to the published blueprint, which trails the workspace during a release.
+blueprint_version = re.search(r'BLUEPRINT_VERSION: &str = "([^"]+)"', (repo / 'cli/src/core/cargo_toml/cargo_toml_constants.rs').read_text()).group(1)
 env = {**os.environ, 'FORKLAUNCH_SKIP_FORMAT': '1', 'CARGO_INCREMENTAL': '0', 'CARGO_TARGET_DIR': str(repo / 'cli/target')}
 def run(*args):
     result = subprocess.run(list(map(str, args)), env=env, text=True, capture_output=True)

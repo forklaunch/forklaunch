@@ -344,11 +344,20 @@ pub(super) fn plan_typescript_sdk(
     if local_http {
         // Earlier releases also built a vendored universal SDK copy.
         let vendored = [
-            format!("bun run --filter '@forklaunch/universal-sdk' build && bun run --filter '{filter}' --filter './{modules_path}/*/sdk/typescript' build"),
-            format!("{} --filter '{filter}' --filter './{modules_path}/*/sdk/typescript' --filter '@forklaunch/universal-sdk' build", if bun { "bun run" } else { "pnpm" }),
+            format!(
+                "bun run --filter '@forklaunch/universal-sdk' build && bun run --filter '{filter}' --filter './{modules_path}/*/sdk/typescript' build"
+            ),
+            format!(
+                "{} --filter '{filter}' --filter './{modules_path}/*/sdk/typescript' --filter '@forklaunch/universal-sdk' build",
+                if bun { "bun run" } else { "pnpm" }
+            ),
         ];
         let key = format!("{prefix}:typecheck");
-        if scripts.get(&key).and_then(Json::as_str).is_some_and(|value| vendored.iter().any(|previous| previous == value)) {
+        if scripts
+            .get(&key)
+            .and_then(Json::as_str)
+            .is_some_and(|value| vendored.iter().any(|previous| previous == value))
+        {
             scripts.remove(&key);
         }
     }
@@ -425,7 +434,10 @@ pub(super) fn plan_typescript_sdk(
         // modules; the root runs it there, plus the Cargo equivalent.
         let cargo = root.join("Cargo.toml").is_file();
         for (name, rust) in [
-            ("lint", Some("cargo clippy --workspace --all-targets --no-deps")),
+            (
+                "lint",
+                Some("cargo clippy --workspace --all-targets --no-deps"),
+            ),
             ("lint:fix", None),
             ("format", Some("cargo fmt --all")),
             ("test", Some("cargo test --workspace")),

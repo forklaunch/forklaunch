@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Forklift Technologies, Inc.",
@@ -59,8 +59,8 @@
     "dotenv": "^18.0.8",
     "jose": "^6.2.12",
     "pino": "^10.4.0",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "uuid": "^14.0.3",
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

@@ -195,15 +195,17 @@ new NodeSDK({
     }/v1/traces`,
     headers: otelHeaders
   }),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter({
-      url: `${
-        getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT') ?? 'http://localhost:4318'
-      }/v1/metrics`,
-      headers: otelHeaders
-    }),
-    exportIntervalMillis: 5000
-  }),
+  metricReaders: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({
+        url: `${
+          getEnvVar('OTEL_EXPORTER_OTLP_ENDPOINT') ?? 'http://localhost:4318'
+        }/v1/metrics`,
+        headers: otelHeaders
+      }),
+      exportIntervalMillis: 5000
+    })
+  ],
   logRecordProcessors: [
     new BatchLogRecordProcessor({
       exporter: new OTLPLogExporter({

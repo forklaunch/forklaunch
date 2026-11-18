@@ -4,10 +4,14 @@ use super::*;
 fn module_exports_follow_rustfmt_module_order() {
     let mut lib = "pub mod application;\npub mod config;\npub mod domain;\npub mod registrations;\npub mod server;\npub use contracts as sdk;\n".to_owned();
     for id in ["s3", "redis"] {
-        let export = format!("#[path = \"infrastructure/{id}.rs\"]\npub mod {id}_infrastructure;\n");
+        let export =
+            format!("#[path = \"infrastructure/{id}.rs\"]\npub mod {id}_infrastructure;\n");
         insert_module_export(&mut lib, &export, &format!("{id}_infrastructure"));
     }
-    assert_eq!(lib, "pub mod application;\npub mod config;\npub mod domain;\n#[path = \"infrastructure/redis.rs\"]\npub mod redis_infrastructure;\npub mod registrations;\n#[path = \"infrastructure/s3.rs\"]\npub mod s3_infrastructure;\npub mod server;\npub use contracts as sdk;\n");
+    assert_eq!(
+        lib,
+        "pub mod application;\npub mod config;\npub mod domain;\n#[path = \"infrastructure/redis.rs\"]\npub mod redis_infrastructure;\npub mod registrations;\n#[path = \"infrastructure/s3.rs\"]\npub mod s3_infrastructure;\npub mod server;\npub use contracts as sdk;\n"
+    );
 }
 
 #[test]
@@ -25,7 +29,11 @@ fn shared_backends_leave_only_in_their_generated_form() {
     assert!(edited.services.contains_key("redis"));
     let mut referenced = generated.clone();
     let user = crate::core::docker::DockerService {
-        environment: Some([("CACHE".to_owned(), "redis://redis:6379/1".to_owned())].into_iter().collect()),
+        environment: Some(
+            [("CACHE".to_owned(), "redis://redis:6379/1".to_owned())]
+                .into_iter()
+                .collect(),
+        ),
         ..Default::default()
     };
     referenced.services.insert("user".into(), user);

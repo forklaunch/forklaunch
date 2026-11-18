@@ -217,9 +217,12 @@ pub(crate) fn change(
         .map(|compose| {
             let mut keys = super::capabilities::compose_processes(compose, &project.name);
             keys.extend(
-                [format!("{}-migrate", project.name), format!("{}-seed", project.name)]
-                    .into_iter()
-                    .filter(|job| compose.services.contains_key(job)),
+                [
+                    format!("{}-migrate", project.name),
+                    format!("{}-seed", project.name),
+                ]
+                .into_iter()
+                .filter(|job| compose.services.contains_key(job)),
             );
             keys
         })
@@ -601,11 +604,18 @@ fn release_backend(
         for (name, volume) in &generated.volumes {
             let mounted = compose.services.values().any(|service| {
                 service.volumes.iter().flatten().any(|mount| {
-                    mount.split_once(':').map_or(mount.as_str(), |(source, _)| source) == name
+                    mount
+                        .split_once(':')
+                        .map_or(mount.as_str(), |(source, _)| source)
+                        == name
                 })
             });
             if !mounted
-                && compose.volumes.get(name).map(serde_json::to_value).transpose()?
+                && compose
+                    .volumes
+                    .get(name)
+                    .map(serde_json::to_value)
+                    .transpose()?
                     == Some(serde_json::to_value(volume)?)
             {
                 compose.volumes.shift_remove(name);
@@ -649,20 +659,30 @@ pub(crate) fn insert_module_export(lib: &mut String, export: &str, name: &str) {
             .and_then(|rest| rest.strip_suffix(';'))
             .map(str::to_owned)
     };
-    let declarations: Vec<(usize, String)> =
-        lines.iter().enumerate().filter_map(|(index, line)| Some((index, module(line)?))).collect();
+    let declarations: Vec<(usize, String)> = lines
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| Some((index, module(line)?)))
+        .collect();
     let attributes_before = |mut index: usize| {
         while index > 0 && lines[index - 1].starts_with("#[") {
             index -= 1;
         }
         index
     };
-    let at = match declarations.iter().find(|(_, existing)| existing.as_str() > name) {
+    let at = match declarations
+        .iter()
+        .find(|(_, existing)| existing.as_str() > name)
+    {
         Some((index, _)) => attributes_before(*index),
         None => match declarations.last() {
             Some((index, _)) => index + 1,
             None => {
-                lib.push_str(if lib.is_empty() || lib.ends_with('\n') { "" } else { "\n" });
+                lib.push_str(if lib.is_empty() || lib.ends_with('\n') {
+                    ""
+                } else {
+                    "\n"
+                });
                 lib.push_str(export);
                 return;
             }
@@ -679,8 +699,9 @@ pub(crate) fn release_deleted_service(root: &Path) -> Result<()> {
     if !compose_path.exists() {
         return Ok(());
     }
-    let manifest: ApplicationManifestData =
-        toml::from_str(&std::fs::read_to_string(root.join(".forklaunch/manifest.toml"))?)?;
+    let manifest: ApplicationManifestData = toml::from_str(&std::fs::read_to_string(
+        root.join(".forklaunch/manifest.toml"),
+    )?)?;
     let text = std::fs::read_to_string(&compose_path)?;
     let mut compose: DockerCompose = serde_yml::from_str(&text)?;
     let before = serde_yml::to_string(&compose)?;
@@ -688,10 +709,13 @@ pub(crate) fn release_deleted_service(root: &Path) -> Result<()> {
     for wanted in [Infrastructure::Redis, Infrastructure::S3] {
         let id = wanted.to_string();
         let remaining = manifest.projects.iter().any(|project| {
-            project.resources.as_ref().is_some_and(|resources| match wanted {
-                Infrastructure::Redis => resources.cache.as_deref() == Some(id.as_str()),
-                Infrastructure::S3 => resources.object_store.as_deref() == Some(id.as_str()),
-            })
+            project
+                .resources
+                .as_ref()
+                .is_some_and(|resources| match wanted {
+                    Infrastructure::Redis => resources.cache.as_deref() == Some(id.as_str()),
+                    Infrastructure::S3 => resources.object_store.as_deref() == Some(id.as_str()),
+                })
         });
         if remaining {
             continue;
@@ -700,7 +724,12 @@ pub(crate) fn release_deleted_service(root: &Path) -> Result<()> {
         let mut environment = IndexMap::new();
         let backend = match wanted {
             Infrastructure::Redis => {
-                add_redis_to_docker_compose(&manifest.app_name, &mut generated, &mut environment, 0)?;
+                add_redis_to_docker_compose(
+                    &manifest.app_name,
+                    &mut generated,
+                    &mut environment,
+                    0,
+                )?;
                 "redis"
             }
             Infrastructure::S3 => {

@@ -37,7 +37,7 @@ functions. A service without `--database` uses the in-memory starter. Selecting
 `--database postgresql` generates its PostgreSQL repository and service-local
 migrations; configure the database and encryption settings before running it.
 
-The service serves `/health`, `/users`, `/openapi.json`, and a Scalar documentation UI at `/docs`. `HOST`, `PORT`, `PROTOCOL`, `VERSION`, `DOCS_PATH`, `RUST_LOG` and `MCP_ENABLED` are required; optional `PUBLIC_ORIGIN`, `DOCS_SERVER_URLS` and `DOCS_SERVER_DESCRIPTIONS` default to the listener's own address. Generated configuration has no in-code defaults (see [Configuration](#configuration)). Ctrl-C and SIGTERM stop the HTTP server gracefully.
+The service serves `/health`, `/users`, `/openapi.json`, and a Scalar documentation UI at `/api/v1/docs`. `DOCS_PATH` is the suffix under `/api/{VERSION}`: for example, `VERSION=v2` and `DOCS_PATH=/reference` serve the UI at `/api/v2/reference`. The unversioned `/docs` route is not mounted. `HOST`, `PORT`, `PROTOCOL`, `VERSION`, `DOCS_PATH`, `RUST_LOG` and `MCP_ENABLED` are required; optional `PUBLIC_ORIGIN`, `DOCS_SERVER_URLS` and `DOCS_SERVER_DESCRIPTIONS` default to the listener's own address. Generated configuration has no in-code defaults (see [Configuration](#configuration)). Ctrl-C and SIGTERM stop the HTTP server gracefully.
 
 Network requests use Axum and the same contract handlers as `local_router`. Path parameters, decoded URL queries, headers, binary bodies, body limits, CORS, and request IDs pass through the framework adapter.
 
@@ -1020,8 +1020,8 @@ initialization, discovery and tool calls, including signed calls, rejected
 credentials and Origins, and graceful shutdown. Generated services use
 `serve_with_default_mcp(listener, shutdown)` to coordinate both surfaces.
 `MCP_LISTENER=shared` (the Rust default) keeps MCP on the HTTP listener.
-`MCP_LISTENER=separate` binds MCP on the HTTP port plus 2000, matching the
-TypeScript fallback. `MCP_PORT` overrides that port (`0` selects an ephemeral
+`MCP_LISTENER=separate` binds MCP on the HTTP port plus 2000, matching
+TypeScript's separate mode (TypeScript also shares the HTTP port by default). `MCP_PORT` overrides that port (`0` selects an ephemeral
 port); `MCP_HOST` accepts a hostname or IP and defaults to the HTTP listener's
 bound IP. Either override also selects separate mode when `MCP_LISTENER` is
 absent. Explicit shared mode rejects these listener overrides.

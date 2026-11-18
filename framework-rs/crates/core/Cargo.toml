@@ -109,7 +109,7 @@ subtle = { version = "2", optional = true }
 chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form", "query"], optional = true }
 oauth2 = { version = "5.0.0", default-features = false, optional = true }
-openidconnect = { version = "4.0.1", default-features = false, optional = true }
+openidconnect = { version = "4.1.0", default-features = false, optional = true }
 schemars = { version = "1.2", optional = true, features = ["uuid1"] }
 ada-url = { version = "=3.2.4", optional = true }
 indexmap = "2"

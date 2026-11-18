@@ -119,13 +119,15 @@ impl CliCommand for AnalyzeCommand {
             module_filter.as_deref(),
         );
         if let Some(message) = normalization_error {
-            analysis.diagnostics.push(workspace_diagnostics::Diagnostic {
-                code: "FLR-LANGUAGE-003",
-                severity: "error",
-                project: String::new(),
-                path: ".forklaunch/manifest.toml".into(),
-                message,
-            });
+            analysis
+                .diagnostics
+                .push(workspace_diagnostics::Diagnostic {
+                    code: "FLR-LANGUAGE-003",
+                    severity: "error",
+                    project: String::new(),
+                    path: ".forklaunch/manifest.toml".into(),
+                    message,
+                });
             analysis.status = "errors";
         }
         let verification = verification::inspect(

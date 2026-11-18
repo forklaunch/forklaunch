@@ -124,8 +124,12 @@ pub(crate) fn change_database_base_entity(
             // of databases is unordered.
             content: all_projects_scan
                 .iter()
-                .flat_map(|export_source| export_source.metadata().exclusive_files.unwrap_or_default())
-                .map(|export_source| format!("export * from './{}'", export_source.replace(".ts", "")))
+                .flat_map(|export_source| {
+                    export_source.metadata().exclusive_files.unwrap_or_default()
+                })
+                .map(|export_source| {
+                    format!("export * from './{}'", export_source.replace(".ts", ""))
+                })
                 .collect::<std::collections::BTreeSet<String>>()
                 .into_iter()
                 .collect::<Vec<String>>()

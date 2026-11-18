@@ -109,6 +109,12 @@ const { url } = await payments.onboardingLink({
   refreshUrl: 'https://app.example.com/settings/payments'
 });
 
+// Where the money is, for the owner's settings page: balance, recent payouts,
+// bank and schedule (read-only, empty before onboarding), and Stripe's own page
+// for changing the bank or getting tax forms (409 before onboarding).
+const { available, payouts, bank, schedule } = await payments.payouts({ limit: 10 });
+const { url: manage } = await payments.dashboardLink();
+
 // The real Stripe SDK, pinned by the platform to your own connected account.
 const stripe = ci.resolve(tokens.StripeClient);
 await stripe.checkout.sessions.create({
