@@ -12,9 +12,13 @@ pub(crate) struct ExpansionBudget {
     pub(crate) bytes: usize,
 }
 impl Default for ExpansionBudget {
+    /// `nodes` counts JSON values visited. A service's own exported API
+    /// description is walked whole, and a large service has several hundred
+    /// thousand values, so the count is sized for that; `bytes` is the limit
+    /// that bounds memory.
     fn default() -> Self {
         Self {
-            nodes: 100_000,
+            nodes: 1_000_000,
             bytes: 32 * 1024 * 1024,
         }
     }
@@ -1215,6 +1219,30 @@ mod tests {
                 &mut ExpansionBudget {
                     nodes: 100,
                     bytes: 100
+                }
+            )
+            .is_err()
+        );
+    }
+
+    /// A real service's own API description passed 100,000 JSON values (about
+    /// 350 routes), and a release could no longer be built for it. The default
+    /// has to hold a document that size; the byte limit still bounds memory.
+    #[test]
+    fn the_default_budget_holds_a_large_service_document() {
+        let properties = (0..60_000)
+            .map(|index| (format!("field{index}"), json!({"type": "string"})))
+            .collect::<Map<String, Value>>();
+        let schema = json!({"type": "object", "properties": properties});
+        let bundled = bundle(&schema, &schema, &mut ExpansionBudget::default()).unwrap();
+        assert_eq!(bundled["properties"]["field59999"]["type"], "string");
+        assert!(
+            bundle(
+                &schema,
+                &schema,
+                &mut ExpansionBudget {
+                    nodes: 100_000,
+                    bytes: 32 * 1024 * 1024
                 }
             )
             .is_err()
