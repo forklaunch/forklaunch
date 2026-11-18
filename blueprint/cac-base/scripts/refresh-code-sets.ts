@@ -17,7 +17,9 @@ import { loadIcd10Codes } from '../persistence/etl/icd10.loader';
 //
 // ICD10_SOURCE_PATH is the CDC codes file as published
 // (icd10cm_codes_YYYY.txt); HCPCS_SOURCE_PATH is a CSV export of the CMS
-// release (code, description, header row). Each is a complete release, so
+// release with its own header row (HCPC, SEQNUM, RECID, LONG DESCRIPTION,
+// ...) or a two-column code,description CSV; a header row that is neither
+// fails the run instead of loading the wrong column. Each is a complete release, so
 // codes it no longer contains are removed (CODE_SET_REPLACE_RELEASE=false
 // keeps them). Swapping either for another feed later (an S3 object) only
 // means writing a new row source; the batching/upsert logic in

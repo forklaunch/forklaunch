@@ -149,6 +149,12 @@ const HCPCS_RECID_PROCEDURE = '3';
 const HCPCS_RECID_PROCEDURE_CONTINUED = '4';
 const HCPCS_RECID_MODIFIER = new Set(['7', '8']);
 
+// Header names of the plain two-column layout, compared in upper case.
+const HCPCS_PLAIN_CODE_HEADERS = new Set(['CODE', 'HCPC', 'HCPCS', 'HCPCS CODE']);
+const HCPCS_PLAIN_DESCRIPTION_HEADERS = new Set(['DESCRIPTION', 'LONG DESCRIPTION']);
+// A HCPCS Level II code: one letter, then four digits.
+const HCPCS_CODE_SHAPE = /^[A-Z][0-9]{4}$/i;
+
 /**
  * Parses a CSV export of the CMS HCPCS Level II release
  * (HCPC2026_JAN_ANWEB and similar). Columns are found by header name, so
@@ -163,8 +169,15 @@ const HCPCS_RECID_MODIFIER = new Set(['7', '8']);
  * and 8) are left out. A row with any other RECID, or without a code or
  * description, counts as skipped.
  *
- * Without HCPC and RECID headers, the file is read as a plain
- * code,description CSV with a header row.
+ * The other layout read here is a plain two-column code,description CSV,
+ * with a "code,description" header row or with no header row at all (the
+ * first line is then a code and its description, and is loaded).
+ *
+ * Any other first line is refused with an error instead of guessed at. A
+ * CMS export whose header names differ slightly (LONG_DESCRIPTION, say)
+ * would otherwise be read as the plain layout, loading SEQNUM as every
+ * code's description and reporting success. Pass a column map to
+ * loadHcpcsCodes for a layout that is neither of the two.
  */
 export async function* parseHcpcsReleaseRows(
   source: Readable,
@@ -184,15 +197,43 @@ export async function* parseHcpcsReleaseRows(
     const fields = splitLine(line, ',');
 
     if (!layout) {
+      // a spreadsheet's "CSV UTF-8" export starts the file with a byte
+      // order mark, which would otherwise be read as part of the first name
+      fields[0] = fields[0].replace(/^\uFEFF/, '').trim();
       const headers = fields.map((h) => h.trim().toUpperCase());
       const code = headers.indexOf('HCPC');
       const recid = headers.indexOf('RECID');
       const description = headers.indexOf('LONG DESCRIPTION');
-      layout =
-        code >= 0 && recid >= 0 && description >= 0
-          ? { kind: 'cms', code, recid, description }
-          : { kind: 'plain' };
-      continue;
+      if (code >= 0 && recid >= 0 && description >= 0) {
+        layout = { kind: 'cms', code, recid, description };
+        continue;
+      }
+      if (
+        HCPCS_PLAIN_CODE_HEADERS.has(headers[0]) &&
+        HCPCS_PLAIN_DESCRIPTION_HEADERS.has(headers[1] ?? '')
+      ) {
+        layout = { kind: 'plain' };
+        continue;
+      }
+      // No header row: the first line is already a code and its
+      // description. Only taken for exactly two columns; a headerless file
+      // with more has no way to say which one is the description.
+      if (
+        fields.length === 2 &&
+        HCPCS_CODE_SHAPE.test(fields[0]) &&
+        fields[1] !== ''
+      ) {
+        layout = { kind: 'plain' };
+        yield { code: fields[0], description: fields[1] };
+        continue;
+      }
+      throw new Error(
+        `HCPCS file: the first line (${fields
+          .map((field) => JSON.stringify(field.slice(0, 40)))
+          .join(
+            ', '
+          )}) is not a header row this loader recognises. Expected the CMS release columns HCPC, RECID and LONG DESCRIPTION (any order, extra columns allowed), or a two-column code,description file with or without that header row. Nothing was loaded; fix the header names or pass a column map.`
+      );
     }
 
     if (layout.kind === 'plain') {

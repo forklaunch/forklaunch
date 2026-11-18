@@ -16,8 +16,10 @@ import {
 // refresh cadence. CMS ships the release as a spreadsheet; export it to CSV
 // and it is read as published (HCPC, SEQNUM, RECID, LONG DESCRIPTION...,
 // see parseHcpcsReleaseRows): continuation rows are joined and modifier
-// rows left out. A plain code,description CSV with a header row also
-// works. Pass a columnMap to read any other layout.
+// rows left out. A plain two-column code,description CSV also works, with
+// or without that header row. A first line that is neither (a CMS export
+// with a renamed column, say) fails the load before anything is written;
+// pass a columnMap to read any other layout.
 export async function loadHcpcsCodes(
   loader: CodeSetLoaderService,
   source: Readable,

@@ -116,6 +116,52 @@ describe('parseHcpcsReleaseRows (CMS HCPCS Level II release)', () => {
     const rows = await collect(parseHcpcsReleaseRows(Readable.from([file])));
     expect(rows).toEqual([{ code: 'J3490', description: 'Unclassified drugs' }]);
   });
+
+  it('reads a plain code,description CSV with no header row, first line included', async () => {
+    const file = ['J3490,"Unclassified drugs"', 'G0438,"Annual wellness visit, initial"'].join('\n');
+    const stats = newParseStats();
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file]), stats));
+    expect(rows).toEqual([
+      { code: 'J3490', description: 'Unclassified drugs' },
+      { code: 'G0438', description: 'Annual wellness visit, initial' }
+    ]);
+    expect(stats.skipped).toBe(0);
+  });
+
+  it('reads the CMS headers behind a byte order mark', async () => {
+    const file = ['\uFEFFHCPC,SEQNUM,RECID,LONG DESCRIPTION', 'J3490,00100,3,"Unclassified drugs"'].join(
+      '\n'
+    );
+    const rows = await collect(parseHcpcsReleaseRows(Readable.from([file])));
+    expect(rows).toEqual([{ code: 'J3490', description: 'Unclassified drugs' }]);
+  });
+
+  // Each of these used to be read as the plain layout: the sequence number
+  // (column 2) was loaded as every code's description and the load
+  // reported success.
+  it.each([
+    ['a renamed description column', 'HCPC,SEQNUM,RECID,LONG_DESCRIPTION,SHORT DESCRIPTION'],
+    ['a renamed code column', 'HCPCS,SEQNUM,RECID,LONG DESCRIPTION'],
+    ['a missing RECID column', 'HCPC,SEQNUM,LONG DESCRIPTION'],
+    ['headers it does not know at all', 'id,name,notes']
+  ])('refuses a header row with %s', async (_label, header) => {
+    const file = [header, 'J3490,00100,3,"Unclassified drugs","Drugs unclassified injection"'].join('\n');
+    const stats = newParseStats();
+    const rows: unknown[] = [];
+    await expect(
+      (async () => {
+        for await (const row of parseHcpcsReleaseRows(Readable.from([file]), stats)) rows.push(row);
+      })()
+    ).rejects.toThrow(/HCPCS file: the first line .* is not a header row this loader recognises/);
+    expect(rows).toEqual([]);
+  });
+
+  it('refuses a CMS-layout file with no header row instead of guessing the columns', async () => {
+    const file = ['J3490,00100,3,"Unclassified drugs"', 'G0438,00100,3,"Annual wellness visit"'].join('\n');
+    await expect(collect(parseHcpcsReleaseRows(Readable.from([file])))).rejects.toThrow(
+      /not a header row this loader recognises/
+    );
+  });
 });
 
 describe('environment settings for the refresh script', () => {
