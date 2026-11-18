@@ -485,23 +485,29 @@ export async function seedEncounterWithCharges(
   const icd10Codes = Array.isArray(opts.icd10Code)
     ? opts.icd10Code
     : [opts.icd10Code];
-  for (const icd10Code of icd10Codes) {
+  // Findings number charge lines and diagnoses in entry order (createdAt).
+  // Rows created in one loop can share a millisecond, so each gets its own
+  // timestamp here and "charge line 2" is the second charge passed in.
+  const enteredAt = Date.now();
+  icd10Codes.forEach((icd10Code, index) => {
     em.create(Diagnosis, {
       organizationId,
       encounter,
-      icd10Code
+      icd10Code,
+      createdAt: new Date(enteredAt + index)
     });
-  }
+  });
 
-  for (const charge of opts.charges) {
+  opts.charges.forEach((charge, index) => {
     em.create(Charge, {
       organizationId,
       encounter,
       procedureCode: charge.procedureCode,
       units: charge.units ?? 1,
-      amount: 125.0
+      amount: 125.0,
+      createdAt: new Date(enteredAt + index)
     });
-  }
+  });
 
   // Two statements, not `em.persist(...).flush()` — `persist()` returns
   // `this` from the *unproxied* target (Reflect.get + .apply preserves the

@@ -113,15 +113,21 @@ export class ClaimService {
     // reference-table checks and scrub(): the reference tables and the
     // scrubbing rule tables are all keyed by normalized code, so E119,
     // e11.9 and E11.9 must reach every layer as the same code.
-    const lines = claim.encounter.charges
-      .getItems()
-      .map((charge) => ({
+    //
+    // Both lists are put in entry order first. A finding names its charge
+    // line or diagnosis by position ("Charge line 2 ..."), and the
+    // collection's own order is whatever the database returned, so without
+    // this the same line could be numbered differently from one scrub to
+    // the next.
+    const lines = inEntryOrder(claim.encounter.charges.getItems()).map(
+      (charge) => ({
         procedureCode: normalizeCode(charge.procedureCode),
         units: charge.units
-      }));
-    const diagnosisCodes = claim.encounter.diagnoses
-      .getItems()
-      .map((diagnosis) => normalizeCode(diagnosis.icd10Code));
+      })
+    );
+    const diagnosisCodes = inEntryOrder(
+      claim.encounter.diagnoses.getItems()
+    ).map((diagnosis) => normalizeCode(diagnosis.icd10Code));
 
     // Unknown-procedure-code check. ScrubbingService is a pure function
     // with no DB dependency (see the class comment above) and can't answer
@@ -143,8 +149,13 @@ export class ClaimService {
       organizationId,
       claim.codeSetType
     );
+    //
+    // A blank code is left to scrub(), which reports it as a missing field
+    // (one CO-16 per blank field). Looking it up here as well would deny
+    // the same blank field a second time as "not recognized".
     const unknownProcedureFindings: ScrubbingFinding[] = [];
     for (let i = 0; i < lines.length; i++) {
+      if (lines[i].procedureCode === '') continue;
       const known =
         (await codeSetProvider.lookupProcedureCode({
           code: lines[i].procedureCode
@@ -154,7 +165,9 @@ export class ClaimService {
         unknownProcedureFindings.push({
           category: 'required_fields',
           carcCode: 'CO-16',
-          message: `Charge line ${i + 1} references procedure code "${lines[i].procedureCode}", which is not recognized by the active code-set provider`
+          message: `Charge line ${i + 1} references procedure code "${lines[i].procedureCode}", which is not recognized by the active code-set provider`,
+          chargeLine: i + 1,
+          code: lines[i].procedureCode
         });
       }
     }
@@ -168,9 +181,10 @@ export class ClaimService {
     // diagnosis justify this procedure," never "is this a real diagnosis
     // code at all," so a mistyped/nonexistent ICD-10 code previously
     // scrubbed clean as long as it happened not to match any crosswalk
-    // entry.
+    // entry. Blank diagnoses are left to scrub() here too.
     const unknownDiagnosisFindings: ScrubbingFinding[] = [];
     for (let i = 0; i < diagnosisCodes.length; i++) {
+      if (diagnosisCodes[i] === '') continue;
       const validated = await this.codeValidationService.validateIcd10(
         diagnosisCodes[i]
       );
@@ -178,7 +192,8 @@ export class ClaimService {
         unknownDiagnosisFindings.push({
           category: 'required_fields',
           carcCode: 'CO-16',
-          message: `Diagnosis ${i + 1} references ICD-10-CM code "${diagnosisCodes[i]}", which is not a recognized code`
+          message: `Diagnosis ${i + 1} references ICD-10-CM code "${diagnosisCodes[i]}", which is not a recognized code`,
+          code: diagnosisCodes[i]
         });
       }
     }
@@ -212,6 +227,11 @@ export class ClaimService {
         claim,
         carcCode: finding.carcCode,
         category: mapMockCategory(finding.category),
+        // The finding's own text and what it points at, so a claim with
+        // several CO-16 denials still says which line or code each is for.
+        message: finding.message,
+        chargeLine: finding.chargeLine ?? null,
+        code: finding.code ?? null,
         worklistStatus: WorklistStatus.OPEN
       })
     );
@@ -235,6 +255,17 @@ export class ClaimService {
 
     return { status: claim.status, denials };
   }
+}
+
+// Oldest first, id as the tie-break for rows created in the same instant.
+function inEntryOrder<T extends { id: string; createdAt: Date }>(
+  rows: ReadonlyArray<T>
+): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      a.createdAt.getTime() - b.createdAt.getTime() ||
+      a.id.localeCompare(b.id)
+  );
 }
 
 function mapMockCategory(

@@ -1,5 +1,7 @@
 import {
   handlers,
+  number,
+  optional,
   schemaValidator,
   string,
   uuid
@@ -120,7 +122,13 @@ export const scrubClaim = handlers.post(
         status: string,
         denials: schemaValidator.array({
           carcCode: string,
-          category: string
+          category: string,
+          // What is wrong, and the charge line (1-based) and code it is
+          // about when the finding is about one: a claim often carries
+          // several CO-16 denials. Never contains a patient identifier.
+          message: string,
+          chargeLine: optional(number),
+          code: optional(string)
         })
       },
       404: string
@@ -141,7 +149,10 @@ export const scrubClaim = handlers.post(
       status: result.status,
       denials: result.denials.map((denial) => ({
         carcCode: denial.carcCode,
-        category: denial.category
+        category: denial.category,
+        message: denial.message,
+        chargeLine: denial.chargeLine ?? undefined,
+        code: denial.code ?? undefined
       }))
     });
   }

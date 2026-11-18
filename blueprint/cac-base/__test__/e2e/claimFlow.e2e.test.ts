@@ -132,7 +132,16 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-50', category: 'lcd_ncd' }]
+        denials: [
+          {
+            carcCode: 'CO-50',
+            category: 'lcd_ncd',
+            message:
+              'Charge line 1: no diagnosis on this claim justifies PROC-001 as medically necessary',
+            chargeLine: 1,
+            code: 'PROC-001'
+          }
+        ]
       });
     });
 
@@ -189,7 +198,16 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-97', category: 'ncci_ptp' }]
+        denials: [
+          {
+            carcCode: 'CO-97',
+            category: 'ncci_ptp',
+            message:
+              'Charge lines 1 and 2: PROC-001 and PROC-002 cannot be billed together without a justifying modifier',
+            chargeLine: 2,
+            code: 'PROC-002'
+          }
+        ]
       });
     });
 
@@ -238,7 +256,13 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message: 'Claim has no diagnosis codes'
+          }
+        ]
       });
     });
 
@@ -263,7 +287,16 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message:
+              'Charge line 1 has an invalid unit count (0); must be a positive integer',
+            chargeLine: 1,
+            code: 'PROC-001'
+          }
+        ]
       });
     });
 
@@ -293,7 +326,16 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message:
+              'Charge line 1 references procedure code "PROC-0001", which is not recognized by the active code-set provider',
+            chargeLine: 1,
+            code: 'PROC-0001'
+          }
+        ]
       });
     });
 
@@ -349,8 +391,160 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
 
       expect(scrubbed.body).toEqual({
         status: 'denied',
-        denials: [{ carcCode: 'CO-16', category: 'required_fields' }]
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message:
+              'Diagnosis 1 references ICD-10-CM code "NOT-A-REAL-ICD10-CODE", which is not a recognized code',
+            code: 'NOT-A-REAL-ICD10-CODE'
+          }
+        ]
       });
+    });
+
+    it('a blank procedure code is denied once, not once per check', async () => {
+      const em = forkPostgresEm(setup);
+      // The blank line used to get two CO-16 denials: "missing a procedure
+      // code" from ScrubbingService and "not recognized" from
+      // ClaimService's reference lookup of the same empty string.
+      const encounterId = await seedEncounterWithCharges(em, {
+        mrn: 'E2E-REQFIELDS-BLANKPROC-001',
+        icd10Code: 'J06.9',
+        charges: [{ procedureCode: 'PROC-999' }, { procedureCode: ' ' }]
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({
+        status: 'denied',
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message: 'Charge line 2 is missing a procedure code',
+            chargeLine: 2
+          }
+        ]
+      });
+    });
+
+    it('a blank diagnosis is denied once per blank field', async () => {
+      const em = forkPostgresEm(setup);
+      const encounterId = await seedEncounterWithCharges(em, {
+        mrn: 'E2E-REQFIELDS-BLANKDIAG-001',
+        icd10Code: ['J06.9', '', ' '],
+        charges: [{ procedureCode: 'PROC-999' }]
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({
+        status: 'denied',
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message: 'Diagnosis code 2 is blank'
+          },
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message: 'Diagnosis code 3 is blank'
+          }
+        ]
+      });
+    });
+
+    it('several CO-16 denials on one claim each say which line and code they are about, on the worklist too', async () => {
+      const em = forkPostgresEm(setup);
+      const mrn = 'E2E-REQFIELDS-WHICHLINE-001';
+      const encounterId = await seedEncounterWithCharges(em, {
+        mrn,
+        icd10Code: ['J06.9', 'NOT-A-REAL-ICD10-CODE'],
+        charges: [
+          { procedureCode: 'PROC-999' },
+          { procedureCode: 'PROC-0001' },
+          { procedureCode: 'PROC-999', units: 0 }
+        ]
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      const expected = [
+        {
+          carcCode: 'CO-16',
+          category: 'required_fields',
+          message:
+            'Charge line 2 references procedure code "PROC-0001", which is not recognized by the active code-set provider',
+          chargeLine: 2,
+          code: 'PROC-0001'
+        },
+        {
+          carcCode: 'CO-16',
+          category: 'required_fields',
+          message:
+            'Diagnosis 2 references ICD-10-CM code "NOT-A-REAL-ICD10-CODE", which is not a recognized code',
+          code: 'NOT-A-REAL-ICD10-CODE'
+        },
+        {
+          carcCode: 'CO-16',
+          category: 'required_fields',
+          message:
+            'Charge line 3 has an invalid unit count (0); must be a positive integer',
+          chargeLine: 3,
+          code: 'PROC-999'
+        }
+      ];
+      expect(scrubbed.body).toEqual({ status: 'denied', denials: expected });
+
+      // The same detail is stored, so the worklist shows it later.
+      const listed = await call(baseUrl, `/denial?claimId=${claimId}`, {
+        token: jwt
+      });
+      const stored = listed.body as Array<Record<string, unknown>>;
+      expect(stored).toHaveLength(3);
+      for (const finding of expected) {
+        expect(stored).toContainEqual(expect.objectContaining(finding));
+      }
+      const single = await call(baseUrl, `/denial/${stored[0].id as string}`, {
+        token: jwt
+      });
+      expect(single.body).toEqual(stored[0]);
+
+      // Findings name codes and line positions only: nothing that
+      // identifies the patient the claim is for.
+      for (const denial of stored) {
+        expect(denial.message).not.toContain(mrn);
+        expect(denial.message).not.toMatch(/Test|Patient|1990/);
+      }
     });
   });
 

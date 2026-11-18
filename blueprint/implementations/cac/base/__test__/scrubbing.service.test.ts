@@ -171,9 +171,13 @@ describe('ScrubbingService', () => {
       [' ']
     );
     expect(onlyBlank.clean).toBe(false);
-    expect(onlyBlank.findings).toContainEqual(
-      expect.objectContaining({ message: 'Claim has no diagnosis codes' })
-    );
+    expect(onlyBlank.findings).toEqual([
+      {
+        category: 'required_fields',
+        carcCode: 'CO-16',
+        message: 'Diagnosis code 1 is blank'
+      }
+    ]);
 
     const oneBlank = scrubbing.scrub(
       [{ procedureCode: 'PROC-002', units: 1 }],
@@ -244,5 +248,86 @@ describe('ScrubbingService', () => {
         (f) => f.category === 'lcd_ncd' || f.category === 'ncci_mue'
       )
     ).toEqual([]);
+  });
+
+  it('reports each blank field once', () => {
+    const result = scrubbing.scrub(
+      [
+        { procedureCode: 'PROC-999', units: 1 },
+        { procedureCode: ' ', units: 1 }
+      ],
+      ['', 'J06.9', ' ']
+    );
+
+    expect(result.findings).toEqual([
+      {
+        category: 'required_fields',
+        carcCode: 'CO-16',
+        message: 'Diagnosis code 1 is blank'
+      },
+      {
+        category: 'required_fields',
+        carcCode: 'CO-16',
+        message: 'Diagnosis code 3 is blank'
+      },
+      {
+        category: 'required_fields',
+        carcCode: 'CO-16',
+        message: 'Charge line 2 is missing a procedure code',
+        chargeLine: 2
+      }
+    ]);
+  });
+
+  it('says which charge line and code each finding is about', () => {
+    const result = scrubbing.scrub(
+      [
+        { procedureCode: 'PROC-001', units: 1 },
+        { procedureCode: 'PROC-002', units: 0 },
+        { procedureCode: 'PROC-004', units: 2 }
+      ],
+      ['J06.9']
+    );
+
+    expect(result.findings).toEqual([
+      {
+        category: 'required_fields',
+        carcCode: 'CO-16',
+        message:
+          'Charge line 2 has an invalid unit count (0); must be a positive integer',
+        chargeLine: 2,
+        code: 'PROC-002'
+      },
+      {
+        category: 'ncci_ptp',
+        carcCode: 'CO-97',
+        message:
+          'Charge lines 1 and 2: PROC-001 and PROC-002 cannot be billed together without a justifying modifier',
+        chargeLine: 2,
+        code: 'PROC-002'
+      },
+      {
+        category: 'ncci_mue',
+        carcCode: 'CO-151',
+        message: 'PROC-004 billed at 2 units, exceeds the mock unit cap of 1',
+        code: 'PROC-004'
+      },
+      {
+        category: 'lcd_ncd',
+        carcCode: 'CO-50',
+        message:
+          'Charge line 2: no diagnosis on this claim justifies PROC-002 as medically necessary',
+        chargeLine: 2,
+        code: 'PROC-002'
+      },
+      {
+        category: 'lcd_ncd',
+        carcCode: 'CO-50',
+        message:
+          'Charge line 3: no diagnosis on this claim justifies PROC-004 as medically necessary',
+        chargeLine: 3,
+        code: 'PROC-004'
+      }
+    ]);
   });
 });

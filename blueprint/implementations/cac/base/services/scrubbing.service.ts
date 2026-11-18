@@ -19,7 +19,16 @@ export interface ScrubClaimLine {
 export interface ScrubbingFinding {
   category: DenialReasonCategory;
   carcCode: string;
+  /**
+   * What is wrong, for the coder working the denial. Built only from
+   * positions, unit counts and the codes on the claim: never a patient
+   * identifier.
+   */
   message: string;
+  /** 1-based position of the charge line the finding is about, if it is about one line. */
+  chargeLine?: number;
+  /** The procedure or diagnosis code the finding is about, if it is about one code. */
+  code?: string;
 }
 
 export interface ScrubbingResult {
@@ -61,24 +70,26 @@ export class ScrubbingService {
     // procedure codes that ARE present, and LCD/NCD only fires for a
     // procedure that has a mock crosswalk entry at all — a claim with zero
     // diagnoses and an uncrosswalked procedure would otherwise scrub clean.
-    // A blank diagnosis is a missing one
-    if (!diagnosisCodes.some((code) => code.trim() !== '')) {
+    // A blank diagnosis is a missing one: one finding per blank field, or
+    // one for the claim when it lists no diagnosis at all. This is the only
+    // place a blank code is reported; a caller that also checks codes
+    // against a reference table must leave blank ones to this.
+    if (diagnosisCodes.length === 0) {
       findings.push({
         category: 'required_fields',
         carcCode: 'CO-16',
         message: 'Claim has no diagnosis codes'
       });
-    } else {
-      diagnosisCodes.forEach((code, index) => {
-        if (code.trim() === '') {
-          findings.push({
-            category: 'required_fields',
-            carcCode: 'CO-16',
-            message: `Diagnosis code ${index + 1} is blank`
-          });
-        }
-      });
     }
+    diagnosisCodes.forEach((code, index) => {
+      if (code.trim() === '') {
+        findings.push({
+          category: 'required_fields',
+          carcCode: 'CO-16',
+          message: `Diagnosis code ${index + 1} is blank`
+        });
+      }
+    });
     if (lines.length === 0) {
       findings.push({
         category: 'required_fields',
@@ -91,14 +102,17 @@ export class ScrubbingService {
         findings.push({
           category: 'required_fields',
           carcCode: 'CO-16',
-          message: `Charge line ${index + 1} is missing a procedure code`
+          message: `Charge line ${index + 1} is missing a procedure code`,
+          chargeLine: index + 1
         });
       }
       if (!Number.isInteger(line.units) || line.units < 1) {
         findings.push({
           category: 'required_fields',
           carcCode: 'CO-16',
-          message: `Charge line ${index + 1} has an invalid unit count (${line.units}); must be a positive integer`
+          message: `Charge line ${index + 1} has an invalid unit count (${line.units}); must be a positive integer`,
+          chargeLine: index + 1,
+          ...(line.procedureCode.trim() !== '' && { code: line.procedureCode })
         });
       }
     });
@@ -111,7 +125,10 @@ export class ScrubbingService {
           findings.push({
             category: 'ncci_ptp',
             carcCode: 'CO-97',
-            message: `${lines[i].procedureCode} and ${lines[j].procedureCode} cannot be billed together without a justifying modifier`
+            // Reported on the later line of the pair; the message names both.
+            message: `Charge lines ${i + 1} and ${j + 1}: ${lines[i].procedureCode} and ${lines[j].procedureCode} cannot be billed together without a justifying modifier`,
+            chargeLine: j + 1,
+            code: lines[j].procedureCode
           });
         }
       }
@@ -139,14 +156,16 @@ export class ScrubbingService {
           // CARC 151: the information submitted does not support this many
           // or this frequency of services, the code payers use for MUE
           carcCode: 'CO-151',
-          message: `${procedureCode} billed at ${units} units, exceeds the mock unit cap of ${cap}`
+          // No chargeLine: the cap is on the code's units over all its lines.
+          message: `${procedureCode} billed at ${units} units, exceeds the mock unit cap of ${cap}`,
+          code: procedureCode
         });
       }
     }
 
     // LCD/NCD — does at least one diagnosis on the claim justify this
     // procedure? Only checked for procedures with a mock crosswalk entry.
-    for (const line of lines) {
+    lines.forEach((line, index) => {
       if (
         Object.hasOwn(MOCK_LCD_CROSSWALK, line.procedureCode) &&
         !isMedicallyNecessary(line.procedureCode, diagnosisCodes)
@@ -154,10 +173,12 @@ export class ScrubbingService {
         findings.push({
           category: 'lcd_ncd',
           carcCode: 'CO-50',
-          message: `No diagnosis on this claim justifies ${line.procedureCode} as medically necessary`
+          message: `Charge line ${index + 1}: no diagnosis on this claim justifies ${line.procedureCode} as medically necessary`,
+          chargeLine: index + 1,
+          code: line.procedureCode
         });
       }
-    }
+    });
 
     return { clean: findings.length === 0, findings };
   }

@@ -1,5 +1,6 @@
 import {
   handlers,
+  number,
   optional,
   schemaValidator,
   string,
@@ -25,6 +26,11 @@ const denialResponseSchema = {
   claimId: string,
   carcCode: string,
   category: string,
+  // What the scrub found, and the charge line (1-based) and code it is
+  // about when the finding is about one. Never a patient identifier.
+  message: string,
+  chargeLine: optional(number),
+  code: optional(string),
   worklistStatus: string,
   resolvedAt: optional(string)
 };
@@ -76,6 +82,9 @@ export const listDenials = handlers.get(
         claimId: denial.claim.id,
         carcCode: denial.carcCode,
         category: denial.category,
+        message: denial.message,
+        chargeLine: denial.chargeLine ?? undefined,
+        code: denial.code ?? undefined,
         worklistStatus: denial.worklistStatus,
         resolvedAt: denial.resolvedAt?.toISOString()
       }))
@@ -122,6 +131,9 @@ export const getDenial = handlers.get(
       claimId: denial.claim.id,
       carcCode: denial.carcCode,
       category: denial.category,
+      message: denial.message,
+      chargeLine: denial.chargeLine ?? undefined,
+      code: denial.code ?? undefined,
       worklistStatus: denial.worklistStatus,
       resolvedAt: denial.resolvedAt?.toISOString()
     });
@@ -168,6 +180,9 @@ export const resolveDenial = handlers.post(
       claimId: denial.claim.id,
       carcCode: denial.carcCode,
       category: denial.category,
+      message: denial.message,
+      chargeLine: denial.chargeLine ?? undefined,
+      code: denial.code ?? undefined,
       worklistStatus: denial.worklistStatus,
       resolvedAt: denial.resolvedAt?.toISOString()
     });

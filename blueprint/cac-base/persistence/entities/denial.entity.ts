@@ -21,6 +21,20 @@ export const Denial = defineComplianceEntity({
     claim: () => fp.manyToOne(Claim).deleteRule('cascade').updateRule('cascade'),
     carcCode: fp.string().compliance('none'),
     category: fp.enum(() => DenialReasonCategory).compliance('none'),
+    // What the scrubbing engine found, in words a coder can act on, and the
+    // charge line and code it is about: several denials on one claim often
+    // share a CARC (CO-16 especially) and are otherwise indistinguishable.
+    // 'none' like the code columns on Charge and Diagnosis: the text is
+    // built only from line positions, unit counts and the claim's own
+    // procedure/diagnosis codes, never from a patient field.
+    message: fp.text().compliance('none'),
+    // 1-based position among the encounter's charges in entry order; null
+    // when the finding is not about one charge line (a diagnosis, a unit
+    // cap summed over lines, a claim with no lines).
+    chargeLine: fp.integer().nullable().compliance('none'),
+    // The procedure or diagnosis code the finding is about, normalized;
+    // null when there is none (a blank field, for instance).
+    code: fp.string().nullable().compliance('none'),
     worklistStatus: fp
       .enum(() => WorklistStatus)
       .default(WorklistStatus.OPEN)

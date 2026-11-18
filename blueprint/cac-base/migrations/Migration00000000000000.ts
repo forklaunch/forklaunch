@@ -52,7 +52,7 @@ export class Migration00000000000000 extends Migration {
     );
 
     this.addSql(
-      `create table "denial" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "claim_id" uuid not null, "carc_code" text not null, "category" text not null, "worklist_status" text not null, "resolved_at" timestamptz null, constraint "denial_pkey" primary key ("id"));`
+      `create table "denial" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "claim_id" uuid not null, "carc_code" text not null, "category" text not null, "message" text not null, "charge_line" int null, "code" text null, "worklist_status" text not null, "resolved_at" timestamptz null, constraint "denial_pkey" primary key ("id"));`
     );
 
     this.addSql(
