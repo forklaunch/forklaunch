@@ -1262,7 +1262,7 @@ pub(crate) struct EntityReport {
     /// unprotected field to the module whose wiring caused it.
     #[serde(skip_serializing_if = "Option::is_none")]
     module: Option<String>,
-    fields: Vec<FieldReport>,
+    pub(crate) fields: Vec<FieldReport>,
     #[serde(skip_serializing_if = "Option::is_none")]
     retention: Option<RetentionReport>,
 }
