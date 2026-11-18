@@ -326,3 +326,118 @@ async fn numeric_max_age_preserves_javascript_text_and_preflight_scope() {
         }
     }
 }
+
+async fn cors_headers(app: Router, method: &str, origin: &str) -> HeaderMap {
+    let mut request = Request::builder()
+        .method(method)
+        .uri("/resource")
+        .header(header::ORIGIN, origin);
+    if method == "OPTIONS" {
+        request = request.header(header::ACCESS_CONTROL_REQUEST_METHOD, "POST");
+    }
+    app.oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap()
+        .headers()
+        .clone()
+}
+
+fn resource_router() -> Router {
+    Router::new().route("/resource", axum::routing::get(|| async { "ok" }))
+}
+
+#[tokio::test]
+async fn unconfigured_cors_allows_no_origin_and_never_the_wildcard() {
+    for setting in [None, Some(""), Some(" , ")] {
+        for method in ["GET", "OPTIONS"] {
+            for origin in ["https://app.example.com", "http://localhost:3000", "null"] {
+                let app = resource_router().layer(default_cors_layer(setting));
+                let headers = cors_headers(app, method, origin).await;
+                assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+                assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+            }
+        }
+    }
+    // The router default (no `cors`, no `typescript_cors`) is that policy.
+    let headers = cors_headers(
+        wrap(resource_router(), None, None),
+        "GET",
+        "https://app.example.com",
+    )
+    .await;
+    if std::env::var(CORS_ORIGINS_ENV).is_err() {
+        assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+    }
+    assert_ne!(
+        headers.get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(&HeaderValue::from_static("*"))
+    );
+}
+
+#[tokio::test]
+async fn cors_origins_setting_allows_exactly_the_listed_origins() {
+    let setting = Some("https://app.example.com, https://admin.example.com/");
+    for method in ["GET", "OPTIONS"] {
+        for origin in ["https://app.example.com", "https://admin.example.com"] {
+            let app = resource_router().layer(default_cors_layer(setting));
+            let headers = cors_headers(app, method, origin).await;
+            assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], origin);
+            assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+        }
+        for origin in [
+            "https://evil.example.com",
+            "https://app.example.com.evil.example",
+            "http://app.example.com",
+        ] {
+            let app = resource_router().layer(default_cors_layer(setting));
+            let headers = cors_headers(app, method, origin).await;
+            assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_ORIGIN));
+        }
+    }
+    // A listed wildcard is an explicit choice, and carries no credentials.
+    let app = resource_router().layer(default_cors_layer(Some("*")));
+    let headers = cors_headers(app, "GET", "https://anything.example.com").await;
+    assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+    assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+}
+
+#[tokio::test]
+async fn typescript_profile_never_sends_wildcard_with_credentials() {
+    for origin in [
+        TypeScriptCorsOrigin::Any,
+        TypeScriptCorsOrigin::Fixed(HeaderValue::from_static("*")),
+    ] {
+        for method in ["GET", "OPTIONS"] {
+            let app = wrap(
+                resource_router(),
+                None,
+                Some(TypeScriptCors {
+                    origin: origin.clone(),
+                    credentials: true,
+                    ..TypeScriptCors::default()
+                }),
+            );
+            let headers = cors_headers(app, method, "https://app.example.com").await;
+            assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+            assert!(!headers.contains_key(header::ACCESS_CONTROL_ALLOW_CREDENTIALS));
+        }
+    }
+    // A named origin keeps its credentials.
+    let app = wrap(
+        resource_router(),
+        None,
+        Some(TypeScriptCors {
+            origin: TypeScriptCorsOrigin::AllowList(vec![HeaderValue::from_static(
+                "https://app.example.com",
+            )]),
+            credentials: true,
+            ..TypeScriptCors::default()
+        }),
+    );
+    let headers = cors_headers(app, "GET", "https://app.example.com").await;
+    assert_eq!(
+        headers[header::ACCESS_CONTROL_ALLOW_ORIGIN],
+        "https://app.example.com"
+    );
+    assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_CREDENTIALS], "true");
+}

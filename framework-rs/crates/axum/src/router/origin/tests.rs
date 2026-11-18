@@ -166,8 +166,15 @@ async fn application_responses_extended_methods_options_and_internal_fallbacks_s
         )
         .await
         .unwrap();
+    // The preflight is still answered by the CORS layer, but with no CORS
+    // policy configured it grants nothing (the default used to be permissive).
     assert_eq!(response.status(), 200);
-    assert_eq!(response.headers()["access-control-allow-methods"], "*");
+    assert!(
+        !response
+            .headers()
+            .contains_key("access-control-allow-origin")
+    );
+    assert!(!response.headers().contains_key("x-method"));
 }
 
 #[tokio::test]

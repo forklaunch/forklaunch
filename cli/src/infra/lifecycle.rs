@@ -1,9 +1,6 @@
 use anyhow::{Context, Result, bail};
 
-use crate::{
-    constants::get_resource_management_api_url,
-    core::http_client::post,
-};
+use crate::{constants::get_resource_management_api_url, core::http_client::post};
 
 use super::{resource_resolver::encode_resource_id_for_url, types::MessageResponse};
 
@@ -31,7 +28,5 @@ pub(crate) fn call_lifecycle_action(resource_id: &str, action: &str) -> Result<M
         bail!("resource-management API returned {} — {}", status, body);
     }
 
-    response
-        .json()
-        .with_context(|| "Failed to parse response")
+    response.json().with_context(|| "Failed to parse response")
 }

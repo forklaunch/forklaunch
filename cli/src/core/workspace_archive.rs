@@ -245,7 +245,11 @@ mod tests {
         fs::create_dir_all(root.join("secrets")).unwrap();
         fs::write(root.join("secrets/key.pem"), "-----BEGIN PRIVATE KEY-----").unwrap();
         fs::create_dir_all(root.join("node_modules/left-pad")).unwrap();
-        fs::write(root.join("node_modules/left-pad/index.js"), "module.exports=1").unwrap();
+        fs::write(
+            root.join("node_modules/left-pad/index.js"),
+            "module.exports=1",
+        )
+        .unwrap();
         fs::create_dir_all(root.join(".git")).unwrap();
         fs::write(root.join(".git/config"), "[remote]").unwrap();
         dir
@@ -300,7 +304,11 @@ mod tests {
     fn skips_oversized_files_and_reports_how_many() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(dir.path().join("small.ts"), "export const a = 1;").unwrap();
-        fs::write(dir.path().join("huge.bin"), vec![0u8; (MAX_FILE_BYTES + 1) as usize]).unwrap();
+        fs::write(
+            dir.path().join("huge.bin"),
+            vec![0u8; (MAX_FILE_BYTES + 1) as usize],
+        )
+        .unwrap();
 
         let (bytes, summary) = pack_workspace(dir.path()).unwrap();
         assert_eq!(summary.skipped_large, 1);

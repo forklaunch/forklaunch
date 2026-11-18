@@ -27,7 +27,6 @@ enum Addable {
     Capability(&'static super::capabilities::Capability),
 }
 
-
 /// Dependencies `infra add` ensures but `infra remove` leaves: every generated
 /// TypeScript service declares ioredis whether or not it has a cache, so
 /// removing it made an add/remove round trip drop a line that was there
@@ -475,13 +474,19 @@ fn change_capability(
             .unwrap_or_else(|| format!("crates/{service}"));
         let relative = std::path::Path::new(&relative);
         if relative.components().any(|component| {
-            matches!(component, std::path::Component::ParentDir
-                | std::path::Component::RootDir | std::path::Component::Prefix(_))
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
         }) {
             bail!("Native capability crate path must remain within the application");
         }
-        let relative: PathBuf = relative.components()
-            .filter(|component| !matches!(component, std::path::Component::CurDir)).collect();
+        let relative: PathBuf = relative
+            .components()
+            .filter(|component| !matches!(component, std::path::Component::CurDir))
+            .collect();
         let path = app_root.join(relative);
         if !path.canonicalize()?.starts_with(app_root.canonicalize()?) {
             bail!("Native capability crate path must remain within the application");

@@ -65,7 +65,9 @@ impl CliCommand for SyncCommand {
         }
 
         let current_dir = env::current_dir()?;
-        let start = matches.get_one::<String>("base_path").map_or(current_dir.clone(), |path| current_dir.join(path));
+        let start = matches
+            .get_one::<String>("base_path")
+            .map_or(current_dir.clone(), |path| current_dir.join(path));
         let workspace_root = find_workspace_root(&start)?;
         let modules_path = get_modules_path(&workspace_root)?;
 

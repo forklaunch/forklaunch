@@ -23,10 +23,22 @@ fn gateway_mock_is_added_once_and_removed_with_the_last_capability() {
 
     release_gateway_mock(&mut c, "billing", "email", true, false, false);
     assert!(c.services.contains_key(GATEWAY_MOCK_SERVICE));
-    assert!(c.services["billing"].environment.as_ref().unwrap().contains_key("INSTANCE_ID"));
+    assert!(
+        c.services["billing"]
+            .environment
+            .as_ref()
+            .unwrap()
+            .contains_key("INSTANCE_ID")
+    );
     release_gateway_mock(&mut c, "billing", "payments", true, true, true);
     assert!(!c.services.contains_key(GATEWAY_MOCK_SERVICE));
-    assert!(!c.services["billing"].environment.as_ref().unwrap().contains_key("INSTANCE_ID"));
+    assert!(
+        !c.services["billing"]
+            .environment
+            .as_ref()
+            .unwrap()
+            .contains_key("INSTANCE_ID")
+    );
     assert!(c.services["billing"].depends_on.is_none());
 }
 
@@ -202,8 +214,7 @@ fn run(root: &Path, service: &Path, capability: &Capability, caps: &[&str], addi
 /// Every line of `before` is still in `after`, in the same order; a
 /// one-line named import may have gained names (it keeps its own).
 fn assert_lines_kept(before: &str, after: &str, what: &str) {
-    let one_line_import =
-        regex::Regex::new(r"^import \{ ([^}]*) \} from ('[^']+');$").unwrap();
+    let one_line_import = regex::Regex::new(r"^import \{ ([^}]*) \} from ('[^']+');$").unwrap();
     let mut rest = after;
     for line in before.lines() {
         if let Some(c) = one_line_import.captures(line) {
@@ -259,21 +270,32 @@ fn every_capability_adds_in_place_and_removes_byte_for_byte() {
         assert_lines_kept(CUSTOM_REGISTRATIONS, &registrations, id);
         // What the capability-wiring check looks for.
         assert!(
-            registrations.contains(&format!("  {}: {{\n    lifetime:", capability.registration_key)),
+            registrations.contains(&format!(
+                "  {}: {{\n    lifetime:",
+                capability.registration_key
+            )),
             "{id}: registration not in the file's indent\n{registrations}"
         );
         assert!(registrations.contains("  PLATFORM_GATEWAY_URL: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('PLATFORM_GATEWAY_URL')\n  },"), "{id}\n{registrations}");
-        assert!(!registrations.contains('"'), "{id}: switched quote style\n{registrations}");
+        assert!(
+            !registrations.contains('"'),
+            "{id}: switched quote style\n{registrations}"
+        );
         assert!(!registrations.contains('\t'), "{id}: switched indentation");
         assert!(
-            !regex::Regex::new(r",\s*\n\s*[}\])]").unwrap().is_match(&registrations),
+            !regex::Regex::new(r",\s*\n\s*[}\])]")
+                .unwrap()
+                .is_match(&registrations),
             "{id}: added a trailing comma\n{registrations}"
         );
         let server = fs::read_to_string(service.join("server.ts")).unwrap();
         if capability.receives_events {
             assert_lines_kept(CUSTOM_SERVER, &server, id);
             assert!(server.contains("import { ci, tokens } from './bootstrapper';\nimport { platformEventsRouter } from './api/routes/platformEvents.routes';\n"), "{id}\n{server}");
-            assert!(server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"), "{id}\n{server}");
+            assert!(
+                server.contains("app.use(factsRouter);\napp.use(platformEventsRouter);\n"),
+                "{id}\n{server}"
+            );
             assert_eq!(server.lines().count(), CUSTOM_SERVER.lines().count() + 2);
         } else {
             // No events: no route to mount.
@@ -314,11 +336,21 @@ fn the_services_own_gateway_settings_are_left_alone() {
         let before = snapshot(dir.path());
         run(dir.path(), &service, capability, &[capability.id], true);
         let added = fs::read_to_string(service.join("registrations.ts")).unwrap();
-        assert_eq!(added.matches("PLATFORM_GATEWAY_URL: {").count(), 1, "{}", capability.id);
+        assert_eq!(
+            added.matches("PLATFORM_GATEWAY_URL: {").count(),
+            1,
+            "{}",
+            capability.id
+        );
         run(dir.path(), &service, capability, &[], false);
         let after = snapshot(dir.path());
         for (path, content) in &before {
-            assert_eq!(after.get(path), Some(content), "{}: {path:?} changed", capability.id);
+            assert_eq!(
+                after.get(path),
+                Some(content),
+                "{}: {path:?} changed",
+                capability.id
+            );
         }
     }
 }
@@ -351,7 +383,8 @@ fn dryrun_staging_writes_nothing() {
     let (dir, service) = custom_service(CUSTOM_REGISTRATIONS);
     let before = snapshot(dir.path());
     let caps = vec!["email".to_string()];
-    let mut edit = CapabilityEdit::new(dir.path(), "clinic", "clinic", &service, caps.clone(), caps);
+    let mut edit =
+        CapabilityEdit::new(dir.path(), "clinic", "clinic", &service, caps.clone(), caps);
     apply(&mut edit, &email::EMAIL, true).unwrap();
     let changed: Vec<PathBuf> = edit.changed_paths().into_iter().map(|(p, _)| p).collect();
     assert!(changed.contains(&service.join("registrations.ts")));

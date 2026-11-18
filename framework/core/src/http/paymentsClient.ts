@@ -20,7 +20,10 @@ import { generateHmacAuthHeaders } from './generateHmacAuthHeaders';
  * the app. The app never holds a Stripe key:
  *
  *   - `createPaymentsClient()` onboards the instance (a Stripe-hosted Account
- *     Link) and reports whether it can take payments yet;
+ *     Link), reports whether it can take payments yet, shows the owner where
+ *     the money is (`payouts()`: balance, recent payouts, bank, schedule;
+ *     read-only) and links them to Stripe's own page for changing it
+ *     (`dashboardLink()`);
  *   - `createStripeClient()` is the REAL Stripe SDK, pointed at the instance
  *     gateway. Every request is signed with the instance key, and the platform
  *     pins `Stripe-Account` to this instance's connected account, forwards
@@ -58,6 +61,42 @@ export interface PaymentsStatus {
   requirementsDue: string[];
 }
 
+/** An amount in the currency's minor unit (cents), as Stripe gives it. */
+export interface PaymentsMoney {
+  amount: number;
+  currency: string;
+}
+
+/** One payout to the business's bank. */
+export interface PaymentsPayout {
+  id: string;
+  amount: number;
+  currency: string;
+  /** `paid`, `pending`, `in_transit`, `canceled` or `failed`. */
+  status: string;
+  /** When it reaches (or reached) the bank, ISO 8601. */
+  arrivalDate: string;
+  /** Made on the account's payout schedule rather than by hand. */
+  automatic: boolean;
+}
+
+/**
+ * Where the instance's money is: read-only, this instance's own connected
+ * account only. Before onboarding every list is empty and the rest null.
+ */
+export interface PaymentsPayouts {
+  /** Ready to be paid out. */
+  available: PaymentsMoney[];
+  /** Still settling. */
+  pending: PaymentsMoney[];
+  /** Most recent first. */
+  payouts: PaymentsPayout[];
+  /** The bank payouts go to, when Stripe shows it to the platform. */
+  bank: { bankName: string | null; last4: string } | null;
+  /** `daily`, `weekly`, `monthly` or `manual`, and the days payments wait first. */
+  schedule: { interval: string; delayDays: number | null } | null;
+}
+
 export interface PaymentsClient {
   /**
    * A single-use Stripe-hosted onboarding link for this instance's connected
@@ -70,6 +109,14 @@ export interface PaymentsClient {
   }): Promise<{ url: string }>;
   /** Whether the instance can take payments yet. */
   status(): Promise<PaymentsStatus>;
+  /** Balance, the most recent `limit` payouts (1–50, default 10), bank and schedule. */
+  payouts(params?: { limit?: number }): Promise<PaymentsPayouts>;
+  /**
+   * Stripe's own page where the business owner changes their bank, sees every
+   * payout and gets tax forms: a single-use link (send them straight to it).
+   * Refused (409) until onboarding is finished.
+   */
+  dashboardLink(): Promise<{ url: string }>;
 }
 
 /** A refusal or failure from the payments gateway. */
@@ -116,6 +163,25 @@ export function createPaymentsClient(
     },
     status() {
       return call('GET', '/payments/status');
+    },
+    payouts(params = {}) {
+      const { limit } = params;
+      if (
+        limit !== undefined &&
+        (!Number.isInteger(limit) || limit < 1 || limit > 50)
+      ) {
+        throw new TypeError('limit must be a whole number from 1 to 50');
+      }
+      // The query is part of the signed path.
+      return call(
+        'GET',
+        limit === undefined
+          ? '/payments/payouts'
+          : `/payments/payouts?limit=${limit}`
+      );
+    },
+    dashboardLink() {
+      return call('POST', '/payments/dashboard-link', {});
     }
   };
 }

@@ -24,8 +24,8 @@ use crate::{
     constants::{
         Database, ERROR_FAILED_TO_PARSE_MANIFEST, ERROR_FAILED_TO_READ_MANIFEST,
         ERROR_FAILED_TO_READ_PACKAGE_JSON, Formatter, HttpFramework, License, Linter, Runtime,
-        SELECTABLE_LINTERS, ensure_selectable_linter, linter_value_parser,
-        TestFramework, Validator,
+        SELECTABLE_LINTERS, TestFramework, Validator, ensure_selectable_linter,
+        linter_value_parser,
     },
     core::{
         ast::transformations::transform_core_registrations_ts::{
@@ -48,17 +48,18 @@ use crate::{
                 ApplicationDevDependencies, ApplicationPackageJson, ApplicationScripts,
             },
             package_json_constants::{
-                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION, UWEBSOCKETS_VERSION,
-                JEST_TYPES_VERSION, JEST_VERSION, OXLINT_TSGOLINT_VERSION, OXLINT_VERSION, PRETTIER_VERSION,
-                TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION, VITEST_VERSION,
-                ZOD_VERSION, application_build_script, application_clean_purge_script,
-                application_clean_script, application_docs_script, application_format_script,
-                application_lint_fix_script, application_lint_script, application_migrate_script,
-                application_seed_script, application_setup_script, application_test_script,
-                application_up_packages_script, project_clean_script, project_dev_local_script,
-                project_dev_server_script, project_dev_worker_client_script, project_format_script,
-                project_lint_fix_script, project_lint_script, project_start_server_script,
-                project_start_worker_script, project_test_script, project_up_latest_script, project_retention_enforce_script,
+                BIOME_VERSION, ESLINT_VERSION, EXPRESS_VERSION, HYPER_EXPRESS_VERSION,
+                JEST_TYPES_VERSION, JEST_VERSION, OXLINT_TSGOLINT_VERSION, OXLINT_VERSION,
+                PRETTIER_VERSION, TS_JEST_VERSION, TYPEBOX_VERSION, TYPESCRIPT_ESLINT_VERSION,
+                UWEBSOCKETS_VERSION, VITEST_VERSION, ZOD_VERSION, application_build_script,
+                application_clean_purge_script, application_clean_script, application_docs_script,
+                application_format_script, application_lint_fix_script, application_lint_script,
+                application_migrate_script, application_seed_script, application_setup_script,
+                application_test_script, application_up_packages_script, project_clean_script,
+                project_dev_local_script, project_dev_server_script,
+                project_dev_worker_client_script, project_format_script, project_lint_fix_script,
+                project_lint_script, project_retention_enforce_script, project_start_server_script,
+                project_start_worker_script, project_test_script, project_up_latest_script,
             },
             project_package_json::{
                 ProjectDependencies, ProjectDevDependencies, ProjectPackageJson, ProjectScripts,
@@ -308,7 +309,11 @@ fn rename_license_holder(
     if renamed != license.content {
         rendered_templates_cache.insert(
             license_path.to_string_lossy(),
-            RenderedTemplate { path: license_path.clone(), content: renamed.into_owned(), context: None },
+            RenderedTemplate {
+                path: license_path.clone(),
+                content: renamed.into_owned(),
+                context: None,
+            },
         );
     }
     Ok(())
@@ -742,15 +747,43 @@ fn migrate_module_imports(
 ) -> Result<()> {
     use oxc_ast::ast::{SourceType, Statement};
     for name in projects.keys() {
-        for entry in walkdir::WalkDir::new(base.join(name)).follow_links(false).into_iter()
-            .filter_entry(|e| !matches!(e.file_name().to_str(), Some("node_modules" | "dist" | "lib" | "production" | "target" | ".git"))) {
+        for entry in walkdir::WalkDir::new(base.join(name))
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(|e| {
+                !matches!(
+                    e.file_name().to_str(),
+                    Some("node_modules" | "dist" | "lib" | "production" | "target" | ".git")
+                )
+            })
+        {
             let entry = entry?;
-            if !entry.file_type().is_file() || entry.path().extension().is_none_or(|ext| ext != "ts" && ext != "tsx") { continue; }
-            let mut template = cache.get(entry.path())?.context("Missing TypeScript source")?;
-            if !template.content.contains(from) { continue; }
+            if !entry.file_type().is_file()
+                || entry
+                    .path()
+                    .extension()
+                    .is_none_or(|ext| ext != "ts" && ext != "tsx")
+            {
+                continue;
+            }
+            let mut template = cache
+                .get(entry.path())?
+                .context("Missing TypeScript source")?;
+            if !template.content.contains(from) {
+                continue;
+            }
             let allocator = oxc_allocator::Allocator::default();
-            let parsed = oxc_parser::Parser::new(&allocator, &template.content, SourceType::from_path(entry.path())?).parse();
-            anyhow::ensure!(!parsed.diagnostics.has_errors(), "Cannot migrate imports in invalid TypeScript source {}", entry.path().display());
+            let parsed = oxc_parser::Parser::new(
+                &allocator,
+                &template.content,
+                SourceType::from_path(entry.path())?,
+            )
+            .parse();
+            anyhow::ensure!(
+                !parsed.diagnostics.has_errors(),
+                "Cannot migrate imports in invalid TypeScript source {}",
+                entry.path().display()
+            );
             let mut spans = Vec::new();
             for statement in &parsed.program.body {
                 let source = match statement {
@@ -759,13 +792,20 @@ fn migrate_module_imports(
                     Statement::ExportAllDeclaration(export) => Some(&export.source),
                     _ => None,
                 };
-                if let Some(source) = source.filter(|source| source.value == from) { spans.push(source.span); }
+                if let Some(source) = source.filter(|source| source.value == from) {
+                    spans.push(source.span);
+                }
             }
             drop(parsed);
             for span in spans.iter().rev() {
-                template.content.replace_range(span.start as usize..span.end as usize, &serde_json::to_string(to)?);
+                template.content.replace_range(
+                    span.start as usize..span.end as usize,
+                    &serde_json::to_string(to)?,
+                );
             }
-            if !spans.is_empty() { cache.insert(entry.path().to_string_lossy(), template); }
+            if !spans.is_empty() {
+                cache.insert(entry.path().to_string_lossy(), template);
+            }
         }
     }
     Ok(())
@@ -781,9 +821,13 @@ fn change_validator(
     let existing_validator = manifest_data.validator.clone().parse::<Validator>()?;
     manifest_data.validator = validator.to_string();
 
-    migrate_module_imports(base_path, project_jsons_to_write,
+    migrate_module_imports(
+        base_path,
+        project_jsons_to_write,
         &format!("@forklaunch/validator/{}", existing_validator.to_string()),
-        &format!("@forklaunch/validator/{}", validator.to_string()), rendered_templates_cache)?;
+        &format!("@forklaunch/validator/{}", validator.to_string()),
+        rendered_templates_cache,
+    )?;
 
     let validator_file_key = base_path.join("core").join("registrations.ts");
 
@@ -821,20 +865,32 @@ fn change_validator(
 
 fn preflight_http_framework(base_path: &Path, http_framework: &str, runtime: &str) -> Result<()> {
     if http_framework == "hyper-express" && runtime == "node" {
-        let package: serde_json::Value = serde_json::from_str(&read_to_string(base_path.join("package.json"))?)?;
+        let package: serde_json::Value =
+            serde_json::from_str(&read_to_string(base_path.join("package.json"))?)?;
         // Moving a Bun workspace to Node writes the default pnpm policy, which
         // blocks the Git-distributed dependency.
         anyhow::ensure!(
-            !package["packageManager"].as_str().is_some_and(|manager| manager.starts_with("bun@")),
-            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved");
-        let pinned_pnpm11 = package["packageManager"].as_str().is_some_and(|manager| manager.starts_with("pnpm@11."));
-        if !pinned_pnpm11 { return Ok(()); }
+            !package["packageManager"]
+                .as_str()
+                .is_some_and(|manager| manager.starts_with("bun@")),
+            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved"
+        );
+        let pinned_pnpm11 = package["packageManager"]
+            .as_str()
+            .is_some_and(|manager| manager.starts_with("pnpm@11."));
+        if !pinned_pnpm11 {
+            return Ok(());
+        }
         let path = base_path.join("pnpm-workspace.yaml");
-        anyhow::ensure!(path.is_file(),
-            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved");
+        anyhow::ensure!(
+            path.is_file(),
+            "HyperExpress on Node requires Git-distributed uWebSockets.js, which the default pnpm policy blocks. Change the HTTP framework to express in the same command (-F express), or keep the Bun runtime. Existing application files are preserved"
+        );
         let workspace: serde_yml::Value = serde_yml::from_str(&read_to_string(&path)?)?;
-        anyhow::ensure!(!pinned_pnpm11 || workspace["blockExoticSubdeps"].as_bool() == Some(false),
-            "HyperExpress requires Git-distributed uWebSockets.js. The current pnpm policy blocks this dependency; explicitly review its dependency policy before selecting HyperExpress. Existing application files are preserved");
+        anyhow::ensure!(
+            !pinned_pnpm11 || workspace["blockExoticSubdeps"].as_bool() == Some(false),
+            "HyperExpress requires Git-distributed uWebSockets.js. The current pnpm policy blocks this dependency; explicitly review its dependency policy before selecting HyperExpress. Existing application files are preserved"
+        );
     }
     Ok(())
 }
@@ -852,9 +908,13 @@ fn change_http_framework(
         .parse::<HttpFramework>()?;
     manifest_data.http_framework = http_framework.to_string();
 
-    migrate_module_imports(base_path, project_jsons_to_write,
+    migrate_module_imports(
+        base_path,
+        project_jsons_to_write,
         &format!("@forklaunch/{}", existing_http_framework.to_string()),
-        &format!("@forklaunch/{}", http_framework.to_string()), rendered_templates_cache)?;
+        &format!("@forklaunch/{}", http_framework.to_string()),
+        rendered_templates_cache,
+    )?;
 
     let http_framework_file_key = base_path.join("core").join("registrations.ts");
 
@@ -946,11 +1006,18 @@ fn change_runtime(
         Some(existing.parse::<TestFramework>()?)
     } else {
         let selected = prompt_field_from_selections_with_validation(
-            "test-framework", None, &["test-framework"], line_editor, stdout, matches,
-            "test framework", Some(&TestFramework::VARIANTS),
+            "test-framework",
+            None,
+            &["test-framework"],
+            line_editor,
+            stdout,
+            matches,
+            "test framework",
+            Some(&TestFramework::VARIANTS),
             |input: &str| TestFramework::VARIANTS.contains(&input),
             |_| "Invalid test framework. Please try again".to_string(),
-        )?.context("Test framework required")?;
+        )?
+        .context("Test framework required")?;
         Some(selected.parse::<TestFramework>()?)
     };
 
@@ -1151,7 +1218,9 @@ fn change_runtime(
         };
 
         if let Some(project_scripts) = &mut project.scripts {
-            if project_scripts.retention_enforce == Some(project_retention_enforce_script(&existing_runtime)) {
+            if project_scripts.retention_enforce
+                == Some(project_retention_enforce_script(&existing_runtime))
+            {
                 project_scripts.retention_enforce = Some(project_retention_enforce_script(runtime));
             }
             project_scripts.clean = Some(attempt_replacement(
@@ -1202,8 +1271,11 @@ fn change_runtime(
                         &project_dev_local_script(runtime, database),
                         None,
                     ));
-                    if project_scripts.start_server == Some(project_start_server_script(&existing_runtime, database)) {
-                        project_scripts.start_server = Some(project_start_server_script(runtime, database));
+                    if project_scripts.start_server
+                        == Some(project_start_server_script(&existing_runtime, database))
+                    {
+                        project_scripts.start_server =
+                            Some(project_start_server_script(runtime, database));
                     }
                     project_scripts.start = Some(attempt_replacement(
                         &mut project_scripts.additional_scripts,
@@ -1268,11 +1340,22 @@ fn change_runtime(
 
     match runtime {
         Runtime::Bun => {
-            let overrides = application_json_to_write.additional_entries.entry("overrides".into()).or_insert_with(|| serde_json::json!({}));
-            let overrides = overrides.as_object_mut().context("Workspace overrides must be an object")?;
-            let defaults = serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
-            for (name, version) in defaults.as_object().context("Framework overrides must be an object")? {
-                overrides.entry(name.clone()).or_insert_with(|| version.clone());
+            let overrides = application_json_to_write
+                .additional_entries
+                .entry("overrides".into())
+                .or_insert_with(|| serde_json::json!({}));
+            let overrides = overrides
+                .as_object_mut()
+                .context("Workspace overrides must be an object")?;
+            let defaults =
+                serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
+            for (name, version) in defaults
+                .as_object()
+                .context("Framework overrides must be an object")?
+            {
+                overrides
+                    .entry(name.clone())
+                    .or_insert_with(|| version.clone());
             }
             application_json_to_write.workspaces = Some(existing_workspaces);
             if let Some(rendered) =
@@ -1321,136 +1404,135 @@ fn change_runtime(
         }
     }
 
-    let managed_image = base_path.ancestors().any(|root| {
-        crate::init::rust_project::managed_typescript_image(root).is_some()
-    });
+    let managed_image = base_path
+        .ancestors()
+        .any(|root| crate::init::rust_project::managed_typescript_image(root).is_some());
     if !managed_image {
-    let dockerfile_template_path = TEMPLATES_DIR
-        .get_file(Path::new("application").join("Dockerfile"))
-        .unwrap();
+        let dockerfile_template_path = TEMPLATES_DIR
+            .get_file(Path::new("application").join("Dockerfile"))
+            .unwrap();
 
-    let dockerfile_template = Template::new(dockerfile_template_path.contents_utf8().unwrap())?;
+        let dockerfile_template = Template::new(dockerfile_template_path.contents_utf8().unwrap())?;
 
-    let existing_service_manifest_data = ApplicationManifestData {
-        is_in_memory_database,
-        is_node: existing_runtime == Runtime::Node,
-        is_bun: existing_runtime == Runtime::Bun,
-        ..manifest_data.clone()
-    };
+        let existing_service_manifest_data = ApplicationManifestData {
+            is_in_memory_database,
+            is_node: existing_runtime == Runtime::Node,
+            is_bun: existing_runtime == Runtime::Bun,
+            ..manifest_data.clone()
+        };
 
-    let existing_dockerfile_contents = read_to_string(base_path.join("Dockerfile"))?;
-    let watermarked_dockerfile_contents = apply_watermark(&RenderedTemplate {
-        path: base_path.join("Dockerfile"),
-        content: dockerfile_template.render(&existing_service_manifest_data),
-        context: None,
-    })?;
+        let existing_dockerfile_contents = read_to_string(base_path.join("Dockerfile"))?;
+        let watermarked_dockerfile_contents = apply_watermark(&RenderedTemplate {
+            path: base_path.join("Dockerfile"),
+            content: dockerfile_template.render(&existing_service_manifest_data),
+            context: None,
+        })?;
 
-    if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
-        log_warn!(
-            stdout,
-            "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
-            runtime.to_string()
-        );
+        if existing_dockerfile_contents.trim() != watermarked_dockerfile_contents.trim() {
+            log_warn!(
+                stdout,
+                "Warning: Dockerfile is generating from template, you may need to manually migrate changes from Dockerfile.{}",
+                runtime.to_string()
+            );
+            rendered_templates_cache.insert(
+                base_path
+                    .join(format!("Dockerfile.{}", runtime.to_string()))
+                    .to_string_lossy(),
+                RenderedTemplate {
+                    path: base_path.join(format!("Dockerfile.{}", runtime.to_string())),
+                    content: existing_dockerfile_contents,
+                    context: None,
+                },
+            );
+        }
+
+        let dockerfile_cache_key = base_path.join("Dockerfile");
         rendered_templates_cache.insert(
-            base_path
-                .join(format!("Dockerfile.{}", runtime.to_string()))
-                .to_string_lossy(),
+            dockerfile_cache_key.to_string_lossy(),
             RenderedTemplate {
-                path: base_path.join(format!("Dockerfile.{}", runtime.to_string())),
-                content: existing_dockerfile_contents,
+                path: base_path.join("Dockerfile"),
+                content: if exists(base_path.join(format!("Dockerfile.{}", runtime.to_string())))? {
+                    read_to_string(base_path.join(format!("Dockerfile.{}", runtime.to_string())))?
+                } else {
+                    update_dockerfile_contents(
+                        &apply_watermark(&RenderedTemplate {
+                            path: base_path.join("Dockerfile"),
+                            content: dockerfile_template.render(&ApplicationManifestData {
+                                is_in_memory_database,
+                                is_node: runtime == &Runtime::Node,
+                                is_bun: runtime == &Runtime::Bun,
+                                ..manifest_data.clone()
+                            }),
+                            context: None,
+                        })?,
+                        &runtime,
+                        is_in_memory_database,
+                    )?
+                },
                 context: None,
             },
         );
-    }
 
-    let dockerfile_cache_key = base_path.join("Dockerfile");
-    rendered_templates_cache.insert(
-        dockerfile_cache_key.to_string_lossy(),
-        RenderedTemplate {
-            path: base_path.join("Dockerfile"),
-            content: if exists(base_path.join(format!("Dockerfile.{}", runtime.to_string())))? {
-                read_to_string(base_path.join(format!("Dockerfile.{}", runtime.to_string())))?
-            } else {
-                update_dockerfile_contents(
-                    &apply_watermark(&RenderedTemplate {
-                        path: base_path.join("Dockerfile"),
-                        content: dockerfile_template.render(&ApplicationManifestData {
-                            is_in_memory_database,
-                            is_node: runtime == &Runtime::Node,
-                            is_bun: runtime == &Runtime::Bun,
-                            ..manifest_data.clone()
-                        }),
-                        context: None,
-                    })?,
-                    &runtime,
-                    is_in_memory_database,
-                )?
-            },
-            context: None,
-        },
-    );
+        if let Some(docker_compose_path) = &manifest_data.docker_compose_path {
+            let docker_compose_file_path = base_path.join(&docker_compose_path);
+            if exists(&docker_compose_file_path)? {
+                let existing_docker_compose_content = read_to_string(&docker_compose_file_path)?;
+                let mut docker_compose: DockerCompose =
+                    serde_yml::from_str(&existing_docker_compose_content)?;
 
-    if let Some(docker_compose_path) = &manifest_data.docker_compose_path {
-        let docker_compose_file_path = base_path.join(&docker_compose_path);
-        if exists(&docker_compose_file_path)? {
-            let existing_docker_compose_content = read_to_string(&docker_compose_file_path)?;
-            let mut docker_compose: DockerCompose =
-                serde_yml::from_str(&existing_docker_compose_content)?;
-
-            let mut updated = false;
-            for (_, service) in docker_compose.services.iter_mut() {
-                if let Some(entrypoint) = &mut service.entrypoint {
-                    match existing_runtime {
-                        Runtime::Node => {
-                            if entrypoint.iter().any(|arg| arg.contains("pnpm")) {
-                                for arg in entrypoint.iter_mut() {
-                                    if arg.contains("pnpm") {
-                                        *arg = arg.replace(
-                                            "pnpm",
-                                            match runtime {
-                                                Runtime::Bun => "bun",
-                                                Runtime::Node => "pnpm",
-                                            },
-                                        );
-                                        updated = true;
+                let mut updated = false;
+                for (_, service) in docker_compose.services.iter_mut() {
+                    if let Some(entrypoint) = &mut service.entrypoint {
+                        match existing_runtime {
+                            Runtime::Node => {
+                                if entrypoint.iter().any(|arg| arg.contains("pnpm")) {
+                                    for arg in entrypoint.iter_mut() {
+                                        if arg.contains("pnpm") {
+                                            *arg = arg.replace(
+                                                "pnpm",
+                                                match runtime {
+                                                    Runtime::Bun => "bun",
+                                                    Runtime::Node => "pnpm",
+                                                },
+                                            );
+                                            updated = true;
+                                        }
                                     }
                                 }
                             }
-                        }
-                        Runtime::Bun => {
-                            if entrypoint.iter().any(|arg| arg.contains("bun")) {
-                                for arg in entrypoint.iter_mut() {
-                                    if arg.contains("bun") {
-                                        *arg = arg.replace(
-                                            "bun",
-                                            match runtime {
-                                                Runtime::Bun => "bun",
-                                                Runtime::Node => "pnpm",
-                                            },
-                                        );
-                                        updated = true;
+                            Runtime::Bun => {
+                                if entrypoint.iter().any(|arg| arg.contains("bun")) {
+                                    for arg in entrypoint.iter_mut() {
+                                        if arg.contains("bun") {
+                                            *arg = arg.replace(
+                                                "bun",
+                                                match runtime {
+                                                    Runtime::Bun => "bun",
+                                                    Runtime::Node => "pnpm",
+                                                },
+                                            );
+                                            updated = true;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            if updated {
-                let updated_docker_compose_content = serde_yml::to_string(&docker_compose)?;
-                rendered_templates_cache.insert(
-                    docker_compose_file_path.to_string_lossy(),
-                    RenderedTemplate {
-                        path: docker_compose_file_path.clone(),
-                        content: updated_docker_compose_content,
-                        context: None,
-                    },
-                );
+                if updated {
+                    let updated_docker_compose_content = serde_yml::to_string(&docker_compose)?;
+                    rendered_templates_cache.insert(
+                        docker_compose_file_path.to_string_lossy(),
+                        RenderedTemplate {
+                            path: docker_compose_file_path.clone(),
+                            content: updated_docker_compose_content,
+                            context: None,
+                        },
+                    );
+                }
             }
         }
-    }
-
     }
 
     let readme = rendered_templates_cache.get(&base_path.join("README.md"))?;
@@ -1489,8 +1571,11 @@ fn change_runtime(
 /// at the default release pin), and the key when nothing else is left. An
 /// entry the user changed or added stays.
 fn remove_framework_overrides(application_json: &mut ApplicationPackageJson) -> Result<()> {
-    let defaults = serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
-    let defaults = defaults.as_object().context("Framework overrides must be an object")?;
+    let defaults =
+        serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?;
+    let defaults = defaults
+        .as_object()
+        .context("Framework overrides must be an object")?;
     let Some(overrides) = application_json.additional_entries.get_mut("overrides") else {
         return Ok(());
     };
@@ -1682,7 +1767,9 @@ fn change_license(
         return Ok(None);
     }
 
-    Ok(exists(&license_path)?.then(|| RemovalTemplate { path: license_path.clone() }))
+    Ok(exists(&license_path)?.then(|| RemovalTemplate {
+        path: license_path.clone(),
+    }))
 }
 
 impl CliCommand for ApplicationCommand {
@@ -1815,16 +1902,26 @@ impl CliCommand for ApplicationCommand {
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
         if matches.contains_id("framework-path") || matches.contains_id("framework-version") {
-            anyhow::ensure!(!matches.get_flag("dryrun"), "--dryrun is not supported when changing the framework source");
-            let selected = crate::init::rust_project::dependencies::change(&app_root_path, matches)?;
+            anyhow::ensure!(
+                !matches.get_flag("dryrun"),
+                "--dryrun is not supported when changing the framework source"
+            );
+            let selected =
+                crate::init::rust_project::dependencies::change(&app_root_path, matches)?;
             log_ok!(stdout, "Rust crates now use the {}", selected);
             return Ok(());
         }
         crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
         let current_manifest: toml::Value = toml::from_str(&read_to_string(&manifest_path)?)?;
-        let mixed = current_manifest.get("language").and_then(toml::Value::as_str) == Some("mixed");
-        let previous_app_name = current_manifest.get("app_name").and_then(toml::Value::as_str).map(str::to_owned);
+        let mixed = current_manifest
+            .get("language")
+            .and_then(toml::Value::as_str)
+            == Some("mixed");
+        let previous_app_name = current_manifest
+            .get("app_name")
+            .and_then(toml::Value::as_str)
+            .map(str::to_owned);
         // TypeScript tooling, and a rename while TypeScript packages carry the
         // application scope, go through the TypeScript change first.
         let typescript_workspace = current_manifest
@@ -1832,8 +1929,20 @@ impl CliCommand for ApplicationCommand {
             .and_then(toml::Value::as_str)
             .is_some_and(|modules| app_root_path.join(modules).join("package.json").is_file());
         let mixed_tooling = mixed
-            && (["formatter", "linter", "test-framework", "validator", "http-framework", "runtime"].iter().any(|key| matches.get_one::<String>(key).is_some())
-                || (typescript_workspace && ["name", "description", "author", "license"].iter().any(|key| matches.get_one::<String>(key).is_some())));
+            && ([
+                "formatter",
+                "linter",
+                "test-framework",
+                "validator",
+                "http-framework",
+                "runtime",
+            ]
+            .iter()
+            .any(|key| matches.get_one::<String>(key).is_some())
+                || (typescript_workspace
+                    && ["name", "description", "author", "license"]
+                        .iter()
+                        .any(|key| matches.get_one::<String>(key).is_some())));
         if rust_project::is_rust_app_root(&app_root_path)? && !mixed_tooling {
             if matches.get_one::<String>("formatter").is_some()
                 || matches.get_one::<String>("linter").is_some()
@@ -2102,7 +2211,13 @@ impl CliCommand for ApplicationCommand {
         let mut project_jsons_to_write: HashMap<String, ProjectPackageJson> = manifest_data
             .projects
             .iter()
-            .filter(|project| project.metadata.as_ref().and_then(|metadata| metadata.language.as_deref()) != Some("rust"))
+            .filter(|project| {
+                project
+                    .metadata
+                    .as_ref()
+                    .and_then(|metadata| metadata.language.as_deref())
+                    != Some("rust")
+            })
             .map(|project| {
                 let project_package_json_path = app_path.join(&project.name).join("package.json");
                 let project_package_json_data = read_to_string(&project_package_json_path)
@@ -2117,11 +2232,13 @@ impl CliCommand for ApplicationCommand {
             .collect();
 
         if http_framework.is_some() || runtime.is_some() {
-        preflight_http_framework(
-            &app_path,
-            http_framework.as_deref().unwrap_or(&manifest_data.http_framework),
-            runtime.as_deref().unwrap_or(&manifest_data.runtime),
-        )?;
+            preflight_http_framework(
+                &app_path,
+                http_framework
+                    .as_deref()
+                    .unwrap_or(&manifest_data.http_framework),
+                runtime.as_deref().unwrap_or(&manifest_data.runtime),
+            )?;
         }
 
         if runtime.is_some() {
@@ -2133,12 +2250,12 @@ impl CliCommand for ApplicationCommand {
 
         if let Some(name) = &name {
             if !dryrun {
-            clean_application(
-                &app_path,
-                &manifest_data.runtime.parse()?,
-                confirm,
-                &mut stdout,
-            )?;
+                clean_application(
+                    &app_path,
+                    &manifest_data.runtime.parse()?,
+                    confirm,
+                    &mut stdout,
+                )?;
             }
 
             change_name(
@@ -2199,13 +2316,15 @@ impl CliCommand for ApplicationCommand {
         }
 
         if let Some(runtime) = runtime {
-            if !dryrun && crate::init::rust_project::managed_typescript_image(&app_root_path).is_none() {
-            clean_application(
-                &app_path,
-                &manifest_data.runtime.parse()?,
-                confirm,
-                &mut stdout,
-            )?;
+            if !dryrun
+                && crate::init::rust_project::managed_typescript_image(&app_root_path).is_none()
+            {
+                clean_application(
+                    &app_path,
+                    &manifest_data.runtime.parse()?,
+                    confirm,
+                    &mut stdout,
+                )?;
             }
 
             let (runtime_removal_templates, runtime_symlink_templates) = change_runtime(
@@ -2298,17 +2417,28 @@ impl CliCommand for ApplicationCommand {
                 let path = app_path.join(project_name).join("package.json");
                 let rendered = serde_json::to_string_pretty(&project_json).unwrap();
                 let content = match read_to_string(&path) {
-                    Ok(original) => crate::core::package_json::preserve_json_layout_renamed(&original, &rendered, &rename_scope),
+                    Ok(original) => crate::core::package_json::preserve_json_layout_renamed(
+                        &original,
+                        &rendered,
+                        &rename_scope,
+                    ),
                     Err(_) => rendered,
                 };
                 rendered_templates_cache.insert(
                     path.to_string_lossy().to_string(),
-                    RenderedTemplate { path, content, context: None },
+                    RenderedTemplate {
+                        path,
+                        content,
+                        context: None,
+                    },
                 );
             });
         // A file this change removes may have been read back into the cache by
         // a later sweep over sources; writing it would resurrect it.
-        let removed: HashSet<&Path> = removal_templates.iter().map(|template| template.path.as_path()).collect();
+        let removed: HashSet<&Path> = removal_templates
+            .iter()
+            .map(|template| template.path.as_path())
+            .collect();
         let rendered_templates: Vec<RenderedTemplate> = rendered_templates_cache
             .drain()
             .map(|(_, template)| template)
@@ -2319,22 +2449,30 @@ impl CliCommand for ApplicationCommand {
         create_symlinks(&symlink_templates, dryrun, &mut stdout)?;
         if !dryrun {
             if mixed_tooling {
-                rust_project::change_rust_application(&app_root_path, name.as_deref(),
+                rust_project::change_rust_application(
+                    &app_root_path,
+                    name.as_deref(),
                     matches.get_one::<String>("description").map(String::as_str),
                     matches.get_one::<String>("author").map(String::as_str),
                     matches.get_one::<String>("license").map(String::as_str),
-                    previous_app_name.as_deref(), false)?;
+                    previous_app_name.as_deref(),
+                    false,
+                )?;
             }
             crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} changed successfully!", &manifest_data.app_name);
             format_code(&app_path, &manifest_data.runtime.parse()?);
         } else if mixed_tooling {
             // The native half: Cargo metadata, Compose and local env files.
-            rust_project::change_rust_application(&app_root_path, name.as_deref(),
+            rust_project::change_rust_application(
+                &app_root_path,
+                name.as_deref(),
                 matches.get_one::<String>("description").map(String::as_str),
                 matches.get_one::<String>("author").map(String::as_str),
                 matches.get_one::<String>("license").map(String::as_str),
-                previous_app_name.as_deref(), true)?;
+                previous_app_name.as_deref(),
+                true,
+            )?;
         }
 
         Ok(())
@@ -2353,10 +2491,22 @@ mod adapter_migration_tests {
         assert!(preflight_http_framework(root.path(), "hyper-express", "node").is_err());
         preflight_http_framework(root.path(), "hyper-express", "bun").unwrap();
         preflight_http_framework(root.path(), "express", "node").unwrap();
-        assert_eq!(std::fs::read_to_string(root.path().join("package.json")).unwrap(), package);
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("package.json")).unwrap(),
+            package
+        );
         std::fs::remove_file(root.path().join("pnpm-workspace.yaml")).unwrap();
-        std::fs::write(root.path().join("package.json"), r#"{"packageManager":"bun@1.3.14"}"#).unwrap();
-        assert!(preflight_http_framework(root.path(), "hyper-express", "node").unwrap_err().to_string().contains("-F express"));
+        std::fs::write(
+            root.path().join("package.json"),
+            r#"{"packageManager":"bun@1.3.14"}"#,
+        )
+        .unwrap();
+        assert!(
+            preflight_http_framework(root.path(), "hyper-express", "node")
+                .unwrap_err()
+                .to_string()
+                .contains("-F express")
+        );
     }
 
     #[test]
@@ -2369,13 +2519,27 @@ mod adapter_migration_tests {
         std::fs::write(root.path().join("api/dist/schema.ts"), source).unwrap();
         let projects = HashMap::from([("api".to_owned(), ProjectPackageJson::default())]);
         let mut cache = RenderedTemplatesCache::new();
-        migrate_module_imports(root.path(), &projects, "@forklaunch/validator/zod", "@forklaunch/validator/typebox", &mut cache).unwrap();
+        migrate_module_imports(
+            root.path(),
+            &projects,
+            "@forklaunch/validator/zod",
+            "@forklaunch/validator/typebox",
+            &mut cache,
+        )
+        .unwrap();
         let staged = cache.get(&path).unwrap().unwrap().content;
         assert!(staged.contains("from \"@forklaunch/validator/typebox\""));
         assert!(staged.contains("// @forklaunch/validator/zod stays documented"));
         assert!(staged.contains("label = '@forklaunch/validator/zod'"));
         assert_eq!(std::fs::read_to_string(path).unwrap(), source);
-        assert_eq!(cache.get(root.path().join("api/dist/schema.ts")).unwrap().unwrap().content, source);
+        assert_eq!(
+            cache
+                .get(root.path().join("api/dist/schema.ts"))
+                .unwrap()
+                .unwrap()
+                .content,
+            source
+        );
     }
 }
 
@@ -2390,13 +2554,27 @@ mod license_tests {
         std::fs::write(root.path().join("LICENSE"), text).unwrap();
         let mut cache = RenderedTemplatesCache::new();
         rename_license_holder(root.path(), "zebra", "kestrel", &mut cache).unwrap();
-        let renamed = cache.get(root.path().join("LICENSE")).unwrap().unwrap().content;
-        assert_eq!(renamed, "MIT License\n\nCopyright (c) 2026 kestrel\n\nzebra is free software\n");
+        let renamed = cache
+            .get(root.path().join("LICENSE"))
+            .unwrap()
+            .unwrap()
+            .content;
+        assert_eq!(
+            renamed,
+            "MIT License\n\nCopyright (c) 2026 kestrel\n\nzebra is free software\n"
+        );
         // A license that does not name the application is left alone.
         std::fs::write(root.path().join("LICENSE"), "Apache License\n").unwrap();
         let mut cache = RenderedTemplatesCache::new();
         rename_license_holder(root.path(), "zebra", "kestrel", &mut cache).unwrap();
-        assert_eq!(cache.get(root.path().join("LICENSE")).unwrap().unwrap().content, "Apache License\n");
+        assert_eq!(
+            cache
+                .get(root.path().join("LICENSE"))
+                .unwrap()
+                .unwrap()
+                .content,
+            "Apache License\n"
+        );
     }
 
     #[test]
@@ -2409,11 +2587,29 @@ mod license_tests {
         .unwrap();
         let mut package = ApplicationPackageJson::default();
         let mut cache = RenderedTemplatesCache::new();
-        let removal = change_license(root.path(), &License::Apache, &mut manifest, &mut package, &mut cache).unwrap();
+        let removal = change_license(
+            root.path(),
+            &License::Apache,
+            &mut manifest,
+            &mut package,
+            &mut cache,
+        )
+        .unwrap();
         assert!(removal.is_none());
         let rendered = cache.get(root.path().join("LICENSE")).unwrap().unwrap();
-        assert!(rendered.content.contains("Apache License"), "{}", &rendered.content[..80]);
-        let removal = change_license(root.path(), &License::None, &mut manifest, &mut package, &mut cache).unwrap();
+        assert!(
+            rendered.content.contains("Apache License"),
+            "{}",
+            &rendered.content[..80]
+        );
+        let removal = change_license(
+            root.path(),
+            &License::None,
+            &mut manifest,
+            &mut package,
+            &mut cache,
+        )
+        .unwrap();
         assert_eq!(removal.unwrap().path, root.path().join("LICENSE"));
     }
 }

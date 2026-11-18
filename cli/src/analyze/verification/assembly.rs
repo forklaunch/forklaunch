@@ -368,41 +368,106 @@ mod tests {
     #[test]
     fn private_host_compiles_service_local_contract_source_without_changing_crate_identity() {
         let workspace = tempfile::tempdir().unwrap();
-        let service=workspace.path().join("src/notes");
-        let host=service.join(".forklaunch/contracts");
-        for path in [&host,&service.join("api/contracts"),&workspace.path().join(".forklaunch")] {std::fs::create_dir_all(path).unwrap();}
-        std::fs::write(workspace.path().join(".forklaunch/manifest.toml"),"application='proof'").unwrap();
+        let service = workspace.path().join("src/notes");
+        let host = service.join(".forklaunch/contracts");
+        for path in [
+            &host,
+            &service.join("api/contracts"),
+            &workspace.path().join(".forklaunch"),
+        ] {
+            std::fs::create_dir_all(path).unwrap();
+        }
+        std::fs::write(
+            workspace.path().join(".forklaunch/manifest.toml"),
+            "application='proof'",
+        )
+        .unwrap();
         std::fs::write(service.join("Cargo.toml"),"[lib]\npath='lib.rs'\n[dependencies]\ncontracts={path='.forklaunch/contracts'}\nforklaunch-axum='0.1'\n[build-dependencies]\ncontracts={path='.forklaunch/contracts'}\n").unwrap();
-        std::fs::write(service.join("lib.rs"),"pub mod application;").unwrap();
+        std::fs::write(service.join("lib.rs"), "pub mod application;").unwrap();
         std::fs::write(service.join("application.rs"),"use contracts::notes; use forklaunch_axum::native::{Router,ContractRouter,NativeApplication}; fn http(){NativeApplication::new(Router::new().merge(notes::Bindings{list:notes::List::bind(handler)}.mount(ContractRouter::new(notes::registry())).unwrap().finish().unwrap()))}").unwrap();
-        std::fs::write(host.join("Cargo.toml"),"[lib]\npath='lib.rs'\n").unwrap();
-        std::fs::write(host.join("lib.rs"),"#[path=\"../../api/contracts/mod.rs\"] mod endpoints; pub use endpoints::*;").unwrap();
-        std::fs::write(service.join("api/contracts/mod.rs"),"mod declarations; pub use crate::endpoints::declarations::notes;").unwrap();
-        std::fs::write(service.join("api/contracts/declarations.rs"),"#[forklaunch_core::contract::api] pub mod notes {pub fn list(){}}").unwrap();
-        let manifest=BindingManifest{format_version:"forklaunch.bindings.v1".into(), declarations:vec![forklaunch_core::contract::assembly::BindingDeclaration{source:"api/contracts/declarations.rs".into(),group:"notes".into(),member:"list".into(),transport:"http".into(),contract:serde_json::json!({})}]};
-        verify(workspace.path(),&service,"notes",&manifest).unwrap();
+        std::fs::write(host.join("Cargo.toml"), "[lib]\npath='lib.rs'\n").unwrap();
+        std::fs::write(
+            host.join("lib.rs"),
+            "#[path=\"../../api/contracts/mod.rs\"] mod endpoints; pub use endpoints::*;",
+        )
+        .unwrap();
+        std::fs::write(
+            service.join("api/contracts/mod.rs"),
+            "mod declarations; pub use crate::endpoints::declarations::notes;",
+        )
+        .unwrap();
+        std::fs::write(
+            service.join("api/contracts/declarations.rs"),
+            "#[forklaunch_core::contract::api] pub mod notes {pub fn list(){}}",
+        )
+        .unwrap();
+        let manifest = BindingManifest {
+            format_version: "forklaunch.bindings.v1".into(),
+            declarations: vec![forklaunch_core::contract::assembly::BindingDeclaration {
+                source: "api/contracts/declarations.rs".into(),
+                group: "notes".into(),
+                member: "list".into(),
+                transport: "http".into(),
+                contract: serde_json::json!({}),
+            }],
+        };
+        verify(workspace.path(), &service, "notes", &manifest).unwrap();
     }
 
     #[test]
     fn inline_controller_contract_export_resolves_same_author_source() {
         let workspace = tempfile::tempdir().unwrap();
-        let service=workspace.path().join("src/notes");
-        let host=service.join(".forklaunch/contracts");
-        for path in [&host,&service.join("api/controllers"),&workspace.path().join(".forklaunch")] {std::fs::create_dir_all(path).unwrap();}
-        std::fs::write(workspace.path().join(".forklaunch/manifest.toml"),"application='proof'").unwrap();
+        let service = workspace.path().join("src/notes");
+        let host = service.join(".forklaunch/contracts");
+        for path in [
+            &host,
+            &service.join("api/controllers"),
+            &workspace.path().join(".forklaunch"),
+        ] {
+            std::fs::create_dir_all(path).unwrap();
+        }
+        std::fs::write(
+            workspace.path().join(".forklaunch/manifest.toml"),
+            "application='proof'",
+        )
+        .unwrap();
         std::fs::write(service.join("Cargo.toml"),"[lib]\npath='lib.rs'\n[dependencies]\ncontracts={path='.forklaunch/contracts'}\nforklaunch-axum='0.1'\n[build-dependencies]\ncontracts={path='.forklaunch/contracts'}\n").unwrap();
-        std::fs::write(service.join("lib.rs"),"pub mod application;pub mod api;").unwrap();
-        std::fs::write(service.join("api/mod.rs"),"pub mod controllers;").unwrap();
-        std::fs::write(service.join("api/controllers/mod.rs"),"pub mod notes;").unwrap();
+        std::fs::write(service.join("lib.rs"), "pub mod application;pub mod api;").unwrap();
+        std::fs::write(service.join("api/mod.rs"), "pub mod controllers;").unwrap();
+        std::fs::write(service.join("api/controllers/mod.rs"), "pub mod notes;").unwrap();
         std::fs::write(service.join("application.rs"),"use crate::api::controllers::notes::contract; use forklaunch_axum::native::{Router,ContractRouter,NativeApplication}; fn http(){NativeApplication::new(Router::new().merge(contract::Bindings{list:contract::List::bind(handler)}.mount(ContractRouter::new(contracts::registry())).unwrap().finish().unwrap()))}").unwrap();
-        std::fs::write(host.join("Cargo.toml"),"[lib]\npath='lib.rs'\n").unwrap();
+        std::fs::write(host.join("Cargo.toml"), "[lib]\npath='lib.rs'\n").unwrap();
         std::fs::write(host.join("lib.rs"),"forklaunch_core::contract::controller_contract!(notes,\"../../api/controllers/notes.rs\");").unwrap();
-        std::fs::write(service.join("api/controllers/notes.rs"),"#[forklaunch_core::contract::api] pub mod contract {pub fn list(){}} fn handler(){}").unwrap();
-        let manifest=BindingManifest{format_version:"forklaunch.bindings.v1".into(), declarations:vec![forklaunch_core::contract::assembly::BindingDeclaration{source:"api/controllers/notes.rs".into(),group:"contract".into(),member:"list".into(),transport:"http".into(),contract:serde_json::json!({})}]};
-        verify(workspace.path(),&service,"notes",&manifest).unwrap();
-        let resolver=resolution::Resolver::new(&service).unwrap();
-        let resolved=resolver.binding(&service.join("application.rs"),&syn::parse_quote!(contracts::notes::contract::Bindings)).unwrap();
-        assert_eq!(resolved.0,service.join("api/controllers/notes.rs").canonicalize().unwrap());
+        std::fs::write(
+            service.join("api/controllers/notes.rs"),
+            "#[forklaunch_core::contract::api] pub mod contract {pub fn list(){}} fn handler(){}",
+        )
+        .unwrap();
+        let manifest = BindingManifest {
+            format_version: "forklaunch.bindings.v1".into(),
+            declarations: vec![forklaunch_core::contract::assembly::BindingDeclaration {
+                source: "api/controllers/notes.rs".into(),
+                group: "contract".into(),
+                member: "list".into(),
+                transport: "http".into(),
+                contract: serde_json::json!({}),
+            }],
+        };
+        verify(workspace.path(), &service, "notes", &manifest).unwrap();
+        let resolver = resolution::Resolver::new(&service).unwrap();
+        let resolved = resolver
+            .binding(
+                &service.join("application.rs"),
+                &syn::parse_quote!(contracts::notes::contract::Bindings),
+            )
+            .unwrap();
+        assert_eq!(
+            resolved.0,
+            service
+                .join("api/controllers/notes.rs")
+                .canonicalize()
+                .unwrap()
+        );
     }
 
     #[test]
@@ -518,7 +583,10 @@ mod tests {
             }
         }
         let fixture = tempfile::tempdir().unwrap();
-        copy(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rust-notes-assembly"), fixture.path());
+        copy(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/rust-notes-assembly"),
+            fixture.path(),
+        );
         let root = fixture.path().to_path_buf();
         let directory = root.join("src/notes");
         let mut declarations = Vec::new();

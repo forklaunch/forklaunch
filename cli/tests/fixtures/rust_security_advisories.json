@@ -13,7 +13,7 @@
     "id": "RUSTSEC-2023-0071",
     "package": "rsa",
     "version": "0.9.10",
-    "review": "Optional openidconnect 4.0.1 client uses rsa only for public RS256 signature verification via CoreJsonWebKey/RsaPublicKey::verify. OidcProvider exposes no RSA private-key signing or decryption; client authentication uses HTTP Basic. Test token signing uses jsonwebtoken/ring. Re-review before introducing private-key operations or changing this dependency path."
+    "review": "Optional openidconnect 4.1.0 client uses rsa only for public RS256 signature verification via CoreJsonWebKey/RsaPublicKey::verify. OidcProvider exposes no RSA private-key signing or decryption; client authentication uses HTTP Basic. Test token signing uses jsonwebtoken/ring. Re-review before introducing private-key operations or changing this dependency path."
   },
   {
     "scope": "blueprint",
@@ -21,7 +21,7 @@
     "id": "RUSTSEC-2023-0071",
     "package": "rsa",
     "version": "0.9.10",
-    "review": "rsa_key.rs uses RSA only for generation, PKCS#8 decoding/encoding and public n/e extraction. Private-key signing uses ring; no RSA decryption is exposed. Optional IAM oidc-sessions additionally reuses the reviewed framework openidconnect 4.0.1 public RS256 verification path, with no RSA private-key operations. Re-review before adding private-key operations through rsa."
+    "review": "rsa_key.rs uses RSA only for generation, PKCS#8 decoding/encoding and public n/e extraction. Private-key signing uses ring; no RSA decryption is exposed. Optional IAM oidc-sessions additionally reuses the reviewed framework openidconnect 4.1.0 public RS256 verification path, with no RSA private-key operations. Re-review before adding private-key operations through rsa."
   },
   {
     "scope": "cli",

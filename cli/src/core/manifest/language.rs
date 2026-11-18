@@ -89,10 +89,18 @@ pub(crate) fn normalized(
             "workerControlService requires a Rust worker"
         );
         if metadata.worker_service == Some(true) {
-            ensure!(project.r#type == ProjectType::Worker && language == ProjectLanguage::Rust,
-                "workerService requires a Rust worker");
-            ensure!(metadata.contract_export != Some(false), "workerService requires its producer contract export");
-            ensure!(metadata.worker_control_service != Some(true), "workerService and legacy workerControlService roles cannot be combined");
+            ensure!(
+                project.r#type == ProjectType::Worker && language == ProjectLanguage::Rust,
+                "workerService requires a Rust worker"
+            );
+            ensure!(
+                metadata.contract_export != Some(false),
+                "workerService requires its producer contract export"
+            );
+            ensure!(
+                metadata.worker_control_service != Some(true),
+                "workerService and legacy workerControlService roles cannot be combined"
+            );
         }
         metadata.language = Some(language.as_str().into());
     }

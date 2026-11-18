@@ -1,5 +1,18 @@
 # @forklaunch/express
 
+## 1.3.0
+
+### Minor Changes
+
+- f047dec: Serve MCP at `/mcp` (or `mcp.path`) on the application port, the way Rust services do, instead of a second listener on `MCP_PORT` / `PORT + 2000`. A separate listener is still used when `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` is set; set `MCP_LISTENER=separate` to keep MCP clients that point at `PORT + 2000` working. Sessions are stateless by default so any worker or task can answer; `mcp.sessions: 'stateful'` keeps in-memory sessions (single worker only) that close after `sessionIdleTimeoutMs` (default 15 minutes) idle. A failed `authenticate` returns 401 with `WWW-Authenticate: Bearer`, and hyper-express now applies `authenticate`. Tools forward the caller's `Authorization`, `x-correlation-id` and trace headers to the routes they call; a header the tool supplies wins.
+
+### Patch Changes
+
+- 856ed17: Depend on multer 2.5.0, so apps no longer need a pnpm override to get it
+- Updated dependencies [f047dec]
+- Updated dependencies [eb7c292]
+  - @forklaunch/core@3.5.0
+
 ## 1.2.53
 
 ### Patch Changes

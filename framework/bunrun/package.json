@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Rohin Bhargava",
@@ -41,7 +41,7 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^26.6.5",
+    "@types/node": "^26.6.6",
     "tsup": "^9.0.0",
     "typescript": "^7.0.2"
   },

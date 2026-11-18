@@ -32,7 +32,11 @@ pub(crate) static PAYMENTS: Capability = Capability {
 /// The version the blueprints use.
 const STRIPE_VERSION: &str = "^22.6.2";
 const CORE_HTTP: &str = "@forklaunch/core/http";
-const KEYS: &[&str] = &["STRIPE_API_KEY", "STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"];
+const KEYS: &[&str] = &[
+    "STRIPE_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+];
 
 /// The registration a service without a Stripe client gets.
 const RUNTIME_BLOCK: &str = "const configInjector = createConfigInjector(SchemaValidator(), {
@@ -110,7 +114,8 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
     // The billing-stripe blueprint's own registration already picks
     // createStripeClient in managed mode; it needs no switching (and `infra
     // remove` leaves it as it is).
-    let native = existing && text.contains("isManagedInstance()") && text.contains("createStripeClient(");
+    let native =
+        existing && text.contains("isManagedInstance()") && text.contains("createStripeClient(");
     if native {
         // Already managed-ready.
     } else if existing {
@@ -138,7 +143,9 @@ fn add(edit: &mut CapabilityEdit) -> Result<()> {
         // The key-verified /webhook route keeps working outside managed mode;
         // with the secret optional, it refuses every delivery in managed mode
         // (where Stripe's events arrive as platform events instead).
-        let controller = edit.service_path.join("api/controllers/webhook.controller.ts");
+        let controller = edit
+            .service_path
+            .join("api/controllers/webhook.controller.ts");
         if let Some(source) = edit.read(&controller)? {
             let resolved = "ci.resolve(tokens.STRIPE_WEBHOOK_SECRET);";
             if source.contains(resolved) {
@@ -194,13 +201,18 @@ fn remove(edit: &mut CapabilityEdit) -> Result<()> {
     };
     if switched_factory().is_match(&before) {
         let mut text = switched_factory()
-            .replace(&before, "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)")
+            .replace(
+                &before,
+                "factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY)",
+            )
             .into_owned();
         text = retype_keys(&text, "optional(string)", "string");
         // createStripeClient goes with the switched factory.
         text = in_place::drop_orphaned_imports(&before, &text, &["createStripeClient"]);
         edit.write(path, text);
-        let controller = edit.service_path.join("api/controllers/webhook.controller.ts");
+        let controller = edit
+            .service_path
+            .join("api/controllers/webhook.controller.ts");
         if let Some(source) = edit.read(&controller)? {
             let switched = "ci.resolve(tokens.STRIPE_WEBHOOK_SECRET) ?? '';";
             if source.contains(switched) {

@@ -942,7 +942,7 @@ fn build_rust_sequence(
         .map(|schema| build_rust_type(&format!("{name}Rest"), schema, models));
     let model = models.get_mut(&name).unwrap();
     model.fields = fields;
-    model.sequence_rest_type = rest.map_or_else(String::new, |ty| {
+    model.sequence_rest_type = rest.map_or_default(|ty| {
         ty.strip_prefix("::std::boxed::Box<")
             .and_then(|value| value.strip_suffix('>'))
             .unwrap_or(&ty)

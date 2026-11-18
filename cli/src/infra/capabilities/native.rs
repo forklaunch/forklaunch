@@ -813,7 +813,10 @@ fn release_dependency_feature(
     else {
         return Ok(());
     };
-    let Some(index) = features.iter().position(|value| value.as_str() == Some(feature)) else {
+    let Some(index) = features
+        .iter()
+        .position(|value| value.as_str() == Some(feature))
+    else {
         return Ok(());
     };
     features.remove(index);
@@ -855,9 +858,14 @@ pub(crate) fn release_dependency(
         deps.remove(name);
     }
     add(&mut fresh)?;
-    let rendered = crate::init::rust_project::dependencies::render_for_path(cargo_path, &fresh.to_string())?;
+    let rendered =
+        crate::init::rust_project::dependencies::render_for_path(cargo_path, &fresh.to_string())?;
     let generated: toml::Value = toml::from_str(&rendered)?;
-    if generated.get("dependencies").and_then(|deps| deps.get(name)) == Some(current) {
+    if generated
+        .get("dependencies")
+        .and_then(|deps| deps.get(name))
+        == Some(current)
+    {
         if let Some(deps) = cargo
             .get_mut("dependencies")
             .and_then(|deps| deps.as_table_like_mut())
@@ -884,11 +892,14 @@ pub(crate) fn dependency_in_use(
         .is_some_and(|features| {
             features.iter().any(|(_, entries)| {
                 entries.as_array().is_some_and(|entries| {
-                    entries.iter().filter_map(|entry| entry.as_str()).any(|entry| {
-                        entry == format!("dep:{name}")
-                            || entry.starts_with(&format!("{name}/"))
-                            || entry.starts_with(&format!("{name}?/"))
-                    })
+                    entries
+                        .iter()
+                        .filter_map(|entry| entry.as_str())
+                        .any(|entry| {
+                            entry == format!("dep:{name}")
+                                || entry.starts_with(&format!("{name}/"))
+                                || entry.starts_with(&format!("{name}?/"))
+                        })
                 })
             })
         });
@@ -1205,8 +1216,7 @@ fn inline_capability_module(source: &str) -> String {
         .replace("        })\n    }\n}", "        }) }.mount(self)\n    }\n}")
 }
 
-const INLINE_CONTRACT: &str =
-    "forklaunch_core::contract::controller_contract!(platform_events, \"../../api/controllers/platform_events.rs\");";
+const INLINE_CONTRACT: &str = "forklaunch_core::contract::controller_contract!(platform_events, \"../../api/controllers/platform_events.rs\");";
 
 /// Add or remove the platform-events contract in a private contract host,
 /// as text: the rest of the file keeps its bytes, so removal returns the
@@ -1288,7 +1298,11 @@ fn inline_capability_registry(source: &str, adding: bool) -> Result<String> {
                 .map(|index| statements[index].span().byte_range().end)
                 .unwrap_or_else(|| function.block.brace_token.span.open().byte_range().end);
             let gap = &source[gap_start..at];
-            let separator = if gap.trim().is_empty() && !gap.is_empty() { gap } else { "\n" };
+            let separator = if gap.trim().is_empty() && !gap.is_empty() {
+                gap
+            } else {
+                "\n"
+            };
             edits.push((at..at, format!("{hook}{separator}")));
         } else {
             for statement in statements.iter().filter(|statement| references(statement)) {

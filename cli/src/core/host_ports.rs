@@ -51,16 +51,28 @@ pub(crate) fn published_ports(compose: &Value, services: &[String]) -> Vec<Publi
         if !services.is_empty() && !services.iter().any(|selected| selected == name) {
             continue;
         }
-        for entry in service.get("ports").and_then(Value::as_array).into_iter().flatten() {
+        for entry in service
+            .get("ports")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             let (host_ip, published, protocol) = match entry {
                 Value::Object(entry) => (
-                    entry.get("host_ip").and_then(Value::as_str).map(str::to_owned),
+                    entry
+                        .get("host_ip")
+                        .and_then(Value::as_str)
+                        .map(str::to_owned),
                     entry.get("published").and_then(|value| match value {
                         Value::String(value) => Some(value.clone()),
                         Value::Number(value) => Some(value.to_string()),
                         _ => None,
                     }),
-                    entry.get("protocol").and_then(Value::as_str).unwrap_or("tcp").to_owned(),
+                    entry
+                        .get("protocol")
+                        .and_then(Value::as_str)
+                        .unwrap_or("tcp")
+                        .to_owned(),
                 ),
                 Value::String(entry) => match parse_short(entry) {
                     Some(parsed) => parsed,
@@ -76,7 +88,9 @@ pub(crate) fn published_ports(compose: &Value, services: &[String]) -> Vec<Publi
                 Some((start, end)) => (start.parse::<u16>(), end.parse::<u16>()),
                 None => (published.parse::<u16>(), published.parse::<u16>()),
             };
-            let (Ok(start), Ok(end)) = (start, end) else { continue };
+            let (Ok(start), Ok(end)) = (start, end) else {
+                continue;
+            };
             for port in start..=end.max(start) {
                 if port == 0 {
                     continue;
@@ -111,8 +125,14 @@ fn parse_short(entry: &str) -> Option<(Option<String>, Option<String>, String)> 
     match (host_ip, parts.as_slice()) {
         (None, [_target]) => Some((None, None, protocol)),
         (None, [published, _target]) => Some((None, Some((*published).to_owned()), protocol)),
-        (None, [ip, published, _target]) => Some((Some((*ip).to_owned()), Some((*published).to_owned()), protocol)),
-        (Some(ip), [published, _target]) => Some((Some(ip), Some((*published).to_owned()), protocol)),
+        (None, [ip, published, _target]) => Some((
+            Some((*ip).to_owned()),
+            Some((*published).to_owned()),
+            protocol,
+        )),
+        (Some(ip), [published, _target]) => {
+            Some((Some(ip), Some((*published).to_owned()), protocol))
+        }
         _ => None,
     }
 }
@@ -121,16 +141,27 @@ fn parse_short(entry: &str) -> Option<(Option<String>, Option<String>, String)> 
 /// is taken by anything other than this Compose project.
 // Wired into `forklaunch dev` just before `docker compose up`.
 pub(crate) fn preflight(compose: &Value, services: &[String]) -> Result<()> {
-    let project = compose.get("name").and_then(Value::as_str).unwrap_or_default().to_owned();
-    check(&published_ports(compose, services), |port| probe(&project, port))
+    let project = compose
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    check(&published_ports(compose, services), |port| {
+        probe(&project, port)
+    })
 }
 
 /// The decision, separated from the host probe for tests.
-pub(crate) fn check(ports: &[PublishedPort], mut probe: impl FnMut(&PublishedPort) -> Holder) -> Result<()> {
+pub(crate) fn check(
+    ports: &[PublishedPort],
+    mut probe: impl FnMut(&PublishedPort) -> Holder,
+) -> Result<()> {
     let mut conflicts = BTreeMap::new();
     for port in ports {
         if let Holder::Other(holder) = probe(port) {
-            conflicts.entry((port.port, port.protocol.clone())).or_insert((port.clone(), holder));
+            conflicts
+                .entry((port.port, port.protocol.clone()))
+                .or_insert((port.clone(), holder));
         }
     }
     if conflicts.is_empty() {
@@ -184,7 +215,11 @@ fn probe(project: &str, port: &PublishedPort) -> Holder {
             TcpListener::bind(address).is_err()
         }
     });
-    if taken { Holder::Other(None) } else { Holder::Free }
+    if taken {
+        Holder::Other(None)
+    } else {
+        Holder::Free
+    }
 }
 
 /// The Compose project and name of a running container publishing `port`.
@@ -228,7 +263,14 @@ mod tests {
         let ports = published_ports(&compose(), &[]);
         let summary: Vec<_> = ports
             .iter()
-            .map(|port| (port.service.as_str(), port.host_ip.as_deref(), port.port, port.protocol.as_str()))
+            .map(|port| {
+                (
+                    port.service.as_str(),
+                    port.host_ip.as_deref(),
+                    port.port,
+                    port.protocol.as_str(),
+                )
+            })
             .collect();
         assert_eq!(
             summary,
@@ -252,21 +294,33 @@ mod tests {
     #[test]
     fn this_project_and_free_ports_pass() {
         let ports = published_ports(&compose(), &[]);
-        check(&ports, |port| if port.port == 6379 { Holder::ThisProject } else { Holder::Free }).unwrap();
+        check(&ports, |port| {
+            if port.port == 6379 {
+                Holder::ThisProject
+            } else {
+                Holder::Free
+            }
+        })
+        .unwrap();
     }
 
     #[test]
     fn conflicts_name_port_service_and_holder() {
         let ports = published_ports(&compose(), &[]);
         let error = check(&ports, |port| match port.port {
-            6379 => Holder::Other(Some("container `other-redis-1` (Compose project `other`)".into())),
+            6379 => Holder::Other(Some(
+                "container `other-redis-1` (Compose project `other`)".into(),
+            )),
             8000 => Holder::Other(None),
             _ => Holder::Free,
         })
         .unwrap_err()
         .to_string();
         assert!(error.contains("127.0.0.1:6379/tcp for service `redis` is held by container `other-redis-1` (Compose project `other`)"), "{error}");
-        assert!(error.contains("0.0.0.0:8000/tcp for service `api` is held by another process"), "{error}");
+        assert!(
+            error.contains("0.0.0.0:8000/tcp for service `api` is held by another process"),
+            "{error}"
+        );
         assert!(!error.contains("7000"), "{error}");
     }
 
@@ -274,7 +328,12 @@ mod tests {
     fn a_port_bound_on_the_host_is_reported() {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
-        let taken = PublishedPort { service: "redis".into(), host_ip: Some("127.0.0.1".into()), port, protocol: "tcp".into() };
+        let taken = PublishedPort {
+            service: "redis".into(),
+            host_ip: Some("127.0.0.1".into()),
+            port,
+            protocol: "tcp".into(),
+        };
         // No container publishes an ephemeral port, so the bind probe decides.
         assert!(matches!(probe("demo", &taken), Holder::Other(None)));
         drop(listener);

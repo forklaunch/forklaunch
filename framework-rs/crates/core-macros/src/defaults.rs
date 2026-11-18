@@ -35,7 +35,7 @@ pub(crate) fn apply(
         let key = option
             .path()
             .get_ident()
-            .map_or_else(String::new, ToString::to_string);
+            .map_or_default(ToString::to_string);
         let allowed = match name.as_str() {
             "String" => matches!(key.as_str(), "min_length" | "max_length"),
             "i64" | "u64" => matches!(key.as_str(), "min" | "max"),

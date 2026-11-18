@@ -18,7 +18,11 @@ impl RemoveCommand {
 
 impl CliCommand for RemoveCommand {
     fn command(&self) -> Command {
-        command("remove", "Permanently remove a job from the dead-letter queue").arg(
+        command(
+            "remove",
+            "Permanently remove a job from the dead-letter queue",
+        )
+        .arg(
             Arg::new("job_id")
                 .required(true)
                 .help("The dead-letter job ID to remove"),
@@ -31,7 +35,11 @@ impl CliCommand for RemoveCommand {
             .get_one::<String>("job_id")
             .context("job id is required")?;
 
-        let url = format!("{}/dlq/{}", get_platform_management_api_url(), urlencoding::encode(job_id));
+        let url = format!(
+            "{}/dlq/{}",
+            get_platform_management_api_url(),
+            urlencoding::encode(job_id)
+        );
         let response = http_client::delete(&url).with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
         if response.status().as_u16() == 404 {

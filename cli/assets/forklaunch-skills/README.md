@@ -90,6 +90,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/imports-and-structure` — Import layers, module structure, file naming. **Always import from `@{{app-name}}/core`.**
 - `/websockets-and-mappers` — WebSockets, real-time, log streaming, requestMapper/responseMapper.
 - `/rust-framework` — Rust services: contracts and SDK artifacts, encrypted workers, service-owned Postgres persistence, agents.
+- `/rust-service-recipes` — Worked example for a Rust service: schemas, protected endpoints, per-user encrypted storage, migration, tests. Copy these shapes instead of reading framework source.
 - `/compliance` — fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation.
 - `/encryption-key-rotation` — The key ring (`ENCRYPTION_KEY` + `LEGACY_ENCRYPTION_KEYS`), rotating a key without downtime, the re-encryption sweep migration and its report, recovering when a key was replaced under live data.
 - `/score` — Generate and read an Enterprise-Readiness Report Card, gate CI on a minimum score, and know what the deterministic checks can and cannot judge.
@@ -98,6 +99,7 @@ Full version in `AGENTS.md` and `CLAUDE.md`.
 - `/observability` — OTel wiring, metrics definitions, security events, alert rules, notifiers, telemetry retention.
 
 ### Frontend
+- `/expo-mobile` — Create a mobile foundation with Expo Router, secure sign-in, and optional assistant through the CLI.
 - `/frontend-patterns` — Pages, SDK client, useApi/useMutation hooks, auth, feature gating, forms, tables.
 - `/tanstack` — TanStack Start: routing, server functions, SSR, data loading.
 - `/design-system` — Design philosophy router: Stripe, Linear, Robinhood, Fidelity, Clinical, Airbnb, Retool, Notion.

@@ -816,7 +816,12 @@ mod tests {
                     format!("modules_path = '{modules}'\n"),
                 )
                 .unwrap();
-                { let manifest = root.join(".forklaunch/manifest.toml"); let prior = std::fs::read_to_string(&manifest).unwrap_or_default(); std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", config)).unwrap(); }
+                {
+                    let manifest = root.join(".forklaunch/manifest.toml");
+                    let prior = std::fs::read_to_string(&manifest).unwrap_or_default();
+                    std::fs::write(&manifest, format!("{prior}\n[framework]\n{}\n", config))
+                        .unwrap();
+                }
                 let directory = if modules == "src" {
                     "src/client-sdk/rust/notes-websocket-sdk"
                 } else {

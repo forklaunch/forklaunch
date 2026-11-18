@@ -70,22 +70,38 @@ pub(crate) fn names_declared_in_workspace(app_root: &Path) -> Option<HashSet<Str
     let project_env_vars = find_all_env_vars(&modules_path, &rendered_templates_cache).ok()?;
 
     let mut names: HashSet<String> = project_env_vars
-        .values().flatten().map(|usage| usage.var_name.clone()).collect();
+        .values()
+        .flatten()
+        .map(|usage| usage.var_name.clone())
+        .collect();
     // Native services declare environment configuration in their checked-in
     // examples. Read names only, never local credentials or dependency trees.
     let manifest: toml::Value = toml::from_str(
-        &std::fs::read_to_string(workspace_root.join(".forklaunch/manifest.toml")).ok()?
-    ).ok()?;
+        &std::fs::read_to_string(workspace_root.join(".forklaunch/manifest.toml")).ok()?,
+    )
+    .ok()?;
     if let Some(projects) = manifest.get("projects").and_then(toml::Value::as_array) {
         for project in projects {
-            let Some(metadata) = project.get("metadata") else { continue };
-            if metadata.get("language").and_then(toml::Value::as_str) != Some("rust") { continue; }
-            let Some(path) = metadata.get("cratePath").and_then(toml::Value::as_str) else { continue };
+            let Some(metadata) = project.get("metadata") else {
+                continue;
+            };
+            if metadata.get("language").and_then(toml::Value::as_str) != Some("rust") {
+                continue;
+            }
+            let Some(path) = metadata.get("cratePath").and_then(toml::Value::as_str) else {
+                continue;
+            };
             let directory = workspace_root.join(path);
-            let Ok(directory) = directory.canonicalize() else { continue };
-            if !directory.starts_with(&workspace_root) { continue; }
+            let Ok(directory) = directory.canonicalize() else {
+                continue;
+            };
+            if !directory.starts_with(&workspace_root) {
+                continue;
+            }
             let example = directory.join(".env.example");
-            if example.is_symlink() { continue; }
+            if example.is_symlink() {
+                continue;
+            }
             if let Ok(content) = std::fs::read_to_string(example) {
                 names.extend(names_in_pulled_config(&content));
             }
@@ -223,11 +239,26 @@ mod tests {
         std::fs::create_dir_all(root.path().join("src/api")).unwrap();
         std::fs::create_dir_all(root.path().join("src/unregistered")).unwrap();
         std::fs::write(root.path().join(".forklaunch/manifest.toml"), "modules_path='src'\n[[projects]]\nname='api'\n[projects.metadata]\nlanguage='rust'\ncratePath='src/api'\n").unwrap();
-        std::fs::write(root.path().join("src/api/.env.example"), "DATABASE_URL=\nTENANT_ID=\n").unwrap();
-        std::fs::write(root.path().join("src/api/.env.local"), "SECRET_ONLY=hidden\n").unwrap();
-        std::fs::write(root.path().join("src/unregistered/.env.example"), "UNREGISTERED=\n").unwrap();
+        std::fs::write(
+            root.path().join("src/api/.env.example"),
+            "DATABASE_URL=\nTENANT_ID=\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("src/api/.env.local"),
+            "SECRET_ONLY=hidden\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.path().join("src/unregistered/.env.example"),
+            "UNREGISTERED=\n",
+        )
+        .unwrap();
         let names = names_declared_in_workspace(root.path()).unwrap();
-        assert_eq!(names, HashSet::from(["DATABASE_URL".to_owned(), "TENANT_ID".to_owned()]));
+        assert_eq!(
+            names,
+            HashSet::from(["DATABASE_URL".to_owned(), "TENANT_ID".to_owned()])
+        );
     }
     use super::*;
 
