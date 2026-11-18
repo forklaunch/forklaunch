@@ -1057,6 +1057,11 @@ forklaunch app domain email remove -e production [-y]         # back to no-reply
 forklaunch app readiness show       # readiness schedule + latest run
 forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)
+forklaunch app compute -e <env> -r <region>      # each service: scale to zero or always on, why, and what traffic suggests
+forklaunch app compute -e <env> -r <region> --service api=always-on --reason "..."   # change; applies on the next deploy
+forklaunch app schedule -e <env> -r <region>     # calls the platform makes to services at set times
+forklaunch app schedule -e <env> -r <region> -s notifications \
+  --set sweep --schedule "rate(15 minutes)" --call /internal/sweep   # add/replace; --remove <name> removes
 forklaunch app route <id>           # route details
 forklaunch app controller <id>      # controller details
 ```

@@ -78,7 +78,7 @@ impl CliCommand for ScoreCommand {
             Arg::new("base_path")
                 .short('p')
                 .long("path")
-                .help("Application root path (defaults to the current directory's manifest)"),
+                .help("Application root path (defaults to the current directory). A folder with no ForkLaunch manifest is scored as an app that is not on ForkLaunch."),
         )
         .arg(
             Arg::new("offline")
@@ -135,6 +135,29 @@ impl CliCommand for ScoreCommand {
                 .default_value("both"),
         )
         .arg(
+            Arg::new("share")
+                .long("share")
+                .value_name("SCOPE")
+                .help(
+                    "What the share link shows: scores (the default: scores, counts and \
+                     requirement titles, no findings or code) or full (the report as you see it \
+                     signed in: overview, findings, data flows; expires sooner). Ignored with \
+                     --no-share and --offline.",
+                )
+                .value_parser(["scores", "full"])
+                .default_value("scores"),
+        )
+        .arg(
+            Arg::new("job")
+                .long("job")
+                .value_name("JOB_ID")
+                .help(
+                    "Pick up an analysis that is already running or finished, by the job id a \
+                     timed-out run printed, instead of uploading again.",
+                )
+                .conflicts_with("offline"),
+        )
+        .arg(
             Arg::new("min_score")
                 .long("min-score")
                 .help("Exit non-zero if the overall score is below this (0-100). For CI gating.")
@@ -143,7 +166,14 @@ impl CliCommand for ScoreCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let (app_root, manifest) = require_manifest(matches)?;
+        let workspace = Workspace::locate(matches)?;
+        // What the share link shows; None when no link is wanted.
+        let share_scope = if matches.get_flag("no_share") {
+            None
+        } else {
+            matches.get_one::<String>("share").map(String::as_str)
+        };
+        let app_root = workspace.root.clone();
         let json_out = matches.get_flag("json");
         let pretty = matches.get_flag("pretty");
 
@@ -151,16 +181,27 @@ impl CliCommand for ScoreCommand {
         let offline = matches.get_flag("offline");
         let (card_json, share_url, remote_prompt) = if offline {
             (
-                offline_card(&app_root, &manifest.app_name, &manifest.modules_path)?,
+                offline_card(&app_root, &workspace.app_name, &workspace.modules_path)?,
                 None,
                 None,
             )
+        } else if let Some(job_id) = matches.get_one::<String>("job") {
+            collect_job(
+                &AuthMode::detect(),
+                job_id,
+                share_scope,
+                json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
+            )?
         } else {
             score_via_api(
                 &app_root,
-                &manifest.app_name,
-                manifest.platform_application_id.as_deref(),
-                !matches.get_flag("no_share"),
+                &workspace.app_name,
+                workspace.platform_application_id.as_deref(),
+                share_scope,
                 json_out || prompt_out,
                 matches
                     .get_one::<String>("prompt_scope")
@@ -179,6 +220,9 @@ impl CliCommand for ScoreCommand {
                     "remediationPrompt".to_string(),
                     Value::String(prompt.clone()),
                 );
+                if let Some(url) = &share_url {
+                    object.insert("shareUrl".to_string(), Value::String(url.clone()));
+                }
             }
             let serialized = if pretty {
                 serde_json::to_string_pretty(&out)?
@@ -226,6 +270,75 @@ impl CliCommand for ScoreCommand {
     }
 }
 
+/// The folder being scored. A ForkLaunch app is described by its manifest; any
+/// other folder is scored as it stands, named after its directory, so an app
+/// that is not on ForkLaunch yet can still be graded.
+struct Workspace {
+    root: std::path::PathBuf,
+    app_name: String,
+    /// Relative to `root`; empty when there is no manifest (each top-level
+    /// directory is then read as a project).
+    modules_path: String,
+    platform_application_id: Option<String>,
+}
+
+impl Workspace {
+    fn locate(matches: &ArgMatches) -> Result<Self> {
+        let cwd = std::env::current_dir().context("could not read the current directory")?;
+        let start = match matches.get_one::<String>("base_path") {
+            Some(path) if cwd.join(path).is_dir() => cwd.join(path),
+            Some(path) => anyhow::bail!("{path} is not a directory"),
+            None => cwd,
+        };
+        if crate::core::base_path::find_nearest_manifest_from(&start).is_some() {
+            let (root, manifest) = require_manifest(matches)?;
+            return Ok(Self {
+                root,
+                app_name: manifest.app_name,
+                modules_path: manifest.modules_path,
+                platform_application_id: manifest.platform_application_id,
+            });
+        }
+        let root = start.canonicalize().unwrap_or(start);
+        let app_name = unmanifested_app_name(&root);
+        eprintln!(
+            "  {}",
+            dim(&format!(
+                "No .forklaunch/manifest.toml here: scoring {} as an app that is not on ForkLaunch.",
+                root.display()
+            ))
+        );
+        Ok(Self {
+            root,
+            app_name,
+            modules_path: String::new(),
+            platform_application_id: None,
+        })
+    }
+}
+
+/// An app name from a directory name: lowercase letters, digits and dashes.
+fn unmanifested_app_name(root: &Path) -> String {
+    let raw = root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let mut name = String::new();
+    for c in raw.chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.ends_with('-') {
+            name.push('-');
+        }
+    }
+    let name = name.trim_matches('-').to_string();
+    if name.is_empty() {
+        "app".to_string()
+    } else {
+        name
+    }
+}
+
 /// Deterministic-only card, built locally. No network, no auth, no cost.
 fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<Value> {
     let modules_root = app_root.join(modules_path);
@@ -246,8 +359,9 @@ fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<V
         })
         .unwrap_or(0);
 
+    let evidence = crate::compliance::checks::local_evidence(&modules_root);
     let card: ReportCard =
-        build_local_report_card(app_name, module_count, &findings, iso8601_now());
+        build_local_report_card(app_name, module_count, &findings, &evidence, iso8601_now());
     Ok(json!(card))
 }
 
@@ -266,7 +380,8 @@ fn score_via_api(
     // The platform application this project is bound to: its deployed instance
     // counts decide the card's hosting criteria (read server-side as the caller).
     application_id: Option<&str>,
-    want_share: bool,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
     quiet: bool,
     // What the platform's remediation prompt covers: not-met, undecided or both.
     prompt_scope: &str,
@@ -316,7 +431,21 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    let job = poll_job(&auth, &job_id, prompt_scope, quiet)?;
+    collect_job(&auth, &job_id, share_scope, quiet, prompt_scope)
+}
+
+/// Wait for an analysis job and return its card, share link and prompt. Also
+/// the whole of `--job`: a run that outlived the wait is picked up by its id
+/// instead of being uploaded and paid for again.
+fn collect_job(
+    auth: &AuthMode,
+    job_id: &str,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
+    quiet: bool,
+    prompt_scope: &str,
+) -> Result<(Value, Option<String>, Option<String>)> {
+    let job = poll_job(auth, job_id, prompt_scope, quiet)?;
     let card = job
         .get("reportCard")
         .cloned()
@@ -326,8 +455,8 @@ fn score_via_api(
         .and_then(Value::as_str)
         .map(str::to_string);
 
-    let share_url = if want_share {
-        mint_share(&auth, &job_id).unwrap_or(None)
+    let share_url = if let Some(scope) = share_scope {
+        mint_share(auth, job_id, scope).unwrap_or(None)
     } else {
         None
     };
@@ -399,7 +528,7 @@ fn offline_prompt(card: &Value, offline: bool) -> String {
             {
                 if matches!(
                     item.get("status").and_then(Value::as_str),
-                    Some("unmet" | "pending")
+                    Some("unmet" | "pending" | "unassessed")
                 ) {
                     outstanding.push((rail.clone(), item));
                 }
@@ -494,8 +623,8 @@ fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> R
     loop {
         if started.elapsed() > POLL_TIMEOUT {
             anyhow::bail!(
-                "analysis did not finish within {} minutes. It may still complete — check the \
-                 dashboard, or poll job {job_id} directly.",
+                "analysis did not finish within {} minutes. It is still running on the server: pick \
+                 it up with `forklaunch score --job {job_id}`.",
                 POLL_TIMEOUT.as_secs() / 60
             );
         }
@@ -558,8 +687,8 @@ fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> R
 
 /// Mint a revocable share link. Best-effort: a scored card the caller can see
 /// is worth more than an error because the link step failed.
-fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
-    let response = post_with_auth(auth, &studio_url("/share"), json!({ "jobId": job_id }))?;
+fn mint_share(auth: &AuthMode, job_id: &str, scope: &str) -> Result<Option<String>> {
+    let response = post_with_auth(auth, &studio_url("/share"), share_request(job_id, scope))?;
     if !response.status().is_success() {
         return Ok(None);
     }
@@ -568,6 +697,13 @@ fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
         .get("sharePath")
         .and_then(Value::as_str)
         .map(|path| format!("{}{}", get_platform_ui_url(), path)))
+}
+
+/// The share request. `scores` is the redacted card (scores, counts and
+/// requirement titles); `full` is the card its owner sees, findings and data
+/// flows included, which the platform expires sooner.
+fn share_request(job_id: &str, scope: &str) -> Value {
+    json!({ "jobId": job_id, "scope": scope })
 }
 
 /// Turn the API's status codes into something a person can act on. The tiering
@@ -665,7 +801,7 @@ fn render_summary(card: &Value) -> String {
                         .filter(|item| {
                             matches!(
                                 item.get("status").and_then(Value::as_str),
-                                Some("unmet" | "pending")
+                                Some("unmet" | "pending" | "unassessed")
                             )
                         })
                         .count()
@@ -695,7 +831,23 @@ fn render_summary(card: &Value) -> String {
                         _ => "-",
                     };
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
-                    let _ = writeln!(out, "      {} {}", marker, text);
+                    // Nothing to read is not a pass: say so on the line, since
+                    // "-" alone reads as a failed check.
+                    // An item can also be unassessed because what there is to
+                    // check is in a Rust service the checks cannot decide yet;
+                    // its detail says so, and "nothing to check" would not be true.
+                    let about_rust = item
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .is_some_and(|detail| detail.contains("Rust "));
+                    let note = match item.get("status").and_then(Value::as_str) {
+                        Some("unassessed") if about_rust => {
+                            dim("  (not decided for Rust services yet: scores 0)")
+                        }
+                        Some("unassessed") => dim("  (nothing to check: scores 0)"),
+                        _ => String::new(),
+                    };
+                    let _ = writeln!(out, "      {} {}{}", marker, text, note);
                 }
             }
             if let Some(findings) = rail.get("findings").and_then(Value::as_array)
@@ -743,6 +895,30 @@ fn render_summary(card: &Value) -> String {
 
     if let Some(caveat) = card.get("caveat").and_then(Value::as_str) {
         let _ = writeln!(out, "  {}", dim(caveat));
+        let _ = writeln!(out);
+    }
+
+    // The card comes back as soon as it is scored; the source review (data
+    // flows, packages, known vulnerabilities) may still be running. Say so:
+    // their absence from a finished-looking report otherwise reads as "none".
+    let review_note = match card
+        .pointer("/deferredSourceReview/status")
+        .and_then(Value::as_str)
+    {
+        Some("pending") => Some(
+            "Source review still running: data flows, packages and known \
+             vulnerabilities are added to this report card on the dashboard when it \
+             finishes. The scores and findings above are final.",
+        ),
+        Some("failed") => Some(
+            "The source review did not finish, so this report has no data flows or \
+             known vulnerabilities. Scores and findings are not affected. Run the \
+             score again to review the source.",
+        ),
+        _ => None,
+    };
+    if let Some(note) = review_note {
+        let _ = writeln!(out, "  {}", dim(note));
         let _ = writeln!(out);
     }
 
@@ -822,6 +998,25 @@ mod tests {
         assert_eq!(job_path("j1", "not-met"), "/job/j1");
         assert_eq!(job_path("j1", "undecided"), "/job/j1?promptScope=undecided");
         assert_eq!(job_path("j1", "both"), "/job/j1?promptScope=both");
+    }
+
+    #[test]
+    fn a_card_scored_before_its_source_review_says_the_review_is_still_running() {
+        let card = |status: &str| {
+            json!({
+                "overall": 72,
+                "deferredSourceReview": { "reviewKey": "k", "status": status }
+            })
+        };
+        let pending = render_summary(&card("pending"));
+        assert!(pending.contains("Source review still running"));
+        assert!(pending.contains("scores and findings above are final"));
+        assert!(render_summary(&card("failed")).contains("source review did not finish"));
+        // Finished, or a card that never deferred: nothing to add.
+        for quiet in [card("complete"), json!({ "overall": 72 })] {
+            let out = render_summary(&quiet);
+            assert!(!out.contains("ource review"), "{out}");
+        }
     }
 
     #[test]
@@ -915,6 +1110,60 @@ mod tests {
 
     /// A rail the CLI cannot judge must stay "not assessed" — never 0/100, and
     /// never carry an outstanding count it did not compute.
+    /// The link's scope is sent as chosen: the platform treats anything but
+    /// exactly "full" as the redacted card.
+    #[test]
+    fn the_share_request_carries_its_scope() {
+        assert_eq!(share_request("j1", "full")["scope"], "full");
+        assert_eq!(share_request("j1", "scores")["scope"], "scores");
+        assert_eq!(share_request("j1", "full")["jobId"], "j1");
+    }
+
+    /// A folder with no manifest is named after its directory.
+    #[test]
+    fn an_unmanifested_folder_is_named_after_its_directory() {
+        assert_eq!(
+            unmanifested_app_name(Path::new("/tmp/Loan Desk_v2")),
+            "loan-desk-v2"
+        );
+        assert_eq!(unmanifested_app_name(Path::new("/")), "app");
+    }
+
+    /// An item the checks had nothing to read for is outstanding and says why
+    /// on its own line: a bare "-" would read as a failed check.
+    #[test]
+    fn an_unassessed_item_is_outstanding_and_explained() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "security": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Every endpoint requires sign-in" }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("nothing to check: scores 0"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_item_undecided_for_a_rust_service_does_not_claim_nothing_to_check() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "governance": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Users can request data export and erasure",
+                  "detail": "Classified entities are declared in Rust services, and the offline erasure check only looks for the TypeScript ComplianceDataService." }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(
+            rendered.contains("not decided for Rust services yet: scores 0"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("nothing to check"), "{rendered}");
+    }
+
     #[test]
     fn a_pending_rail_is_not_given_a_score() {
         let rendered = render_summary(&json!({

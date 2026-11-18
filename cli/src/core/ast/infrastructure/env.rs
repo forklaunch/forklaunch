@@ -480,6 +480,25 @@ pub(crate) fn fold_optionality(sightings: &[Option<bool>]) -> Option<bool> {
     Some(sightings.iter().all(|sighting| *sighting == Some(true)))
 }
 
+/// Variables every process is handed by the operating system or the container
+/// runtime, whatever the application configures. Code reads them to find
+/// programs and directories; nobody sets them per environment.
+const PROVIDED_BY_THE_OS: &[&str] = &["PATH", "HOME", "TMPDIR", "PWD", "USER", "SHELL", "LANG"];
+
+/// A bare read normally counts as required, because the scanner cannot see
+/// whether the reader copes with a missing value. For a variable the operating
+/// system always provides there is no missing value to cope with, so a bare
+/// read of one is optional: a release is not held back until someone
+/// configures `PATH`. It is still listed, so a value an environment does set
+/// keeps reaching the process, and a declaration that calls it required still
+/// wins.
+fn sighted_optionality(sighting: &EnvVarUsage) -> Option<bool> {
+    if sighting.optional.is_none() && PROVIDED_BY_THE_OS.contains(&sighting.var_name.as_str()) {
+        return Some(true);
+    }
+    sighting.optional
+}
+
 /// Collapses raw sightings into one entry per variable name, preserving
 /// first-seen order so manifest output stays stable across runs.
 fn fold_sightings(sightings: Vec<EnvVarUsage>) -> Vec<EnvVarUsage> {
@@ -499,7 +518,7 @@ fn fold_sightings(sightings: Vec<EnvVarUsage>) -> Vec<EnvVarUsage> {
         .into_iter()
         .map(|var_name| {
             let declared: Vec<Option<bool>> =
-                grouped[&var_name].iter().map(|s| s.optional).collect();
+                grouped[&var_name].iter().map(sighted_optionality).collect();
             let optional = fold_optionality(&declared);
             EnvVarUsage { var_name, optional }
         })
@@ -974,6 +993,24 @@ mod tests {
         let folded = fold_sightings(sightings);
 
         assert_eq!(optionality(&folded, "OTEL_LEVEL"), Some(false));
+    }
+
+    #[test]
+    fn a_bare_read_of_a_variable_the_os_provides_is_optional() {
+        // forklaunch-platform builds child process environments from
+        // `process.env.PATH`; its releases were held for "missing PATH".
+        let source = r#"
+const env = { PATH: `/usr/local/bin:${process.env.PATH}`, HOME: process.env.HOME };
+const token = process.env.API_TOKEN;
+"#;
+        let folded = fold_sightings(extract_process_env_vars_from_source(source).unwrap());
+        assert_eq!(optionality(&folded, "PATH"), Some(true));
+        assert_eq!(optionality(&folded, "HOME"), Some(true));
+        assert_eq!(optionality(&folded, "API_TOKEN"), Some(false));
+
+        // Declared required somewhere: the declaration wins.
+        let folded = fold_sightings(vec![sighting("PATH", None), sighting("PATH", Some(false))]);
+        assert_eq!(optionality(&folded, "PATH"), Some(false));
     }
 
     #[test]

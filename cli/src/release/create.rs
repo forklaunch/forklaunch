@@ -836,7 +836,20 @@ impl CliCommand for CreateCommand {
                 // Other Pulumi-injected vars get empty values — Pulumi fills at deploy time.
                 // `${X:-default}` is optional with its default; `${X:?why}` is required.
                 let (value, optional) = compose_interpolation(&value);
-                let value = &value;
+                // The Rust framework reads these itself and runs without them,
+                // so a person is never asked for one. Their Compose values are
+                // local addresses or local names and do not travel.
+                let framework_optional = is_framework_optional_var(&key);
+                let optional = if framework_optional {
+                    Some(true)
+                } else {
+                    optional
+                };
+                let value = &if framework_optional {
+                    String::new()
+                } else {
+                    value
+                };
                 let effective_value = if key.eq_ignore_ascii_case("DB_NAME") {
                     if let Some(ref sid) = scope_id {
                         let base = sid
@@ -2334,6 +2347,23 @@ fn compose_interpolation(value: &str) -> (String, Option<bool>) {
     (value.to_owned(), None)
 }
 
+/// Settings the Rust framework reads on its own and treats as optional: the
+/// service's public address (it falls back to its listener), the MCP host and
+/// origin allow-lists and path, and the session token issuer and audience
+/// (each unenforced when unset; the signature is still checked against the
+/// app's own keys). Compose names them for local development only.
+fn is_framework_optional_var(key: &str) -> bool {
+    matches!(
+        key,
+        "PUBLIC_ORIGIN"
+            | "MCP_ALLOWED_HOSTS"
+            | "MCP_ALLOWED_ORIGINS"
+            | "MCP_PATH"
+            | "JWT_ISSUER"
+            | "JWT_AUDIENCE"
+    )
+}
+
 fn is_cli_generated_key_var(key_upper: &str) -> bool {
     CLI_GENERATED_KEY_VARS
         .iter()
@@ -2769,6 +2799,29 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+
+    #[test]
+    fn framework_optional_settings_are_never_asked_of_a_person() {
+        for name in [
+            "PUBLIC_ORIGIN",
+            "MCP_ALLOWED_HOSTS",
+            "MCP_ALLOWED_ORIGINS",
+            "MCP_PATH",
+            "JWT_ISSUER",
+            "JWT_AUDIENCE",
+        ] {
+            assert!(is_framework_optional_var(name), "{name}");
+        }
+        // Signing settings and anything the app itself requires stay required.
+        for name in [
+            "SESSION_JWT_ISSUER",
+            "TENANT_ID",
+            "DATABASE_URL",
+            "MCP_ENABLED",
+        ] {
+            assert!(!is_framework_optional_var(name), "{name}");
+        }
+    }
 
     #[test]
     fn compose_interpolations_map_to_defaults_and_requirements() {
