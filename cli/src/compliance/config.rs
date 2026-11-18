@@ -266,13 +266,24 @@ fn print_config(config: &EnvironmentConfig) -> Result<()> {
         .collect();
     writeln!(
         stdout,
-        "Protections on: {}",
+        "Protections switched on individually: {}",
         if features.is_empty() {
             "none".to_string()
         } else {
             features.join(", ")
         }
     )?;
+
+    let mut required: Vec<&str> = config
+        .enabled_standards
+        .iter()
+        .flat_map(|s| s.required_features.iter().map(|f| f.slug.as_str()))
+        .collect();
+    required.sort_unstable();
+    required.dedup();
+    if !required.is_empty() {
+        writeln!(stdout, "Required by the standards: {}", required.join(", "))?;
+    }
 
     let allowlist_on = config
         .feature_overrides
