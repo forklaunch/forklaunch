@@ -56,6 +56,13 @@ impl CliCommand for ScanCommand {
                 .help("Path to application root (optional)"),
         )
         .arg(
+            Arg::new("output")
+                .short('o')
+                .long("output")
+                .value_name("FILE")
+                .help("Write the scan as JSON to this file instead of printing it"),
+        )
+        .arg(
             Arg::new("json")
                 .long("json")
                 .action(ArgAction::SetTrue)
@@ -66,6 +73,10 @@ impl CliCommand for ScanCommand {
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let (app_root, manifest) = require_manifest(matches)?;
         let inventory = scan_field_inventory(&app_root.join(&manifest.modules_path))?;
+        if let Some(output) = matches.get_one::<String>("output") {
+            std::fs::write(output, serde_json::to_string(&inventory)?)?;
+            return Ok(());
+        }
         if matches.get_flag("json") {
             println!("{}", serde_json::to_string(&inventory)?);
             return Ok(());
