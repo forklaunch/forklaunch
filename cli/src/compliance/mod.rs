@@ -9,6 +9,7 @@ mod config;
 pub(crate) mod deps;
 mod docs;
 mod rust_artifact;
+pub(crate) mod scan;
 mod tenancy;
 
 use audit::AuditCommand;
@@ -22,6 +23,7 @@ pub(crate) struct ComplianceCommand {
     config: ConfigCommand,
     docs: DocsCommand,
     audit_tenancy: AuditTenancyCommand,
+    scan: scan::ScanCommand,
     validate_artifacts: rust_artifact::ValidateArtifactsCommand,
 }
 
@@ -32,6 +34,7 @@ impl ComplianceCommand {
             config: ConfigCommand::new(),
             docs: DocsCommand::new(),
             audit_tenancy: AuditTenancyCommand::new(),
+            scan: scan::ScanCommand,
             validate_artifacts: rust_artifact::ValidateArtifactsCommand,
         }
     }
@@ -47,6 +50,7 @@ impl CliCommand for ComplianceCommand {
         .subcommand(self.config.command())
         .subcommand(self.docs.command())
         .subcommand(self.audit_tenancy.command())
+        .subcommand(self.scan.command())
         .subcommand(self.validate_artifacts.command())
         .subcommand_required(true)
     }
@@ -56,6 +60,7 @@ impl CliCommand for ComplianceCommand {
             Some(("audit", sub_matches)) => self.audit.handler(sub_matches),
             Some(("config", sub_matches)) => self.config.handler(sub_matches),
             Some(("docs", sub_matches)) => self.docs.handler(sub_matches),
+            Some(("scan", sub_matches)) => self.scan.handler(sub_matches),
             Some(("audit-tenancy", sub_matches)) => self.audit_tenancy.handler(sub_matches),
             Some(("validate-artifacts", sub_matches)) => {
                 self.validate_artifacts.handler(sub_matches)
