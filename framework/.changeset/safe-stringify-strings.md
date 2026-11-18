@@ -1,5 +1,5 @@
 ---
-'@forklaunch/common': minor
+'@forklaunch/common': major
 '@forklaunch/core': patch
 '@forklaunch/express': patch
 '@forklaunch/hyper-express': patch
@@ -29,5 +29,17 @@ still read back, but one that looks like JSON (`'123'`) reads as that type
 until it is written again. The Rust `JsonRecordCodec` in TypeScript-compatible
 mode now also writes strings as JSON, so both sides agree.
 
+hyper-express `setHeader` changes for arrays and newlines, to match express:
+- An array value is now sent as one header line per item instead of one value
+  joined with `\n`.
+- A header value containing CR, LF or NUL now throws a `TypeError` instead of
+  being written to the response, where it could add headers of its own.
+
 If you call `safeStringify` on a string and expect the raw string back, switch
 to `toPlainString`.
+
+This is a major version of `@forklaunch/common` so that already published
+packages, which depend on `@forklaunch/common` `^1`, keep the old
+`safeStringify`. Their code still passes header, query and enum values through
+it and would send them quoted. Every package that depends on common is released
+with this change and depends on `^2`.

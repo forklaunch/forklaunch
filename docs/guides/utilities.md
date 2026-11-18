@@ -351,7 +351,7 @@ safeStringify('123');                // '"123"'
 safeParse(safeStringify('123'));     // '123' (a string, not the number 123)
 ```
 
-Before 1.3.0 a string was returned as-is, so `safeParse` turned `'123'` into a
+Before 2.0.0 a string was returned as-is, so `safeParse` turned `'123'` into a
 number and `'{"a":1}'` into an object. For headers, form fields and query
 values, where a string should stay unquoted, use `toPlainString`.
 
