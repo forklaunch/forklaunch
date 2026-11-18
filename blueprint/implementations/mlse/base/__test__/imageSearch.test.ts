@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { FetchLike } from '../domain/http';
 import { ImageSearchService, isChart, rankByCaption } from '../services/imageSearch.service';
 
+// a made-up Open-i response: no real article, caption or image
 const OPENI = readFileSync(join(__dirname, 'fixtures', 'openi-search.json'), 'utf8');
 
 function fakeFetch(body: string, requests: string[] = [], status = 200): FetchLike {
@@ -18,21 +19,23 @@ describe('ImageSearchService', () => {
 
     expect(status).toBe('ok');
     // of 12 figures: 5 unlicensed, 3 NonCommercial or NoDerivatives
-    expect(images.map((i) => i.pmcid)).toEqual(['PMC11169428', 'PMC7486639', 'PMC10625278', 'PMC12263465']);
+    expect(images.map((i) => i.pmcid)).toEqual(['PMC900000003', 'PMC900000004', 'PMC900000005', 'PMC900000009']);
     expect(images.every((i) => i.license === 'CC BY 4.0')).toBe(true);
     const [first] = images;
     expect(first.imageUrl).toMatch(/^https:\/\/openi\.nlm\.nih\.gov\/imgs\/512\//);
     expect(first.thumbnailUrl).toMatch(/^https:\/\/openi\.nlm\.nih\.gov\/imgs\/150\//);
-    expect(first.articleUrl).toBe('https://pmc.ncbi.nlm.nih.gov/articles/PMC11169428/');
+    expect(first.articleUrl).toBe('https://pmc.ncbi.nlm.nih.gov/articles/PMC900000003/');
     expect(first.modality).toBe('CT');
     expect(first.title.length).toBeGreaterThan(0);
   });
 
   it('turns caption markup into plain text', async () => {
     const { images } = await new ImageSearchService(fakeFetch(OPENI)).search('appendectomy');
-    const bleeding = images.find((i) => i.pmcid === 'PMC10625278');
+    const bleeding = images.find((i) => i.pmcid === 'PMC900000005');
 
-    expect(bleeding?.caption).toMatch(/^Post-appendectomy bleeding/);
+    expect(bleeding?.caption).toBe(
+      'Bleeding after appendectomy: (a) Fresh blood at the wound & dressing after appendectomy. (b) Two clips closing the appendiceal opening'
+    );
     expect(images.some((i) => /<|&[a-z]+;/.test(i.caption))).toBe(false);
   });
 

@@ -1610,13 +1610,6 @@ importers:
         version: 7.0.2
 
   interfaces/mlse:
-    dependencies:
-      '@forklaunch/common':
-        specifier: ^1.2.32
-        version: 1.2.32
-      '@mikro-orm/core':
-        specifier: 7.2.5
-        version: 7.2.5
     devDependencies:
       depcheck:
         specifier: ^1.4.7
