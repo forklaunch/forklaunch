@@ -49,7 +49,7 @@
     "@eslint/js": "^10.0.1",
     "@types/jest": "^30.0.0",
     "@types/node": "^26.6.5",
-    "eslint": "^10.13.0",
+    "eslint": "^10.15.0",
     "globals": "^17.13.0",
     "jest": "^30.5.2",
     "lint-staged": "^17.6.0",
@@ -61,7 +61,7 @@
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.0",
+    "typescript-eslint": "^8.73.0",
     "vitest": "^5.0.5"
   },
   "dependencies": {
