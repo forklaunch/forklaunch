@@ -15,7 +15,7 @@
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
     "publish:packages": "pnpm -r run publish:package",
     "test": "pnpm vitest --passWithNoTests",
-    "up:packages": "pnpm -r update --latest \"!uWebSockets.js\""
+    "up:packages": "pnpm -r update --latest \"!uWebSockets.js\" \"!range-parser\""
   },
   "lint-staged": {
     "**/*.ts": [
