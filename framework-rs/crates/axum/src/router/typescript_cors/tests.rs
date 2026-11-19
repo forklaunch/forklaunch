@@ -449,7 +449,11 @@ fn unconfigured_cors_is_reported_once_origins_are_missing() {
         assert!(warning.contains("CORS_ORIGINS=https://app.example.com"));
         assert!(warning.contains("RouterConfig::cors"));
     }
-    for setting in ["https://app.example.com", "*", " https://a.example , https://b.example/"] {
+    for setting in [
+        "https://app.example.com",
+        "*",
+        " https://a.example , https://b.example/",
+    ] {
         assert_eq!(unconfigured_cors_warning(Some(setting)), None);
     }
 }
