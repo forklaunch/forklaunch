@@ -123,8 +123,9 @@ impl CliCommand for AuditCommand {
         // tag it was given.
         let module_ctx = scan_module_encryption_context(&modules_path_buf);
 
-        let entities =
+        let mut entities =
             build_entity_reports(&field_classifications, &retention_policies, &module_ctx);
+        entities.extend(super::rust_artifact::entity_reports(&rust_declarations));
 
         // Every route, read from the source: each contract's access level and auth, plus routes
         // registered outside the framework. Exported OpenAPI specs are the fallback for apps
@@ -1280,6 +1281,33 @@ pub(crate) struct FieldReport {
     name: String,
     compliance: String,
     encrypted: bool,
+}
+
+impl EntityReport {
+    /// An entity read from a Rust crate's exported declarations, which carry
+    /// no retention rule.
+    pub(crate) fn declared(name: String, module: String, fields: Vec<FieldReport>) -> Self {
+        Self {
+            name,
+            module: Some(module),
+            fields,
+            retention: None,
+        }
+    }
+}
+
+impl FieldReport {
+    pub(crate) fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub(crate) fn declared(name: String, compliance: String, encrypted: bool) -> Self {
+        Self {
+            name,
+            compliance,
+            encrypted,
+        }
+    }
 }
 
 #[derive(Serialize)]
