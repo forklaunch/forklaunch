@@ -27,7 +27,7 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.15";
 // ts-node
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.72.0";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.73.0";
 // vitest
 pub(crate) const VITEST_VERSION: &str = "^5.0.5";
 

@@ -24,3 +24,15 @@ allowBuilds:
   ssh2: true
   tldjs: true
   unrs-resolver: true
+
+# Reviewed advisories with no fixed upstream release. Each entry names what
+# brings the package in; remove an entry as soon as that package ships a fix.
+# Do not add overrides or release-age exemptions here instead.
+auditConfig:
+  ignoreGhsas:
+    # glob <=14.0.1 (AbortSignal cancellation bypass). Via testcontainers ->
+    # archiver 7 -> archiver-utils, and jest -> test-exclude. Test tooling only.
+    - GHSA-3g3m-2fjr-6pw4
+    # minimatch <11.0.1 (pattern amplification denial of service). Via the
+    # same glob paths, plus typedoc and depcheck where they are installed.
+    - GHSA-g3hv-75wg-m249

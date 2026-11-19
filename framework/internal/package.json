@@ -33,7 +33,6 @@
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsc --emitDeclarationOnly",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -52,7 +51,6 @@
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
     "tsup": "^9.0.0",
-    "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.73.0",
     "vitest": "^5.1.0"
