@@ -43,8 +43,38 @@ export type App<
  *
  * @template SV - A type that extends AnySchemaValidator.
  * @param {SV} schemaValidator - The schema validator.
+ * @param options - Application options. `cors` says how cross-origin browser
+ *   requests are answered: `'environment'` to allow the origins listed in
+ *   `CORS_ORIGINS`, or CORS options naming them.
  * @returns {Application<SV>} - The new application instance.
  */
+export function forklaunchExpress<
+  SV extends AnySchemaValidator,
+  SessionSchema extends SessionObject<SV>
+>(
+  schemaValidator: SV,
+  openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
+  options: ExpressApplicationOptions<SV, SessionSchema> & {
+    cors: NonNullable<ExpressApplicationOptions<SV, SessionSchema>['cors']>;
+  }
+): Application<SV, SessionSchema>;
+/**
+ * @deprecated Say how this application answers cross-origin browser requests.
+ * Since `@forklaunch/core` 4 an application without a `cors` option no longer
+ * allows every origin: it allows only the origins in the `CORS_ORIGINS`
+ * environment variable, and none in production when that is unset, so a
+ * browser frontend on another origin stops working. Pass
+ * `cors: 'environment'` to keep reading `CORS_ORIGINS`, or
+ * `cors: { origin: ['https://app.example.com'] }` to name the origins here.
+ */
+export function forklaunchExpress<
+  SV extends AnySchemaValidator,
+  SessionSchema extends SessionObject<SV>
+>(
+  schemaValidator: SV,
+  openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
+  options?: ExpressApplicationOptions<SV, SessionSchema>
+): Application<SV, SessionSchema>;
 export function forklaunchExpress<
   SV extends AnySchemaValidator,
   SessionSchema extends SessionObject<SV>
