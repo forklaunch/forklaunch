@@ -43,7 +43,7 @@
   "dependencies": {
     "@forklaunch/common": "workspace:^",
     "@forklaunch/validator": "workspace:^",
-    "@mikro-orm/core": "7.2.7"
+    "@mikro-orm/core": "7.2.10"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -53,6 +53,6 @@
     "tsup": "^9.0.0",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.73.0",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.1"
   }
 }
