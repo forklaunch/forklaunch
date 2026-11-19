@@ -27,7 +27,7 @@ pub(crate) const TS_JEST_VERSION: &str = "^29.4.15";
 // ts-node
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.72.0";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.73.0";
 // vitest
 pub(crate) const VITEST_VERSION: &str = "^5.0.5";
 
@@ -242,7 +242,44 @@ pub(crate) fn application_test_script(
         Runtime::Bun => "bun run --bun",
         Runtime::Node => "pnpm",
     };
+    // vitest starts its default "forks" pool through `child.channel.unref()`,
+    // which Bun's child processes do not have (vitest 5.1.1 fails every test
+    // file with "child.channel?.unref is not a function"). Worker threads run
+    // under Bun on every vitest 5 release.
+    let pool = match (runtime, test_framework.as_ref()?) {
+        (Runtime::Bun, TestFramework::Vitest) => " --pool=threads",
+        _ => "",
+    };
+    Some(format!("{command} {runner}{pool} --passWithNoTests"))
+}
+
+/// The test script earlier CLI versions wrote, before the Bun vitest pool was
+/// set. Changing an application's runtime still has to recognise it.
+pub(crate) fn legacy_application_test_script(
+    runtime: &Runtime,
+    test_framework: &Option<TestFramework>,
+) -> Option<String> {
+    let runner = match test_framework.as_ref()? {
+        TestFramework::Jest => "jest",
+        TestFramework::Vitest => "vitest",
+    };
+    let command = match runtime {
+        Runtime::Bun => "bun run --bun",
+        Runtime::Node => "pnpm",
+    };
     Some(format!("{command} {runner} --passWithNoTests"))
+}
+
+/// Whether `script` is a test script this CLI generated for the runtime,
+/// in its current or earlier form.
+pub(crate) fn is_generated_test_script(
+    script: &Option<String>,
+    runtime: &Runtime,
+    test_framework: &Option<TestFramework>,
+) -> bool {
+    script.is_some()
+        && (*script == application_test_script(runtime, test_framework)
+            || *script == legacy_application_test_script(runtime, test_framework))
 }
 
 pub(crate) fn application_up_packages_script(runtime: &Runtime) -> String {
@@ -350,9 +387,9 @@ pub(crate) const TYPEBOX_VERSION: &str = "^0.34.52";
 // ajv
 pub(crate) const AJV_VERSION: &str = "^8.20.0";
 // better-auth
-pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.11";
+pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.12";
 // bullmq
-pub(crate) const BULLMQ_VERSION: &str = "^6.3.17";
+pub(crate) const BULLMQ_VERSION: &str = "^6.3.19";
 // better-sqlite3
 pub(crate) const BETTER_SQLITE3_VERSION: &str = "^13.0.3";
 // dotenv
@@ -657,7 +694,27 @@ mod tests {
             (TestFramework::Jest, "jest"),
         ] {
             for (runtime, command) in [(Runtime::Bun, "bun run --bun"), (Runtime::Node, "pnpm")] {
-                let expected = Some(format!("{command} {runner} --passWithNoTests"));
+                let pool = match (&runtime, &framework) {
+                    (Runtime::Bun, TestFramework::Vitest) => " --pool=threads",
+                    _ => "",
+                };
+                let expected = Some(format!("{command} {runner}{pool} --passWithNoTests"));
+                let legacy = Some(format!("{command} {runner} --passWithNoTests"));
+                assert!(is_generated_test_script(
+                    &legacy,
+                    &runtime,
+                    &Some(framework.clone())
+                ));
+                assert!(is_generated_test_script(
+                    &expected,
+                    &runtime,
+                    &Some(framework.clone())
+                ));
+                assert!(!is_generated_test_script(
+                    &Some(String::from("my-own-test-command")),
+                    &runtime,
+                    &Some(framework.clone())
+                ));
                 assert_eq!(
                     application_test_script(&runtime, &Some(framework.clone())),
                     expected

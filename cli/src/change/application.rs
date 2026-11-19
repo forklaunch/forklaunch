@@ -55,8 +55,8 @@ use crate::{
                 application_clean_purge_script, application_clean_script, application_docs_script,
                 application_format_script, application_lint_fix_script, application_lint_script,
                 application_migrate_script, application_seed_script, application_setup_script,
-                application_test_script, application_up_packages_script, project_clean_script,
-                project_dev_local_script, project_dev_server_script,
+                application_test_script, application_up_packages_script, is_generated_test_script,
+                project_clean_script, project_dev_local_script, project_dev_server_script,
                 project_dev_worker_client_script, project_format_script, project_lint_fix_script,
                 project_lint_script, project_retention_enforce_script, project_start_server_script,
                 project_start_worker_script, project_test_script, project_up_latest_script,
@@ -1022,13 +1022,13 @@ fn change_runtime(
     };
 
     if let Some(scripts) = application_json_to_write.scripts.as_mut() {
-        if scripts.test == application_test_script(&existing_runtime, &test_framework) {
+        if is_generated_test_script(&scripts.test, &existing_runtime, &test_framework) {
             scripts.test = application_test_script(runtime, &test_framework);
         }
     }
     for project in project_jsons_to_write.values_mut() {
         if let Some(scripts) = project.scripts.as_mut() {
-            if scripts.test == project_test_script(&existing_runtime, &test_framework) {
+            if is_generated_test_script(&scripts.test, &existing_runtime, &test_framework) {
                 scripts.test = project_test_script(runtime, &test_framework);
             }
         }
@@ -1643,7 +1643,13 @@ fn change_test_framework(
                     &mut scripts.additional_scripts,
                     scripts.test.clone(),
                     existing_test_framework.map(|test_framework| test_framework.to_string()),
-                    application_test_script(&runtime, &existing_test_framework),
+                    // A script written by an earlier CLI counts as generated,
+                    // not as the developer's own to keep under `test:<framework>`.
+                    if is_generated_test_script(&scripts.test, &runtime, &existing_test_framework) {
+                        scripts.test.clone()
+                    } else {
+                        application_test_script(&runtime, &existing_test_framework)
+                    },
                     &modified_test_script_key,
                     &test_framework.to_string(),
                     &test_script,

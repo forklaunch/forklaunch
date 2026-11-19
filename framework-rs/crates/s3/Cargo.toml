@@ -16,8 +16,8 @@ aws-sdk = ["dep:aws-sdk-s3", "dep:aws-config", "dep:tokio", "dep:base64", "dep:c
 forklaunch-core = { version = "0.2.5", path = "../core" }
 serde = { version = "1", optional = true }
 
-aws-sdk-s3 = { version = "=1.124.0", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"], optional = true }
-aws-config = { version = "=1.8.11", features = ["behavior-version-latest"], optional = true }
+aws-sdk-s3 = { version = "=1.159.0", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"], optional = true }
+aws-config = { version = "=1.13.1", features = ["behavior-version-latest"], optional = true }
 tokio = { version = "1", features = ["time"], optional = true }
 
 aws-runtime = { version = "1", optional = true }

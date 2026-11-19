@@ -62,9 +62,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts src/typebox/index.ts src/zod/index.ts __test__/utils/mockSchemaValidator.ts shims/zod-v3-openapi/zod-extensions.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly",
-    "check": "depcheck",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -80,19 +78,15 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/jest": "^30.0.0",
     "@types/node": "^26.6.6",
     "@vitest/coverage-v8": "^5.1.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.7",
     "globals": "^17.14.0",
-    "jest": "^30.5.2",
     "openapi3-ts": "^4.6.2",
-    "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
-    "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.1"
+    "typescript-eslint": "^8.73.0"
   }
 }
