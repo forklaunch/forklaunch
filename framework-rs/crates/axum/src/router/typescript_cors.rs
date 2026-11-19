@@ -231,6 +231,23 @@ fn default_cors_layer(setting: Option<&str>) -> tower_http::cors::CorsLayer {
         .allow_headers(AllowHeaders::mirror_request())
 }
 
+/// What to tell the operator when the application configured no CORS policy
+/// and `CORS_ORIGINS` names no origin: browsers on other origins cannot call
+/// the service. `None` when origins are listed.
+fn unconfigured_cors_warning(setting: Option<&str>) -> Option<String> {
+    let listed = setting
+        .unwrap_or_default()
+        .split(',')
+        .any(|origin| !origin.trim().trim_end_matches('/').is_empty());
+    (!listed).then(|| {
+        format!(
+            "CORS: no allowed origins are configured, so browsers on other origins cannot call \
+             this service. Set {CORS_ORIGINS_ENV} to a comma separated list of allowed origins \
+             (for example {CORS_ORIGINS_ENV}=https://app.example.com), or set `RouterConfig::cors`."
+        )
+    })
+}
+
 pub(super) fn wrap(
     router: Router,
     native: Option<tower_http::cors::CorsLayer>,
@@ -243,8 +260,14 @@ pub(super) fn wrap(
     if let Some(config) = typescript {
         return wrap_typescript(router, config);
     }
-    let cors = native
-        .unwrap_or_else(|| default_cors_layer(std::env::var(CORS_ORIGINS_ENV).ok().as_deref()));
+    let cors = native.unwrap_or_else(|| {
+        let setting = std::env::var(CORS_ORIGINS_ENV).ok();
+        if let Some(warning) = unconfigured_cors_warning(setting.as_deref()) {
+            // Once per router at startup, as the TypeScript framework does.
+            tracing::warn!("{warning}");
+        }
+        default_cors_layer(setting.as_deref())
+    });
     router.layer(middleware::from_fn(move |request: Request, next: Next| {
         let cors = cors.clone();
         async move {
