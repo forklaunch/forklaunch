@@ -43,10 +43,10 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1162.0",
-    "@aws-sdk/lib-storage": "^3.1162.0",
-    "@aws-sdk/s3-presigned-post": "^3.1162.0",
-    "@aws-sdk/s3-request-presigner": "^3.1162.0",
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "@aws-sdk/lib-storage": "^3.1169.0",
+    "@aws-sdk/s3-presigned-post": "^3.1169.0",
+    "@aws-sdk/s3-request-presigner": "^3.1169.0",
     "@forklaunch/common": "workspace:^",
     "@forklaunch/core": "workspace:^"
   },
@@ -55,12 +55,12 @@
     "@types/jest": "^30.0.0",
     "globals": "^17.14.0",
     "jest": "^30.5.2",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "ts-jest": "^29.4.15",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.1"
+    "typescript-eslint": "^8.72.2"
   }
 }
