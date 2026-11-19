@@ -32,7 +32,6 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsc --emitDeclarationOnly",
-    "check": "depcheck",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
     "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
@@ -50,7 +49,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
-    "depcheck": "^1.4.7",
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
     "tsup": "^9.0.0",
