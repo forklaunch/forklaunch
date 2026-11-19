@@ -25,6 +25,40 @@ describe('parseCsvRows', () => {
     ]);
   });
 
+  it('keeps quotes that a CSV export writes doubled inside a quoted field', async () => {
+    // As the CMS HCPCS release comes out of a spreadsheet's CSV export:
+    // a quoted word and an inch mark, both doubled.
+    const csv = [
+      'code,description',
+      'A4719,"""y set"" tubing for peritoneal dialysis"',
+      'E1031,"Rollabout chair, any and all types with casters 5"" or greater"'
+    ].join('\n');
+    const rows = await collect(Readable.from([csv]), {
+      code: 0,
+      description: 1
+    });
+
+    expect(rows).toEqual([
+      { code: 'A4719', description: '"y set" tubing for peritoneal dialysis' },
+      {
+        code: 'E1031',
+        description: 'Rollabout chair, any and all types with casters 5" or greater'
+      }
+    ]);
+  });
+
+  it('keeps a quote inside an unquoted field as written', async () => {
+    const csv = ['code,description', 'E1031,Casters 5" or greater'].join('\n');
+    const rows = await collect(Readable.from([csv]), {
+      code: 0,
+      description: 1
+    });
+
+    expect(rows).toEqual([
+      { code: 'E1031', description: 'Casters 5" or greater' }
+    ]);
+  });
+
   it('handles a quoted field containing the delimiter', async () => {
     const csv = [
       'code,description',

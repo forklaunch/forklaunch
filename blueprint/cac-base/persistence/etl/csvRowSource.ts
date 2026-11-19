@@ -33,20 +33,34 @@ function recordSkip(stats: ParseStats | undefined, lineNumber: number): void {
 }
 
 function splitLine(line: string, delimiter: string): string[] {
-  // Minimal CSV split — handles a quoted field containing the delimiter,
-  // which is the one real-world wrinkle in CMS/CDC's published code-set
-  // files (descriptions sometimes contain commas). Not a full RFC 4180
-  // parser — swap in a dedicated CSV library here if a real source needs
-  // more (escaped quotes, embedded newlines, etc.).
+  // CSV split per RFC 4180 for one line: a quoted field may contain the
+  // delimiter, and a quote inside it is written doubled (""). The CMS HCPCS
+  // release needs both: descriptions contain commas, quoted words ("y set")
+  // and inch marks (5"), which a spreadsheet's CSV export writes as
+  // "...""y set""..." and "...5"" or greater". A quote in an unquoted field
+  // is kept as written. Embedded newlines are not supported (no published
+  // code-set file uses them).
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;
 
   for (let i = 0; i < line.length; i++) {
     const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === delimiter && !inQuotes) {
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += char;
+      }
+    } else if (char === '"' && current.trim() === '') {
+      inQuotes = true;
+      current = '';
+    } else if (char === delimiter) {
       fields.push(current.trim());
       current = '';
     } else {
@@ -55,7 +69,7 @@ function splitLine(line: string, delimiter: string): string[] {
   }
   fields.push(current.trim());
 
-  return fields.map((field) => field.replace(/^"|"$/g, ''));
+  return fields;
 }
 
 /**
