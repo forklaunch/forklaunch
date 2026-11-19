@@ -441,3 +441,19 @@ async fn typescript_profile_never_sends_wildcard_with_credentials() {
     );
     assert_eq!(headers[header::ACCESS_CONTROL_ALLOW_CREDENTIALS], "true");
 }
+
+#[test]
+fn unconfigured_cors_is_reported_once_origins_are_missing() {
+    for setting in [None, Some(""), Some(" , "), Some("/")] {
+        let warning = unconfigured_cors_warning(setting).expect("no origin is listed");
+        assert!(warning.contains("CORS_ORIGINS=https://app.example.com"));
+        assert!(warning.contains("RouterConfig::cors"));
+    }
+    for setting in [
+        "https://app.example.com",
+        "*",
+        " https://a.example , https://b.example/",
+    ] {
+        assert_eq!(unconfigured_cors_warning(Some(setting)), None);
+    }
+}
