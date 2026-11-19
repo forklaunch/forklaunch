@@ -28,7 +28,8 @@ export const Denial = defineComplianceEntity({
     // built only from line positions, unit counts and the claim's own
     // procedure/diagnosis codes, never from a patient field.
     message: fp.text().compliance('none'),
-    // 1-based position among the encounter's charges in entry order; null
+    // 1-based position among the encounter's charges in entry order
+    // (Charge.lineNumber, falling back to createdAt); null
     // when the finding is not about one charge line (a diagnosis, a unit
     // cap summed over lines, a claim with no lines).
     chargeLine: fp.integer().nullable().compliance('none'),

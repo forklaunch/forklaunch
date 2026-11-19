@@ -339,6 +339,55 @@ describe('cac-base end-to-end (real Postgres + Redis via testcontainers)', () =>
       });
     });
 
+    it('numbers charge lines by lineNumber, even when they share a timestamp', async () => {
+      const em = forkPostgresEm(setup);
+      // Saved in one flush with the same createdAt, and with ids that sort
+      // opposite to the entry order: without lineNumber the unrecognized
+      // code (entered second) would be reported as line 1.
+      const encounterId = await seedEncounterWithCharges(em, {
+        mrn: 'E2E-LINE-NUMBER-001',
+        icd10Code: 'J06.9',
+        sameCreatedAt: true,
+        charges: [
+          {
+            procedureCode: 'PROC-999',
+            lineNumber: 1,
+            id: 'ffffffff-ffff-4fff-bfff-ffffffffffff'
+          },
+          {
+            procedureCode: 'PROC-0001',
+            lineNumber: 2,
+            id: '00000000-0000-4000-8000-000000000001'
+          }
+        ]
+      });
+
+      const built = await call(baseUrl, '/claim/build', {
+        method: 'POST',
+        body: { encounterId },
+        token: jwt
+      });
+      const claimId = (built.body as { id: string }).id;
+      const scrubbed = await call(baseUrl, `/claim/${claimId}/scrub`, {
+        method: 'POST',
+        token: jwt
+      });
+
+      expect(scrubbed.body).toEqual({
+        status: 'denied',
+        denials: [
+          {
+            carcCode: 'CO-16',
+            category: 'required_fields',
+            message:
+              'Charge line 2 references procedure code "PROC-0001", which is not recognized by the active code-set provider',
+            chargeLine: 2,
+            code: 'PROC-0001'
+          }
+        ]
+      });
+    });
+
     it('a recognized procedure code with no crosswalk entry is not flagged as unrecognized', async () => {
       const em = forkPostgresEm(setup);
       // PROC-999 is a real entry in MOCK_PROCEDURE_CODES with no

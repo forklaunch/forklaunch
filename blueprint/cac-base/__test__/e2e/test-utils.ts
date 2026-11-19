@@ -445,8 +445,16 @@ export async function seedEncounterWithCharges(
   opts: {
     mrn: string;
     icd10Code: string | string[];
-    charges: Array<{ procedureCode: string; units?: number }>;
+    charges: Array<{
+      procedureCode: string;
+      units?: number;
+      lineNumber?: number;
+      id?: string;
+    }>;
     organizationId?: string;
+    // every row saved with the same timestamp, as an integration's single
+    // flush can produce
+    sameCreatedAt?: boolean;
   }
 ): Promise<string> {
   const { Patient } = await import('../../persistence/entities/patient.entity');
@@ -500,12 +508,16 @@ export async function seedEncounterWithCharges(
 
   opts.charges.forEach((charge, index) => {
     em.create(Charge, {
+      ...(charge.id ? { id: charge.id } : {}),
       organizationId,
       encounter,
       procedureCode: charge.procedureCode,
       units: charge.units ?? 1,
       amount: 125.0,
-      createdAt: new Date(enteredAt + index)
+      ...(charge.lineNumber !== undefined
+        ? { lineNumber: charge.lineNumber }
+        : {}),
+      createdAt: new Date(opts.sameCreatedAt ? enteredAt : enteredAt + index)
     });
   });
 

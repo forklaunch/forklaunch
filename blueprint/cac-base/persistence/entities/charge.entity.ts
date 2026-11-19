@@ -20,6 +20,11 @@ export const Charge = defineComplianceEntity({
     // fractions of a cent. 'number' keeps the runtime type a JS number
     // (nothing aggregates this column yet); the exactness that matters is
     // in the column.
-    amount: fp.decimal('number').precision(12).scale(2).compliance('none')
+    amount: fp.decimal('number').precision(12).scale(2).compliance('none'),
+    // The line's position as the coder entered it (1, 2, 3...). Findings
+    // number lines in this order, so "line 2" is the second line entered.
+    // Optional: rows without one fall back to createdAt, then id, which is
+    // stable but cannot tell apart rows saved in the same millisecond.
+    lineNumber: fp.integer().nullable().compliance('none')
   }
 });

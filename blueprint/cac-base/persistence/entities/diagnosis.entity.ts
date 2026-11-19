@@ -22,6 +22,11 @@ export const Diagnosis = defineComplianceEntity({
     // WHERE/hydration touching this column found nothing). Pin it explicitly
     // so property and column agree with the migration and with every other
     // snake_case column in this schema.
-    icd10Code: fp.string().fieldName('icd10_code').compliance('none')
+    icd10Code: fp.string().fieldName('icd10_code').compliance('none'),
+    // The diagnosis's position as the coder entered it (1, 2, 3...). Findings
+    // number diagnoses in this order, so "Diagnosis 2" is the second one entered.
+    // Optional: rows without one fall back to createdAt, then id, which is
+    // stable but cannot tell apart rows saved in the same millisecond.
+    lineNumber: fp.integer().nullable().compliance('none')
   }
 });

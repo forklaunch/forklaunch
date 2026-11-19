@@ -28,11 +28,11 @@ export class Migration00000000000000 extends Migration {
     );
 
     this.addSql(
-      `create table "diagnosis" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "encounter_id" uuid not null, "icd10_code" text not null, constraint "diagnosis_pkey" primary key ("id"));`
+      `create table "diagnosis" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "encounter_id" uuid not null, "icd10_code" text not null, "line_number" int null, constraint "diagnosis_pkey" primary key ("id"));`
     );
 
     this.addSql(
-      `create table "charge" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "encounter_id" uuid not null, "procedure_code" text not null, "units" int not null, "amount" numeric(12,2) not null, constraint "charge_pkey" primary key ("id"));`
+      `create table "charge" ("id" uuid not null, "created_at" timestamptz not null, "updated_at" timestamptz not null, "retention_anonymized_at" timestamptz null, "organization_id" uuid not null, "encounter_id" uuid not null, "procedure_code" text not null, "units" int not null, "amount" numeric(12,2) not null, "line_number" int null, constraint "charge_pkey" primary key ("id"));`
     );
 
     this.addSql(

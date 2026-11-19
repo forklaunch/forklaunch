@@ -257,12 +257,18 @@ export class ClaimService {
   }
 }
 
-// Oldest first, id as the tie-break for rows created in the same instant.
-function inEntryOrder<T extends { id: string; createdAt: Date }>(
-  rows: ReadonlyArray<T>
-): T[] {
+// The order the coder entered the lines in: by lineNumber when set (rows
+// without one after those with), then oldest first, then id. createdAt alone
+// cannot order rows an integration saved in the same millisecond, and the id
+// tie-break is stable but random, so "line 1" would not always be the first
+// line entered.
+function inEntryOrder<
+  T extends { id: string; createdAt: Date; lineNumber?: number | null }
+>(rows: ReadonlyArray<T>): T[] {
+  const position = (row: T) => row.lineNumber ?? Number.MAX_SAFE_INTEGER;
   return [...rows].sort(
     (a, b) =>
+      position(a) - position(b) ||
       a.createdAt.getTime() - b.createdAt.getTime() ||
       a.id.localeCompare(b.id)
   );
