@@ -1,5 +1,11 @@
 # @forklaunch/testing
 
+## 1.3.1
+
+### Patch Changes
+
+- 60c3abe: Republishes `@forklaunch/internal` and `@forklaunch/testing` on `@mikro-orm/core` 7.2.10. Their published versions (1.2.35 and 1.3.0) still pinned 7.2.5 while `@forklaunch/core` 4.0.0 pins 7.2.10, so an application got two copies of MikroORM and its entity types stopped matching (`EntitySchemaWithMeta ... is not assignable to EntityName`).
+
 ## 1.3.0
 
 ### Minor Changes
