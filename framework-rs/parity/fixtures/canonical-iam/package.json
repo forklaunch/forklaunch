@@ -5,7 +5,7 @@
   "type": "module",
   "dependencies": {
     "@asyncapi/parser": "3.6.4",
-    "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.5",
+    "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.6",
     "@mikro-orm/core": "7.2.3",
     "@mikro-orm/mongodb": "7.2.3",
     "@modelcontextprotocol/sdk": "1.32.1",

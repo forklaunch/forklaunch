@@ -103,7 +103,7 @@
   "dependencies": {
     "@asyncapi/parser": "^3.6.6",
     "@forklaunch/common": "workspace:^",
-    "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.5",
+    "@forklaunch/opentelemetry-instrumentation-hyper-express": "0.0.6",
     "@forklaunch/validator": "workspace:^",
     "@mikro-orm/core": "7.2.7",
     "@mikro-orm/mongodb": "7.2.7",
