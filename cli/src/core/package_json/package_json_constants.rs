@@ -350,9 +350,9 @@ pub(crate) const TYPEBOX_VERSION: &str = "^0.34.52";
 // ajv
 pub(crate) const AJV_VERSION: &str = "^8.20.0";
 // better-auth
-pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.11";
+pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.12";
 // bullmq
-pub(crate) const BULLMQ_VERSION: &str = "^6.3.17";
+pub(crate) const BULLMQ_VERSION: &str = "^6.3.19";
 // better-sqlite3
 pub(crate) const BETTER_SQLITE3_VERSION: &str = "^13.0.3";
 // dotenv
