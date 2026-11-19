@@ -330,16 +330,21 @@ export type ExpressLikeApplicationOptions<
         discreteVersions?: boolean;
       };
   /**
-   * CORS configuration options, used exactly as given.
+   * How this application answers cross-origin browser requests.
    *
-   * Leave this out to get the secure default: only the origins listed in the
-   * `CORS_ORIGINS` environment variable (comma separated) are allowed; when
-   * that is unset, no cross-origin request is allowed in production and only
-   * localhost origins are allowed elsewhere.
+   * - `'environment'`: only the origins listed in the `CORS_ORIGINS`
+   *   environment variable (comma separated) are allowed; when that is unset,
+   *   no cross-origin request is allowed in production and only localhost
+   *   origins are allowed elsewhere.
+   * - CORS options: used exactly as given.
+   *
+   * Leaving it out behaves like `'environment'`, but the application
+   * factories mark that call deprecated so a linter points at it: say which
+   * one the application wants.
    *
    * WARNING: an object without `origin`, including an empty `cors: {}`,
    * allows EVERY origin (`Access-Control-Allow-Origin: *`). Name the origins:
    * `cors: { origin: ['https://app.example.com'] }`.
    */
-  cors?: CorsOptions;
+  cors?: CorsOptions | 'environment';
 };
