@@ -1,5 +1,15 @@
 # @forklaunch/infrastructure-s3
 
+## 1.5.5
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+
 ## 1.5.4
 
 ### Patch Changes
