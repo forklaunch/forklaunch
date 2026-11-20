@@ -65,7 +65,7 @@
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "typescript-eslint": "^8.73.0",
-    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
+    "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.71.0"
   },
   "peerDependencies": {
     "uWebSockets.js": "*"
