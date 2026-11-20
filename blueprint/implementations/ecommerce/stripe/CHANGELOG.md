@@ -1,5 +1,19 @@
 # @forklaunch/implementation-ecommerce-stripe
 
+## 2.0.0
+
+### Major Changes
+
+- 4ec1f4b: Built on `@forklaunch/core` 4 and `@mikro-orm/core` 7.2.10. The previous versions depend on core 3 and pin MikroORM 7.2.5, so an application on core 4 that used them installed two copies of each and its entity types stopped matching.
+
+  Breaking, because core 4 changes defaults these packages run with: cross-origin browser access is denied unless the application names its origins (`CORS_ORIGINS` or a `cors` option), an HMAC-signed request is accepted once and only within 5 minutes of the server clock (multi-instance services need a shared nonce store), and JWT verification pins the signature algorithm. See the `@forklaunch/core` 4.0.0 changelog for what to change. 0.x packages take a minor bump, the 0.x equivalent of a major.
+
+### Patch Changes
+
+- Updated dependencies [4ec1f4b]
+  - @forklaunch/implementation-ecommerce-base@2.0.0
+  - @forklaunch/interfaces-ecommerce@2.0.0
+
 ## 1.1.0
 
 ### Minor Changes
