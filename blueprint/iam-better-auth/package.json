@@ -68,7 +68,7 @@
     "@types/uuid": "^11.0.0",
     "depcheck": "^1.4.7",
     "prettier": "^3.10.1",
-    "testcontainers": "^12.2.1",
+    "testcontainers": "^12.2.2",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
     "vitest": "^5.1.1"

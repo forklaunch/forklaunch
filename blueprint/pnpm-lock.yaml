@@ -15,11 +15,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/universal-sdk':
         specifier: ^1.4.1
         version: 1.4.1
@@ -106,11 +106,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../implementations/billing/base
@@ -197,8 +197,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -230,11 +230,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-stripe':
         specifier: workspace:^
         version: link:../implementations/billing/stripe
@@ -324,8 +324,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -354,11 +354,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-cac-base':
         specifier: workspace:^
         version: link:../implementations/cac/base
@@ -439,8 +439,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -500,11 +500,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator':
         specifier: ^1.3.0
         version: 1.3.0
@@ -558,11 +558,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../implementations/ecommerce/base
@@ -664,8 +664,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -773,8 +773,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -879,8 +879,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -1617,11 +1617,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../implementations/messaging/base
@@ -1708,8 +1708,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -1738,11 +1738,11 @@ importers:
         specifier: ^4.1.0
         version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
       '@forklaunch/express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
-        specifier: ^2.1.0
-        version: 2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        specifier: ^2.2.0
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-twilio':
         specifier: workspace:^
         version: link:../implementations/messaging/twilio
@@ -1829,8 +1829,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
@@ -1981,8 +1981,8 @@ importers:
         specifier: ^3.10.1
         version: 3.10.1
       testcontainers:
-        specifier: ^12.2.1
-        version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+        specifier: ^12.2.2
+        version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
@@ -2027,8 +2027,8 @@ packages:
     resolution: {integrity: sha512-OHlfkNzDFjYnwNPABhwAkDTUi0HPjfsKUHJDR0bSMORpCXNzRpInPCNCIT08xKDhjaPlcLJ+2Av+Sk7hHnuC8A==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-s3@3.1172.0':
-    resolution: {integrity: sha512-ByCRHFlL9yui61J5e4w9nrDZcRUbAzd+78z9Q1DQWoAT2HE1XwjtDGEx86GdNTu1+oSyerNhl8eijF6jMUvEpg==}
+  '@aws-sdk/client-s3@3.1173.0':
+    resolution: {integrity: sha512-eFlCOczCvpv1CN37d0BzUxoHmw2ARrMtqQ4JC0pkh5kx/SU9oUKlNtWkqrNg+QRNob0MAi3+SbQQnP5FCcKpHg==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.981.0':
@@ -2067,11 +2067,11 @@ packages:
     resolution: {integrity: sha512-duLeE3xlf0viHeH+1RM4z5duR3b32BCZTWVMu+MbxFPjQBxy7hmIGEqt5hekuFPRuXoyhMovjNl+PNNsb5oiGQ==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/lib-storage@3.1172.0':
-    resolution: {integrity: sha512-LwMKAKEwzXZvk31QudwHIYMWq6YZ5N5+K/E0KkiraHnInLRrmGviQTNUykjXzYElv1JS0s4ZbR6THze39JRc5w==}
+  '@aws-sdk/lib-storage@3.1173.0':
+    resolution: {integrity: sha512-pVi5n39lAvRHSuysciVQRyjSStjlL48Q+ZeWp/uUvctyV7ogOCkEPLTpxTusiET9ZejsSDsYXR/7gkZ/i2qUEA==}
     engines: {node: '>=20.0.0'}
     peerDependencies:
-      '@aws-sdk/client-s3': ^3.1172.0
+      '@aws-sdk/client-s3': ^3.1173.0
 
   '@aws-sdk/middleware-sdk-s3@3.972.90':
     resolution: {integrity: sha512-UtdPoeKTfUyk4WI6iGirvuN+2MkVMNiWyYwHlwbdOBIonD66+Jm8qR4zdlJJDLqTIDmtvULTH0ZUyEyf/BGTsA==}
@@ -2081,12 +2081,12 @@ packages:
     resolution: {integrity: sha512-acHTTzMB13CU6dU4sxABYExMI3PQM2zStWH2MiUwJp/7QKTrLg2f7mbzSXoegW2kYOk2tdqQYagsZrWB8Xv7eA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/s3-presigned-post@3.1172.0':
-    resolution: {integrity: sha512-ZOVSdDsozVflDPR4RqJVqClHKuLoxDYlGfak1qGGgkBvF7x+1CxkD4MiBUi/5FAXDKEBnLqWiSKiWSnn0Iwr3w==}
+  '@aws-sdk/s3-presigned-post@3.1173.0':
+    resolution: {integrity: sha512-RUSI+Gvj0f8ekPEj/NMeyz8/rhQx7Lwy6fN1I5hhBZjbWk9ScjkbrTTZfP45UrBI29jgTuRVdJfrr8MOyzes8w==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/s3-request-presigner@3.1172.0':
-    resolution: {integrity: sha512-jtK1RkwtTnpw6GZ6mL8n3SqR9EUzfJJQh/jamtnbWFe3/UFxpzA1nTFvPoUoGhdhbAPxeE5IuuPmphXtm4Vs3Q==}
+  '@aws-sdk/s3-request-presigner@3.1173.0':
+    resolution: {integrity: sha512-M1VcisErcZY3LYRSE1QE402L5Xv+XjhAA4IMK1TTkyDdE8XLYWg9DmEwRJo2FLSC2qDMEmrNimZgsHhoyLb36Q==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/signature-v4-multi-region@3.996.52':
@@ -2834,8 +2834,8 @@ packages:
       stripe:
         optional: true
 
-  '@forklaunch/express@2.1.0':
-    resolution: {integrity: sha512-ZFWa4TkPdZHq2pYOpP6yBKurG830112Dg80ha+VC8bQbtwGLP1GvbDxWeCV4yOi+mR+4samHwKicR7BNAVuaFg==}
+  '@forklaunch/express@2.2.0':
+    resolution: {integrity: sha512-RhGZ9clo61FDexzKDn4iiL5N4TZjxkjS/5eSnTWx13tmUuNrN1taujudMli2qrwJZSZwmuvM6fEj7aM5/1XjyQ==}
 
   '@forklaunch/hyper-express-fork@6.18.1':
     resolution: {integrity: sha512-U8mP9vibNXj4FwmMXcEIqK+oJHXf5Pbn2EFaPBpjtjNiMDNcE+10cObaaGMbSJigjNVM5l38UP3xzF3/e+DWoA==}
@@ -2843,9 +2843,9 @@ packages:
     peerDependencies:
       uWebSockets.js: '*'
 
-  '@forklaunch/hyper-express@2.1.0':
-    resolution: {integrity: sha512-aBdMNmjplJhGJMlX6fMyRlYuzr9EART5wVp6dG7A+H7MMREmOpYZ+ODywpdrZQi/6YF6YTDyz1QFCN+DjZMINQ==}
-    version: 2.1.0
+  '@forklaunch/hyper-express@2.2.0':
+    resolution: {integrity: sha512-Wt7ln2A9tV02kxu6lVTmf6djEI390/WaU/TmnDNPV+TDLyuD+WEghmHPCNUY1U7ICLAh4q78SFbe6UiNFCTxEQ==}
+    version: 2.2.0
     peerDependencies:
       uWebSockets.js: '*'
 
@@ -4349,12 +4349,6 @@ packages:
   '@types/shimmer@1.2.0':
     resolution: {integrity: sha512-UE7oxhQLLd9gub6JKIAhDq06T0F6FnztwMNRvYgjeQSBeMc1ZG/tA47EwfduvkuQS8apbkM/lpLpWsaCeYsXVg==}
 
-  '@types/ssh2-streams@0.1.13':
-    resolution: {integrity: sha512-faHyY3brO9oLEA0QlcO8N2wT7R0+1sHWZvQ+y3rMLwdY1ZyS1z0W3t65j9PqT4HmQ6ALzNe7RZlNuCNE0wBSWA==}
-
-  '@types/ssh2@0.5.52':
-    resolution: {integrity: sha512-lbLLlXxdCZOSJMCInKH2+9V/77ET2J6NPQHpFI0kda61Dd1KglJs+fPQBchizmzYSOJBgdTajhPqBO1xxLywvg==}
-
   '@types/ssh2@1.15.6':
     resolution: {integrity: sha512-oGdxhBqcRTwSTKFm+9EiKzkNVYRLEFkcW44lhguvBalGJbWfGnDt/ezwSUZc+SF9m9bMc3VyklNAtp7zICjS5w==}
 
@@ -4953,8 +4947,8 @@ packages:
       bare-abort-controller:
         optional: true
 
-  bare-fs@4.8.4:
-    resolution: {integrity: sha512-MPC2eyrpbk3A873sK4y6rk+Iv4o2enxTjHZ8zH3HO0mjrpm5XjnguY2XmfidIsDV6vnjpbMBKUAJpV0ISD2SsQ==}
+  bare-fs@4.8.5:
+    resolution: {integrity: sha512-5gborbd4IEFpnyqAiwD0tl6sH9fvPvIaK2hdM8DXU+xAMxSB7B3D3D04CD21k4T5C6u5Oxw3iajkBQhNLxINKg==}
     engines: {bare: '>=1.28.0'}
     peerDependencies:
       bare-buffer: '*'
@@ -6947,8 +6941,8 @@ packages:
     resolution: {integrity: sha512-1ZOI8J+1PKKGceo/5CT5GfQOG6H8I2BencSK06YarZ2wXwH37BSSUWldqJmMJYA5JfqDqffxDXynt6f11AyKcA==}
     engines: {node: ^12.20 || >=14.13}
 
-  node-abi@3.101.0:
-    resolution: {integrity: sha512-bkb/RkuWCE64eWu1PCh3Fu2pGc9mKRs+kOE+FU2bGHRYlQa86/D321DSATV54AsCQMKz3/xSt9sRgraZTpqdhQ==}
+  node-abi@3.102.0:
+    resolution: {integrity: sha512-vhgjY69m3FleyDCtGsV8N0/gNFHUj/tNbyra9E1qewWJiMubN97GpEF2mbdHzTUqUbM3gyYXxzGI1qIZ4m7oRw==}
     engines: {node: '>=10'}
 
   node-abort-controller@3.1.1:
@@ -7679,9 +7673,9 @@ packages:
     resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
-  source-map-js@1.2.3:
-    resolution: {integrity: sha512-xj+WrAkyv5Qp+t7r9N5HvCBu7g1qOe6CKRNpq22X1GGcPEQADFU54v5qsPVs3/vrUFQ7XivFrcAVKA2stI0kWA==}
-    engines: {node: '>=0.10.0'}
+  source-map-js@1.2.4:
+    resolution: {integrity: sha512-J7ZjMvHd9O1fcT/5V09QWaaSl2BbWx3F6O08spde82Namf9UB0GxRVIPiNbVsdKkoizHiSpTodo3vp2bAy91MA==}
+    engines: {node: '>=6.0.0'}
 
   source-map@0.6.1:
     resolution: {integrity: sha512-UjgapumWlbMhkBgzT7Ykc5YXUT46F0iKu8SGXq0bcwP5dz/h0Plj6enJqjz1Zbq2l5WaqYnrVbwWOWMyF3F47g==}
@@ -7711,9 +7705,6 @@ packages:
   sqlstring@2.3.3:
     resolution: {integrity: sha512-qC9iz2FlN7DQl3+wjwn3802RTyjCx7sDvfQEXchwa6CWOx07/WVfh91gBmQ9fahw8snwGEWU3xGzOt4tFyHLxg==}
     engines: {node: '>= 0.6'}
-
-  ssh-remote-port-forward@1.0.4:
-    resolution: {integrity: sha512-x0LV1eVDwjf1gmG7TTnfqIzf+3VPRz7vrNIjX6oYLbeCrf/PeVY6hkT68Mg+q02qXxQhrLjB0jfgvhevoCRmLQ==}
 
   ssh2@1.17.0:
     resolution: {integrity: sha512-wPldCk3asibAjQ/kziWQQt1Wh3PgDFpC0XpwclzKcdT1vql6KeYxf5LIt4nlFkUeR8WuphYMKqUA56X4rjbfgQ==}
@@ -7903,8 +7894,8 @@ packages:
     resolution: {integrity: sha512-u9E6A+ZDYdp7a4WnarkXPZOx8Ilz46+kby6p1yZ8zsGTz9gYa6FIS7lj2oezzNKmtdyyJNNmmXDppga5GB7kSw==}
     engines: {node: '>=18'}
 
-  testcontainers@12.2.1:
-    resolution: {integrity: sha512-JfbCyOvLdzatwgqUI3AvYCwRW0P5mCkKQVBPO8U5qSH1efC2kHvnfWmi9VHloy1rAFG2MEqWZObRH4bq0gU1kQ==}
+  testcontainers@12.2.2:
+    resolution: {integrity: sha512-ndmRB+wQnCd7YkelXoUtLVUFUQ3CrbIPmldSWzY8p1pXy09lBC/Hm99RYRCL2brHve/xNWCJX35173peMj5LUg==}
     engines: {node: '>= 22.22'}
 
   text-decoder@1.2.7:
@@ -8540,7 +8531,7 @@ snapshots:
       '@smithy/types': 4.20.0
       tslib: 2.9.1
 
-  '@aws-sdk/client-s3@3.1172.0':
+  '@aws-sdk/client-s3@3.1173.0':
     dependencies:
       '@aws-sdk/checksums': 3.1002.5
       '@aws-sdk/core': 3.981.0
@@ -8649,9 +8640,9 @@ snapshots:
       '@smithy/types': 4.20.0
       tslib: 2.9.1
 
-  '@aws-sdk/lib-storage@3.1172.0(@aws-sdk/client-s3@3.1172.0)':
+  '@aws-sdk/lib-storage@3.1173.0(@aws-sdk/client-s3@3.1173.0)':
     dependencies:
-      '@aws-sdk/client-s3': 3.1172.0
+      '@aws-sdk/client-s3': 3.1173.0
       '@smithy/core': 3.41.0
       '@smithy/types': 4.20.0
       buffer: 5.6.0
@@ -8679,9 +8670,9 @@ snapshots:
       '@smithy/types': 4.20.0
       tslib: 2.9.1
 
-  '@aws-sdk/s3-presigned-post@3.1172.0':
+  '@aws-sdk/s3-presigned-post@3.1173.0':
     dependencies:
-      '@aws-sdk/client-s3': 3.1172.0
+      '@aws-sdk/client-s3': 3.1173.0
       '@aws-sdk/core': 3.981.0
       '@aws-sdk/types': 3.975.1
       '@smithy/core': 3.41.0
@@ -8689,7 +8680,7 @@ snapshots:
       '@smithy/types': 4.20.0
       tslib: 2.9.1
 
-  '@aws-sdk/s3-request-presigner@3.1172.0':
+  '@aws-sdk/s3-request-presigner@3.1173.0':
     dependencies:
       '@aws-sdk/core': 3.981.0
       '@aws-sdk/signature-v4-multi-region': 3.996.52
@@ -9553,7 +9544,7 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/express@2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
@@ -9594,7 +9585,7 @@ snapshots:
       - sury
       - zod
 
-  '@forklaunch/express@2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
@@ -9648,7 +9639,7 @@ snapshots:
       typed-emitter: 2.1.0
       uWebSockets.js: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
 
-  '@forklaunch/hyper-express@2.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
+  '@forklaunch/hyper-express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
     dependencies:
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
@@ -9718,10 +9709,10 @@ snapshots:
 
   '@forklaunch/infrastructure-s3@1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)':
     dependencies:
-      '@aws-sdk/client-s3': 3.1172.0
-      '@aws-sdk/lib-storage': 3.1172.0(@aws-sdk/client-s3@3.1172.0)
-      '@aws-sdk/s3-presigned-post': 3.1172.0
-      '@aws-sdk/s3-request-presigner': 3.1172.0
+      '@aws-sdk/client-s3': 3.1173.0
+      '@aws-sdk/lib-storage': 3.1173.0(@aws-sdk/client-s3@3.1173.0)
+      '@aws-sdk/s3-presigned-post': 3.1173.0
+      '@aws-sdk/s3-request-presigner': 3.1173.0
       '@forklaunch/common': 1.2.32
       '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -9765,7 +9756,7 @@ snapshots:
       '@mikro-orm/core': 7.2.10
       ioredis: 6.0.0(supports-color@8.1.1)
       jose: 6.2.18
-      testcontainers: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
+      testcontainers: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     transitivePeerDependencies:
       - bare-abort-controller
@@ -10269,7 +10260,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      jose: 6.2.17
+      jose: 6.2.18
       pkce-challenge: 5.0.1
       zod: 4.6.7
 
@@ -10290,7 +10281,7 @@ snapshots:
       express: 5.3.0(supports-color@8.1.1)
       express-rate-limit: 8.7.5(express@5.3.0(supports-color@8.1.1))(supports-color@8.1.1)
       hono: 4.13.19
-      jose: 6.2.17
+      jose: 6.2.18
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -11331,15 +11322,6 @@ snapshots:
 
   '@types/shimmer@1.2.0': {}
 
-  '@types/ssh2-streams@0.1.13':
-    dependencies:
-      '@types/node': 26.6.6
-
-  '@types/ssh2@0.5.52':
-    dependencies:
-      '@types/node': 26.6.6
-      '@types/ssh2-streams': 0.1.13
-
   '@types/ssh2@1.15.6':
     dependencies:
       '@types/node': 18.19.130
@@ -11615,7 +11597,7 @@ snapshots:
       '@vue/shared': 3.5.45
       entities: 7.0.1
       estree-walker: 2.0.2
-      source-map-js: 1.2.3
+      source-map-js: 1.2.4
 
   '@vue/compiler-dom@3.5.45':
     dependencies:
@@ -11632,7 +11614,7 @@ snapshots:
       estree-walker: 2.0.2
       magic-string: 0.30.21
       postcss: 8.5.33
-      source-map-js: 1.2.3
+      source-map-js: 1.2.4
 
   '@vue/compiler-ssr@3.5.45':
     dependencies:
@@ -11865,7 +11847,7 @@ snapshots:
 
   bare-events@2.9.2: {}
 
-  bare-fs@4.8.4(bare-buffer@3.7.3):
+  bare-fs@4.8.5(bare-buffer@3.7.3):
     dependencies:
       bare-events: 2.9.2
       bare-path: 3.1.3
@@ -14127,7 +14109,7 @@ snapshots:
       jsonpath-plus: 10.4.0
       lodash.topath: 4.5.2
 
-  node-abi@3.101.0:
+  node-abi@3.102.0:
     dependencies:
       semver: 7.8.6
 
@@ -14512,7 +14494,7 @@ snapshots:
       minimist: 1.2.8
       mkdirp-classic: 0.5.3
       napi-build-utils: 2.0.0
-      node-abi: 3.101.0
+      node-abi: 3.102.0
       pump: 3.0.4
       rc: 1.2.8
       simple-get: 4.0.1
@@ -14975,7 +14957,7 @@ snapshots:
 
   source-map-js@1.2.2: {}
 
-  source-map-js@1.2.3: {}
+  source-map-js@1.2.4: {}
 
   source-map@0.6.1: {}
 
@@ -15001,11 +14983,6 @@ snapshots:
       node-gyp: 12.4.0
 
   sqlstring@2.3.3: {}
-
-  ssh-remote-port-forward@1.0.4:
-    dependencies:
-      '@types/ssh2': 0.5.52
-      ssh2: 1.17.0
 
   ssh2@1.17.0:
     dependencies:
@@ -15185,7 +15162,7 @@ snapshots:
       pump: 3.0.4
       tar-stream: 3.2.2(bare-buffer@3.7.3)
     optionalDependencies:
-      bare-fs: 4.8.4(bare-buffer@3.7.3)
+      bare-fs: 4.8.5(bare-buffer@3.7.3)
       bare-path: 3.1.3
     transitivePeerDependencies:
       - bare-abort-controller
@@ -15203,7 +15180,7 @@ snapshots:
   tar-stream@3.2.2(bare-buffer@3.7.3):
     dependencies:
       b4a: 1.9.0
-      bare-fs: 4.8.4(bare-buffer@3.7.3)
+      bare-fs: 4.8.5(bare-buffer@3.7.3)
       fast-fifo: 1.3.2
       streamx: 2.28.1
     transitivePeerDependencies:
@@ -15248,7 +15225,7 @@ snapshots:
       glob: 10.5.0
       minimatch: 10.2.6
 
-  testcontainers@12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1):
+  testcontainers@12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1):
     dependencies:
       '@balena/dockerignore': 1.0.2
       '@types/dockerode': 4.0.2
@@ -15261,7 +15238,7 @@ snapshots:
       get-port: 5.1.1
       proper-lockfile: 4.1.2
       properties-reader: 3.0.1(supports-color@8.1.1)
-      ssh-remote-port-forward: 1.0.4
+      ssh2: 1.17.0
       tar-fs: 3.1.3(bare-buffer@3.7.3)
       tmp: 0.2.7
       undici: 8.12.4
@@ -15390,7 +15367,7 @@ snapshots:
       postcss-load-config: 6.0.1(postcss@8.5.33)(tsx@4.23.15)(yaml@2.9.1)
       resolve-from: 5.0.0
       rollup: 4.68.7
-      source-map-js: 1.2.3
+      source-map-js: 1.2.4
       sucrase: 3.35.1
       tinyexec: 1.3.1
       tinyglobby: 0.2.17

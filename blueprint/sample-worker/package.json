@@ -82,7 +82,7 @@
     "eslint": "^10.15.0",
     "ioredis": "^6.0.0",
     "prettier": "^3.10.1",
-    "testcontainers": "^12.2.1",
+    "testcontainers": "^12.2.2",
     "tsx": "^4.23.15",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
