@@ -43,7 +43,7 @@
   "dependencies": {
     "ioredis": "^6.0.0",
     "jose": "6.2.18",
-    "testcontainers": "^12.2.1"
+    "testcontainers": "^12.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
