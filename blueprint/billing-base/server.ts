@@ -22,6 +22,7 @@ setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     surfacePermissions: async (_payload, _req) => {
