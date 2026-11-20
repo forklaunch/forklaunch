@@ -53,56 +53,61 @@ import {
 } from './src/types/expressOptions.types';
 
 /**
- * Creates a new instance of Application with the given schema validator.
- *
- * @template SV - A type that extends AnySchemaValidator.
- * @param {SV} schemaValidator - The schema validator.
- * @param options - Application options. `cors` says how cross-origin browser
- *   requests are answered: `'environment'` to allow the origins listed in
- *   `CORS_ORIGINS`, or CORS options naming them.
- * @returns {Application<SV>} - The new application instance.
+ * The application factory. Its deprecation sits on a call signature, not on
+ * the exported name, so a linter's no-deprecated rule reports only calls that
+ * leave out `cors`, never imports, re-exports or `typeof forklaunchExpress`.
  */
-export function forklaunchExpress<
-  SV extends AnySchemaValidator,
-  SessionSchema extends SessionObject<SV>
->(
-  schemaValidator: SV,
-  openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
-  options: ExpressApplicationOptions<SV, SessionSchema> & {
-    cors: NonNullable<ExpressApplicationOptions<SV, SessionSchema>['cors']>;
-  }
-): Application<SV, SessionSchema>;
+export interface ForklaunchExpressFactory {
+  /**
+   * Creates a new instance of Application with the given schema validator.
+   *
+   * @template SV - A type that extends AnySchemaValidator.
+   * @param {SV} schemaValidator - The schema validator.
+   * @param options - Application options. `cors` says how cross-origin browser
+   *   requests are answered: `'environment'` to allow the origins listed in
+   *   `CORS_ORIGINS`, or CORS options naming them.
+   * @returns {Application<SV>} - The new application instance.
+   */
+  <SV extends AnySchemaValidator, SessionSchema extends SessionObject<SV>>(
+    schemaValidator: SV,
+    openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
+    options: ExpressApplicationOptions<SV, SessionSchema> & {
+      cors: NonNullable<ExpressApplicationOptions<SV, SessionSchema>['cors']>;
+    }
+  ): Application<SV, SessionSchema>;
+  /**
+   * @deprecated Say how this application answers cross-origin browser requests.
+   * Since `@forklaunch/core` 4 an application without a `cors` option no longer
+   * allows every origin: it allows only the origins in the `CORS_ORIGINS`
+   * environment variable, and none in production when that is unset, so a
+   * browser frontend on another origin stops working. Pass
+   * `cors: 'environment'` to keep reading `CORS_ORIGINS`, or
+   * `cors: { origin: ['https://app.example.com'] }` to name the origins here.
+   */
+  <SV extends AnySchemaValidator, SessionSchema extends SessionObject<SV>>(
+    schemaValidator: SV,
+    openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
+    options?: ExpressApplicationOptions<SV, SessionSchema>
+  ): Application<SV, SessionSchema>;
+}
+
 /**
- * @deprecated Say how this application answers cross-origin browser requests.
- * Since `@forklaunch/core` 4 an application without a `cors` option no longer
- * allows every origin: it allows only the origins in the `CORS_ORIGINS`
- * environment variable, and none in production when that is unset, so a
- * browser frontend on another origin stops working. Pass
- * `cors: 'environment'` to keep reading `CORS_ORIGINS`, or
- * `cors: { origin: ['https://app.example.com'] }` to name the origins here.
+ * Creates a new instance of Application with the given schema validator.
+ * Pass `cors` to say how cross-origin browser requests are answered.
  */
-export function forklaunchExpress<
+export const forklaunchExpress: ForklaunchExpressFactory = <
   SV extends AnySchemaValidator,
   SessionSchema extends SessionObject<SV>
 >(
   schemaValidator: SV,
   openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
   options?: ExpressApplicationOptions<SV, SessionSchema>
-): Application<SV, SessionSchema>;
-export function forklaunchExpress<
-  SV extends AnySchemaValidator,
-  SessionSchema extends SessionObject<SV>
->(
-  schemaValidator: SV,
-  openTelemetryCollector: OpenTelemetryCollector<MetricsDefinition>,
-  options?: ExpressApplicationOptions<SV, SessionSchema>
-) {
-  return new Application<SV, SessionSchema>(
+) =>
+  new Application<SV, SessionSchema>(
     schemaValidator,
     openTelemetryCollector,
     options
   );
-}
 
 /**
  * Creates a new instance of Router with the given base path and schema validator.
