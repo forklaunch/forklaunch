@@ -365,7 +365,7 @@ pub(crate) const CAC_INTERFACES_VERSION: &str = "~0.2.8";
 // @forklaunch/interfaces-worker
 pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.37";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~1.2.36";
+pub(crate) const INTERNAL_VERSION: &str = "~1.2.37";
 // @forklaunch/testing
 pub(crate) const TESTING_VERSION: &str = "~1.3.0";
 // @forklaunch/universal-sdk
