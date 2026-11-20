@@ -33,11 +33,11 @@ setupTenantFilter(orm, { logger: openTelemetryCollector });
 setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
-const app = forklaunchExpress(
-  schemaValidator,
-  openTelemetryCollector,
-  await ci.resolve(tokens.ExpressApplicationOptions)
-);
+const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  // Origins come from CORS_ORIGINS unless the resolved options name them.
+  cors: 'environment',
+  ...(await ci.resolve(tokens.ExpressApplicationOptions))
+});
 
 //! Use the resolved URL: Better Auth lets a base URL path override basePath.
 const resolvedAuth = ci.resolve(tokens.BetterAuth) as BetterAuth;
