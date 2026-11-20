@@ -157,11 +157,11 @@ importers:
         specifier: ^18.0.10
         version: 18.0.10
       fastmcp:
-        specifier: ^4.28.3
-        version: 4.28.3(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(supports-color@8.1.1)
+        specifier: ^4.28.4
+        version: 4.28.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(supports-color@8.1.1)
       jose:
-        specifier: 6.2.17
-        version: 6.2.17
+        specifier: 6.2.18
+        version: 6.2.18
       openapi3-ts:
         specifier: ^4.6.2
         version: 4.6.2
@@ -276,8 +276,8 @@ importers:
         specifier: ^1.2.7
         version: 1.2.7
       jose:
-        specifier: 6.2.17
-        version: 6.2.17
+        specifier: 6.2.18
+        version: 6.2.18
       tsup:
         specifier: ^9.0.0
         version: 9.0.0(postcss@8.5.32)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1)
@@ -318,8 +318,8 @@ importers:
         specifier: ^5.3.0
         version: 5.3.0(supports-color@8.1.1)
       fastmcp:
-        specifier: ^4.28.3
-        version: 4.28.3(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(supports-color@8.1.1)
+        specifier: ^4.28.4
+        version: 4.28.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(supports-color@8.1.1)
       multer:
         specifier: 2.5.0
         version: 2.5.0
@@ -587,8 +587,8 @@ importers:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@8.1.1)
       jose:
-        specifier: 6.2.17
-        version: 6.2.17
+        specifier: 6.2.18
+        version: 6.2.18
       testcontainers:
         specifier: ^12.2.1
         version: 12.2.1(bare-buffer@3.7.3)(supports-color@8.1.1)
@@ -3118,8 +3118,8 @@ packages:
     resolution: {integrity: sha512-BhC+hbc5lIVjygr840n5DEkW3MQq7H9o+mc1/N7Z5uIiCFVyESLL5DIE7LNq4CYUNxy+XjA+3jRrL/h0Kt2xcg==}
     engines: {node: '>=16.9.0'}
 
-  express-rate-limit@8.7.4:
-    resolution: {integrity: sha512-LKBXzX700wz3zAGNNmVnjRI5mEbYkLv7UbMI4+9Xa+JPcg2UZh6AgY/2CZh9RrJjFM5ttC/N1lD+KzyFoZITCw==}
+  express-rate-limit@8.7.5:
+    resolution: {integrity: sha512-wi+v38cx2EqD0JnhE/e74o5tFqKWUOAPFJIgyEiqJ8v2MNpoOAA3kI2hXYOI+YM+HE5yqbdAlVxm2GqOIeYOgA==}
     engines: {node: '>= 16'}
     peerDependencies:
       express: '>= 4.11'
@@ -3164,8 +3164,8 @@ packages:
   fast-wrap-ansi@0.2.2:
     resolution: {integrity: sha512-7F2Fl+TjRSenLqlU3UjSH0iyqopqoZIu7eZVpEirP2g1GtWa2G/ecEmBdgz31+Mxr+ELclgg6sokpSFIQiZ02Q==}
 
-  fastmcp@4.28.3:
-    resolution: {integrity: sha512-zO86AktbDkSe8HDAEQphBJW8afbja3YdgcsGyWkGX9w+myv7v2xEy7d4XoBcwWf6xZ8ubsj5WiWZZTTiAyNouw==}
+  fastmcp@4.28.4:
+    resolution: {integrity: sha512-qah9KP/1D20qOblAqbBYnUZ+BM7XZOtVVibv+0yo107HUKAQtYx2pJ7qlU7keu5hdopDS9sZceZNcbZ+0c4tXw==}
     hasBin: true
     peerDependencies:
       ajv: ^8.0.0
@@ -3584,8 +3584,8 @@ packages:
   jju@1.4.0:
     resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
 
-  jose@6.2.17:
-    resolution: {integrity: sha512-wOuK9V1yujQFH5S0ZWmLcDZN7+IKh9bUCC2ZPCf2HDlol3WWHy+PPyNjEI75FXRLMp3vDKQcupP59xhVU95hcg==}
+  jose@6.2.18:
+    resolution: {integrity: sha512-doV4thUwgkrycJH4yLeqwTGIIZphHl+pk7CPReuMIhYhncmgzdko85MaCG4YQFTxqMFr1/oEH32tZuKKovcDEg==}
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -3793,8 +3793,8 @@ packages:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
     engines: {node: '>= 0.4'}
 
-  mcp-proxy@6.10.0:
-    resolution: {integrity: sha512-CyqZApuiRpDIk69/94gXlF2c0o7ynA7/BRvFIpGb52bqIE+dPQtJgj5/zMuSFT2J+mFO4egei07yWYVxV/Qfrw==}
+  mcp-proxy@6.11.0:
+    resolution: {integrity: sha512-Vr6gQN+kuVqVFxLwbbni1PRs7wEnfa8JNwFKQmNKQ23LRu1/GQjtC+C7fUO8Efyx3wSm8a3FdLxu56Pw6sIq5g==}
     hasBin: true
 
   media-typer@0.3.0:
@@ -3959,8 +3959,8 @@ packages:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
     engines: {node: '>=0.10.0'}
 
-  object-inspect@1.13.4:
-    resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
+  object-inspect@1.14.0:
+    resolution: {integrity: sha512-IVgHNlp/jwQX271+Xzoq9LZNTWXxZK+cEOrGBOBxXNbn7fapnZ+Ts6TVMgNOuAezwG2wdtnMX97tTPK6VEnuOQ==}
     engines: {node: '>= 0.4'}
 
   object-keys@1.1.1:
@@ -4573,8 +4573,8 @@ packages:
     resolution: {integrity: sha512-Stg6edJXC/6/xqGwSXwFokrUhChJ18amEjpKH89WrQQ0oVFDF+pUUcTpiwWhFUrE89Vf16FBOlwhaw+lescxMQ==}
     engines: {node: '>=20'}
 
-  tinybench@6.2.3:
-    resolution: {integrity: sha512-Al01C2JIBnO2CXCAPbpAl6sUiOZHeThGtHYNTa51JRw9PyWOCdr+9Ong05R4qg/Sk3+H645E8ov1h2c58ityNw==}
+  tinybench@6.2.4:
+    resolution: {integrity: sha512-SQ52jEncXxbMCzJuY2A/jGIbbAu6NYsBWW7grz2pNE+EnzQdoGaoBfpk4qC/opE7qiUcGmGgaGIz5EoHdS1O9w==}
     engines: {node: '>=20.0.0'}
 
   tinyexec@1.3.1:
@@ -5736,7 +5736,7 @@ snapshots:
       cross-spawn: 7.0.6
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
-      jose: 6.2.17
+      jose: 6.2.18
       pkce-challenge: 5.0.1
       zod: 4.6.7
 
@@ -5755,9 +5755,9 @@ snapshots:
       eventsource: 3.0.7
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@8.1.1)
-      express-rate-limit: 8.7.4(express@5.3.0(supports-color@8.1.1))(supports-color@8.1.1)
+      express-rate-limit: 8.7.5(express@5.3.0(supports-color@8.1.1))(supports-color@8.1.1)
       hono: 4.13.19
-      jose: 6.2.17
+      jose: 6.2.18
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
@@ -7304,7 +7304,7 @@ snapshots:
       es-errors: 1.3.0
       es-object-atoms: 1.1.2
       is-callable: 1.2.7
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
 
   es-abstract@1.24.2:
     dependencies:
@@ -7343,7 +7343,7 @@ snapshots:
       is-typed-array: 1.1.15
       is-weakref: 1.1.1
       math-intrinsics: 1.1.0
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
       object-keys: 1.1.1
       object.assign: 4.1.7
       own-keys: 1.0.2
@@ -7555,7 +7555,7 @@ snapshots:
 
   expr-eval-fork@3.0.3: {}
 
-  express-rate-limit@8.7.4(express@5.3.0(supports-color@8.1.1))(supports-color@8.1.1):
+  express-rate-limit@8.7.5(express@5.3.0(supports-color@8.1.1))(supports-color@8.1.1):
     dependencies:
       debug: 4.4.3(supports-color@8.1.1)
       express: 5.3.0(supports-color@8.1.1)
@@ -7624,7 +7624,7 @@ snapshots:
     dependencies:
       fast-string-width: 3.0.2
 
-  fastmcp@4.28.3(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(supports-color@8.1.1):
+  fastmcp@4.28.4(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(supports-color@8.1.1):
     dependencies:
       '@apidevtools/swagger-parser': 13.1.0(openapi-types@12.1.3)
       '@modelcontextprotocol/sdk': 1.32.2(supports-color@8.1.1)(zod@4.6.7)
@@ -7633,7 +7633,7 @@ snapshots:
       file-type: 21.3.4(supports-color@8.1.1)
       fuse.js: 7.5.0
       hono: 4.13.19
-      mcp-proxy: 6.10.0
+      mcp-proxy: 6.11.0
       strict-event-emitter-types: 2.0.0
       uri-templates: 0.2.0
       xsschema: 0.4.4(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
@@ -7643,7 +7643,7 @@ snapshots:
     optionalDependencies:
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
-      jose: 6.2.17
+      jose: 6.2.18
     transitivePeerDependencies:
       - '@cfworker/json-schema'
       - '@valibot/to-json-schema'
@@ -8063,7 +8063,7 @@ snapshots:
 
   jju@1.4.0: {}
 
-  jose@6.2.17: {}
+  jose@6.2.18: {}
 
   joycon@3.1.1: {}
 
@@ -8237,7 +8237,7 @@ snapshots:
 
   math-intrinsics@1.1.0: {}
 
-  mcp-proxy@6.10.0:
+  mcp-proxy@6.11.0:
     dependencies:
       '@modelcontextprotocol/client': 2.4.0
       '@modelcontextprotocol/server': 2.4.0
@@ -8361,7 +8361,7 @@ snapshots:
 
   object-assign@4.1.1: {}
 
-  object-inspect@1.13.4: {}
+  object-inspect@1.14.0: {}
 
   object-keys@1.1.1: {}
 
@@ -8860,27 +8860,27 @@ snapshots:
   side-channel-list@1.0.1:
     dependencies:
       es-errors: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
 
   side-channel-map@1.0.1:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
 
   side-channel-weakmap@1.0.2:
     dependencies:
       call-bound: 1.0.4
       es-errors: 1.3.0
       get-intrinsic: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
       side-channel-map: 1.0.1
 
   side-channel@1.1.1:
     dependencies:
       es-errors: 1.3.0
-      object-inspect: 1.13.4
+      object-inspect: 1.14.0
       side-channel-list: 1.0.1
       side-channel-map: 1.0.1
       side-channel-weakmap: 1.0.2
@@ -9161,7 +9161,7 @@ snapshots:
     dependencies:
       real-require: 1.0.0
 
-  tinybench@6.2.3: {}
+  tinybench@6.2.4: {}
 
   tinyexec@1.3.1: {}
 
@@ -9417,7 +9417,7 @@ snapshots:
       obug: 3.0.0
       picomatch: 4.0.7
       std-env: 4.3.0
-      tinybench: 6.2.3
+      tinybench: 6.2.4
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
       vite: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
