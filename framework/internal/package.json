@@ -42,8 +42,7 @@
   },
   "dependencies": {
     "@forklaunch/common": "workspace:^",
-    "@forklaunch/validator": "workspace:^",
-    "@mikro-orm/core": "7.2.10"
+    "@forklaunch/validator": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
