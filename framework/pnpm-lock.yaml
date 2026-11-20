@@ -555,9 +555,6 @@ importers:
       '@forklaunch/validator':
         specifier: workspace:^
         version: link:../validator
-      '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
     devDependencies:
       '@eslint/js':
         specifier: ^10.0.1
@@ -586,9 +583,6 @@ importers:
 
   testing:
     dependencies:
-      '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
       ioredis:
         specifier: ^6.0.0
         version: 6.0.0(supports-color@8.1.1)
@@ -602,6 +596,9 @@ importers:
       '@eslint/js':
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.15.0(supports-color@8.1.1))
+      '@mikro-orm/core':
+        specifier: ^7.2.10
+        version: 7.2.10
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
