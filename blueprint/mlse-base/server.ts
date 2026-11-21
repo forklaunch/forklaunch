@@ -25,6 +25,7 @@ setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     // Every route so far is internal (HMAC). Clinician-facing routes arrive
     // with search and answers, and replace these placeholders with real
@@ -61,7 +62,8 @@ app.use(complianceRouter);
 app.registerSdks(mlseSdkClient);
 
 //! starts the server
-app.listen(port, host, () => {
+// hyper-express returns a Promise from listen; nothing awaits startup here.
+void app.listen(port, host, () => {
   openTelemetryCollector.info(
     `🎉 MLSE Server is running at http://${host}:${port} 🎉.\nAn API reference can be accessed at http://${host}:${port}/api/${version}${docsPath}`
   );
