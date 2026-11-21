@@ -1,5 +1,15 @@
 # @forklaunch/ws
 
+## 1.3.1
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+
 ## 1.3.0
 
 ### Minor Changes

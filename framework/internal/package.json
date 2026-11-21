@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/internal",
-  "version": "1.2.35",
+  "version": "1.2.37",
   "description": "Internal package for utilities and other internal code.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -32,9 +32,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --outDir lib --clean && tsc --emitDeclarationOnly",
-    "check": "depcheck",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -44,19 +42,16 @@
   },
   "dependencies": {
     "@forklaunch/common": "workspace:^",
-    "@forklaunch/validator": "workspace:^",
-    "@mikro-orm/core": "7.2.7"
+    "@forklaunch/validator": "workspace:^"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
-    "depcheck": "^1.4.7",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "globals": "^17.14.0",
     "tsup": "^9.0.0",
-    "typedoc": "^0.28.20",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.72.1",
-    "vitest": "^5.1.0"
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
   }
 }

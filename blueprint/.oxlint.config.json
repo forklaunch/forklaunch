@@ -25,7 +25,8 @@
         "no-async-endpoint-handlers": "off",
         "no-await-in-loop": "off",
         "unicorn/require-module-specifiers": "off",
-        "typescript/no-unnecessary-type-assertion": "off"
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-deprecated": "error"
       }
     }
   ]

@@ -30,9 +30,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && tsup",
-    "check": "depcheck",
     "clean": "rm -rf dist pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",

@@ -1,5 +1,37 @@
 # @forklaunch/hyper-express
 
+## 2.2.0
+
+### Minor Changes
+
+- 5fd1341: `forklaunchExpress` is now a constant typed by the exported `ForklaunchExpressFactory` interface, and the deprecation for calls without a `cors` option sits on that interface's call signature. A no-deprecated lint rule now reports only those calls. Before, it also reported every import, re-export and `typeof forklaunchExpress`, so an application's `core/registrations.ts` re-export failed lint. Calling the factory is unchanged.
+
+## 2.1.0
+
+### Minor Changes
+
+- 8dc54d6: The `cors` application option accepts `'environment'`, which states that the application takes its allowed origins from `CORS_ORIGINS` (the same behaviour as leaving the option out). Creating an application with no `cors` option is now marked `@deprecated`, so a linter with a no-deprecated rule (`typescript/no-deprecated` in oxlint, `@typescript-eslint/no-deprecated`) points at every application that has not said how it answers cross-origin browser requests since the 4.0 default changed. To clear it, pass `cors: 'environment'` or `cors: { origin: [...] }`. Nothing changes at runtime.
+
+### Patch Changes
+
+- Updated dependencies [8dc54d6]
+  - @forklaunch/core@4.1.0
+
+## 2.0.0
+
+### Major Changes
+
+- d612dd6: BREAKING: cross-origin browser access is now denied unless the application names its origins. An application created without a `cors` option used to answer every origin with `Access-Control-Allow-Origin: *`; it now allows only the origins in the comma separated `CORS_ORIGINS` environment variable, and when that is unset it allows no origin when `NODE_ENV=production` and only `localhost` / `127.0.0.1` / `[::1]` otherwise (one startup warning explains this). Who is affected: any service with a browser frontend on a different origin that passes no `cors` option and has no `CORS_ORIGINS` set. Fix: set `CORS_ORIGINS=https://your-ui` (several: `CORS_ORIGINS=https://app.example.com,https://admin.example.com`), or pass `cors: { origin: ['https://your-ui'] }` in the application options. Server-to-server, curl and same-origin callers are unaffected. An explicit `cors` option is still used exactly as given, which means an object without `origin`, including an empty `cors: {}`, still allows every origin; a startup warning now says so. `Access-Control-Allow-Credentials: true` is never sent together with a wildcard origin (browsers already rejected that pair): name the origins to use credentials.
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+  - @forklaunch/ws@1.3.1
+
 ## 1.3.0
 
 ### Minor Changes

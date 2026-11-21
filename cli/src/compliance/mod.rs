@@ -8,7 +8,7 @@ pub(crate) mod checks;
 mod config;
 pub(crate) mod deps;
 mod docs;
-mod rust_artifact;
+pub(crate) mod rust_artifact;
 pub(crate) mod scan;
 mod tenancy;
 
