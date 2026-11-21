@@ -93,6 +93,7 @@ async function startServer() {
    * Creates an instance of forklaunchExpress
    */
   const app = forklaunchExpress(SchemaValidator(), openTelemetryCollector, {
+    cors: 'environment',
     auth: authOptions
   });
 

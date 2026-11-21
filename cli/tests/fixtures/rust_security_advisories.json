@@ -1,14 +1,6 @@
 [
   {
     "scope": "framework",
-    "kind": "unsound",
-    "id": "RUSTSEC-2026-0253",
-    "package": "lru",
-    "version": "0.16.4",
-    "review": "AWS S3 1.124.0 S3 Express cache uses CacheKey(String), without a custom/panicking Drop. The advisory's panicking key destructor prerequisite is absent. Re-review on SDK/key-type changes; do not add direct lru use under this exception."
-  },
-  {
-    "scope": "framework",
     "kind": "vulnerability",
     "id": "RUSTSEC-2023-0071",
     "package": "rsa",
@@ -24,11 +16,27 @@
     "review": "rsa_key.rs uses RSA only for generation, PKCS#8 decoding/encoding and public n/e extraction. Private-key signing uses ring; no RSA decryption is exposed. Optional IAM oidc-sessions additionally reuses the reviewed framework openidconnect 4.1.0 public RS256 verification path, with no RSA private-key operations. Re-review before adding private-key operations through rsa."
   },
   {
+    "scope": "framework",
+    "kind": "unmaintained",
+    "id": "RUSTSEC-2026-0543",
+    "package": "chrono",
+    "version": "0.4.45",
+    "review": "Maintenance notice with no identified vulnerability and no patched version. chrono types are part of the framework's date codec, retention calendar, auth expiry and generated SDK surface, and rmcp 3.10.0 requires chrono itself, so it cannot be dropped by an upgrade. Moving to jiff or time is a breaking change for applications. Re-review on any chrono vulnerability advisory, and when rmcp no longer requires it."
+  },
+  {
+    "scope": "blueprint",
+    "kind": "unmaintained",
+    "id": "RUSTSEC-2026-0543",
+    "package": "chrono",
+    "version": "0.4.45",
+    "review": "Maintenance notice with no identified vulnerability and no patched version. Reaches the blueprint through forklaunch-core's date types and rmcp 3.10.0; the blueprint follows the framework's reviewed use. Re-review on any chrono vulnerability advisory, and when the framework changes date library."
+  },
+  {
     "scope": "cli",
     "kind": "unmaintained",
-    "id": "RUSTSEC-2024-0436",
-    "package": "paste",
-    "version": "1.0.15",
-    "review": "Compile-time identifier concatenation in two CLI macros. This is a maintenance notice, not an identified runtime vulnerability. Re-evaluate before extending use or changing versions."
+    "id": "RUSTSEC-2026-0543",
+    "package": "chrono",
+    "version": "0.4.45",
+    "review": "Maintenance notice with no identified vulnerability and no patched version. The CLI uses chrono for local timestamps and for parsing and printing platform dates; it parses no untrusted time-zone data. Re-review on any chrono vulnerability advisory; replace alongside the framework's date library."
   }
 ]

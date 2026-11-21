@@ -12,6 +12,12 @@ import { ParamsDictionary } from '../../types/contractDetails.types';
 export const CORS_ORIGINS_ENV = 'CORS_ORIGINS';
 
 /**
+ * The `cors` option value that states the application takes its allowed
+ * origins from the `CORS_ORIGINS` environment variable.
+ */
+export const CORS_FROM_ENVIRONMENT = 'environment';
+
+/**
  * Origins allowed outside production when nothing is configured: this
  * machine only (`localhost`, `127.0.0.1`, `[::1]`), any port, http or https.
  * Anchored, so `http://localhost.evil.example` does not match.
@@ -98,9 +104,12 @@ export function withoutWildcardCredentials(options: CorsOptions): CorsOptions {
  * the operator should know, a warning to log once at startup.
  */
 export function resolveCorsOptions(
-  appCors: CorsOptions | undefined,
+  appCorsOption: CorsOptions | typeof CORS_FROM_ENVIRONMENT | undefined,
   env: Record<string, string | undefined> = process.env
 ): { options: CorsOptions; warning?: string } {
+  // `'environment'` states the default out loud; it resolves the same way.
+  const appCors =
+    appCorsOption === CORS_FROM_ENVIRONMENT ? undefined : appCorsOption;
   const howToConfigure =
     `Set ${CORS_ORIGINS_ENV} to a comma separated list of allowed origins ` +
     `(for example ${CORS_ORIGINS_ENV}=https://app.example.com), or pass ` +

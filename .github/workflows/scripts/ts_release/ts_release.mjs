@@ -324,8 +324,27 @@ async function checkPickup(frameworkDir, blueprintDir, flags) {
   if (!flags['warn-only']) process.exit(1);
 }
 
+/** Whether a caret or tilde range (or exact version) accepts version. */
+function rangeAccepts(spec, version) {
+  const m = /^\s*([\^~]?)v?(\d+)\.(\d+)\.(\d+)\s*$/.exec(String(spec));
+  if (!m) return false;
+  const [, op, ...parts] = m;
+  const [major, minor, patch] = parts.map(Number);
+  const v = String(version).split('.').map(Number);
+  if (compareSemver(version, `${major}.${minor}.${patch}`) < 0) return false;
+  if (op === '') return v[0] === major && v[1] === minor && v[2] === patch;
+  if (op === '~') return v[0] === major && v[1] === minor;
+  if (major > 0) return v[0] === major;
+  if (minor > 0) return v[0] === 0 && v[1] === minor;
+  return v[0] === 0 && v[1] === 0 && v[2] === patch;
+}
+
 async function checkMikroOrm(dirs) {
   const seen = new Map();
+  // A peer dependency is a compatibility range, not an installed copy: the
+  // package uses the application's MikroORM. It must accept the version the
+  // workspaces resolve, but does not count as a second version.
+  const peers = [];
   for (const dir of dirs) {
     const pkgs = await workspacePackages(dir);
     const manifests = [{ rel: '.', manifest: readJson(join(dir, 'package.json')) }, ...pkgs];
@@ -333,6 +352,10 @@ async function checkMikroOrm(dirs) {
       for (const field of DEP_FIELDS) {
         for (const [dep, spec] of Object.entries(p.manifest[field] ?? {})) {
           if (!dep.startsWith('@mikro-orm/')) continue;
+          if (field === 'peerDependencies') {
+            peers.push({ dep, spec, where: `${dir}/${p.rel}` });
+            continue;
+          }
           const v = minVersion(spec) ?? spec;
           if (!seen.has(dep)) seen.set(dep, new Map());
           const where = seen.get(dep);
@@ -343,12 +366,19 @@ async function checkMikroOrm(dirs) {
     }
   }
   const split = [...seen].filter(([, versions]) => versions.size > 1);
-  if (split.length === 0) {
+  const rejected = peers.filter(({ dep, spec }) => {
+    const versions = seen.get(dep);
+    return versions && versions.size === 1 && !rangeAccepts(spec, [...versions.keys()][0]);
+  });
+  if (split.length === 0 && rejected.length === 0) {
     console.log(`@mikro-orm/* resolves to one version per package across ${dirs.join(', ')}.`);
     return;
   }
   for (const [dep, versions] of split) {
     console.error(`::error::${dep} has ${versions.size} versions: ${[...versions].map(([v, w]) => `${v} (${w.length} manifests, e.g. ${w[0]})`).join('; ')}`);
+  }
+  for (const { dep, spec, where } of rejected) {
+    console.error(`::error::${where} peerDependencies.${dep} = ${spec} does not accept ${[...seen.get(dep).keys()][0]}`);
   }
   process.exit(1);
 }

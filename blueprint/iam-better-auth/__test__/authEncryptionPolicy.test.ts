@@ -1,6 +1,6 @@
 import {
   FieldEncryptor,
-  getCurrentTenantId,
+  getBoundTenantId,
   withEncryptionContext
 } from '@forklaunch/core/persistence';
 import { describe, expect, it } from 'vitest';
@@ -11,7 +11,7 @@ import {
   withAuthEncryptionPolicy
 } from '../domain/utils/authEncryptionPolicy.util';
 function fixture() {
-  const seen: string[] = [];
+  const seen: (string | undefined)[] = [];
   const rows: { id: string; encryptionPolicy?: string }[] = [];
   const forkOptions: unknown[] = [];
   const orm = {
@@ -33,20 +33,24 @@ function fixture() {
       },
       create: (_model: unknown, data: unknown) => data,
       find: async (_model: unknown, _criteria: unknown) => {
-        seen.push(getCurrentTenantId());
+        seen.push(getBoundTenantId());
         return rows;
       },
       findOne: async (_model: unknown, _criteria: unknown) => {
-        seen.push(getCurrentTenantId());
+        seen.push(getBoundTenantId());
         return null;
       },
-      nativeUpdate: async (_model: unknown, _criteria: unknown, _update: unknown) => 1,
+      nativeUpdate: async (
+        _model: unknown,
+        _criteria: unknown,
+        _update: unknown
+      ) => 1,
       flush: async () => {
-        seen.push(getCurrentTenantId());
+        seen.push(getBoundTenantId());
       },
       transactional: async (callback: () => Promise<void>) => {
         await callback();
-        seen.push(getCurrentTenantId());
+        seen.push(getBoundTenantId());
       }
     }
   };
@@ -89,7 +93,7 @@ describe('fresh iam-service-v1 policy', () => {
     );
     expect(f.seen).toEqual(Array(4).fill(AUTH_ENCRYPTION_CONTEXT));
     expect(f.forkOptions).toEqual([{ keepTransactionContext: true }]);
-    expect(getCurrentTenantId()).toBe('');
+    expect(getBoundTenantId()).toBeUndefined();
   });
   it('refuses legacy ciphertext before hydration', async () => {
     const f = fixture();
@@ -132,11 +136,11 @@ describe('fresh iam-service-v1 policy', () => {
     await Promise.all([
       withAuthEncryptionPolicy(async () => {
         await Promise.resolve();
-        expect(getCurrentTenantId()).toBe(AUTH_ENCRYPTION_CONTEXT);
+        expect(getBoundTenantId()).toBe(AUTH_ENCRYPTION_CONTEXT);
       }),
       withEncryptionContext('organization-a', async () => {
         await Promise.resolve();
-        expect(getCurrentTenantId()).toBe('organization-a');
+        expect(getBoundTenantId()).toBe('organization-a');
         expect(() => f.orm.em.create('Account', {})).toThrow('incompatible');
       })
     ]);

@@ -32,10 +32,18 @@ pub(crate) struct FieldInventory {
     pub(crate) storage: Vec<StorageUsage>,
 }
 
-pub(crate) fn scan_field_inventory(modules_path: &Path) -> Result<FieldInventory> {
+/// `rust` is the application's exported Rust declarations (see
+/// `rust_artifact::scan`); their classified fields join the entities read from
+/// TypeScript source.
+pub(crate) fn scan_field_inventory(
+    modules_path: &Path,
+    rust: &super::rust_artifact::RustDeclarations,
+) -> Result<FieldInventory> {
+    let mut entities = super::audit::scan_field_inventory(modules_path)?;
+    entities.extend(super::rust_artifact::entity_reports(rust));
     Ok(FieldInventory {
         generated_at: chrono::Utc::now().to_rfc3339(),
-        entities: super::audit::scan_field_inventory(modules_path)?,
+        entities,
         storage: crate::core::static_analysis::storage_analyzer::scan_storage_usage(modules_path),
     })
 }
@@ -72,7 +80,9 @@ impl CliCommand for ScanCommand {
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let (app_root, manifest) = require_manifest(matches)?;
-        let inventory = scan_field_inventory(&app_root.join(&manifest.modules_path))?;
+        let rust =
+            super::rust_artifact::scan(&app_root, &manifest.modules_path, &manifest.projects);
+        let inventory = scan_field_inventory(&app_root.join(&manifest.modules_path), &rust)?;
         if let Some(output) = matches.get_one::<String>("output") {
             std::fs::write(output, serde_json::to_string(&inventory)?)?;
             return Ok(());
@@ -105,7 +115,7 @@ mod tests {
     #[test]
     fn scan_has_the_shape_a_release_carries() {
         let dir = tempfile::tempdir().unwrap();
-        let inventory = scan_field_inventory(dir.path()).unwrap();
+        let inventory = scan_field_inventory(dir.path(), &Default::default()).unwrap();
         let json = serde_json::to_value(&inventory).unwrap();
         assert!(json["generatedAt"].is_string());
         assert!(json["entities"].is_array());
