@@ -19,7 +19,9 @@ setupTenantFilter(orm, { logger: openTelemetryCollector });
 setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
-const app = forklaunchExpress(schemaValidator, openTelemetryCollector);
+const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment'
+});
 
 //! resolves the protocol, host, port, and version from the configuration
 const protocol = ci.resolve(tokens.PROTOCOL);

@@ -36,7 +36,6 @@
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -55,12 +54,9 @@
   "devDependencies": {
     "@types/node": "^26.6.6",
     "fetch-mock": "^12.6.0",
-    "jest": "^30.5.2",
     "openapi3-ts": "^4.6.2",
-    "prettier": "^3.9.10",
-    "ts-jest": "^29.4.15",
+    "prettier": "^3.10.1",
     "tsup": "^9.0.0",
-    "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   }
 }

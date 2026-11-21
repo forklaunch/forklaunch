@@ -64,14 +64,14 @@ oxc_allocator = { version = "0.155.0", optional = true }
 oxc_parser = { version = "0.155.0", optional = true }
 oxc_ast = { version = "0.155.0", features = ["serialize"], optional = true }
 oxc_span = { version = "0.155.0", optional = true }
-rmcp = { version = "3.6.0", default-features = false, features = ["server", "transport-streamable-http-server"], optional = true }
+rmcp = { version = "3.9.0", default-features = false, features = ["server", "transport-streamable-http-server"], optional = true }
 axum = { version = "0.8", optional = true }
 tower = { version = "0.5", features = ["util"], optional = true }
 form_urlencoded = { version = "1", optional = true }
-forklaunch-validator = { version = "0.2.5", path = "../validator", optional = true }
+forklaunch-validator = { version = "0.3.0", path = "../validator", optional = true }
 uuid = { version = "1", features = ["v4"], optional = true }
-forklaunch-common = { version = "0.2.5", path = "../common" }
-forklaunch-core-macros = { version = "0.2.5", path = "../core-macros" }
+forklaunch-common = { version = "0.3.0", path = "../common" }
+forklaunch-core-macros = { version = "0.3.0", path = "../core-macros" }
 
 opentelemetry = { version = "0.33", features = ["metrics", "trace"] }
 tracing = "0.1"
