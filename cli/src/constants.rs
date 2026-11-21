@@ -667,6 +667,10 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
         // The mlse blueprint caches live source responses in Redis and runs
         // corpus ingestion on a Redis-backed worker queue.
         Module::BaseMlse => Some(Infrastructure::Redis.to_string()),
+        // cac-base's registrations wire a RedisTtlCache (caches IAM
+        // permission/role lookups) and its config validator throws at
+        // startup without REDIS_URL.
+        Module::BaseCac => Some(Infrastructure::Redis.to_string()),
         _ => None,
     }
 }
@@ -702,6 +706,7 @@ mod tests {
             Module::TwilioMessaging,
             Module::StripeEcommerce,
             Module::BaseMlse,
+            Module::BaseCac,
         ] {
             assert_eq!(
                 get_service_module_cache(&module),

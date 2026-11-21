@@ -269,15 +269,12 @@ impl CliCommand for ModuleCommand {
             is_iam: module.clone() == Module::BaseIam || module.clone() == Module::BetterAuthIam,
             is_billing: module.clone() == Module::BaseBilling
                 || module.clone() == Module::StripeBilling,
-            // Ecommerce needs a cache like billing does: the cart is a
-            // Redis-backed read-through cache and the order-event producer
-            // publishes to a Redis queue, so REDIS_URL must be scaffolded.
-            is_cache_enabled: module.clone() == Module::BaseBilling
-                || module.clone() == Module::StripeBilling
-                || module.clone() == Module::StripeEcommerce
-                // mlse caches live source responses and queues ingestion jobs
-                // in Redis.
-                || module.clone() == Module::BaseMlse,
+            // Derive from the module registry, as `init application` does: a
+            // hardcoded list here silently skipped the cache (the redis
+            // dependency, REDIS_URL and the compose redis service) for every
+            // module it did not name, which left cac-base's and messaging's
+            // RedisTtlCache import unresolvable.
+            is_cache_enabled: get_service_module_cache(&module).is_some(),
             is_s3_enabled: false,
             is_database_enabled: true,
             platform_application_id: manifest_data.platform_application_id.clone(),

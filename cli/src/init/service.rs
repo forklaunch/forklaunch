@@ -68,12 +68,13 @@ use crate::{
                 TYPES_JEST_VERSION, TYPES_QS_VERSION, TYPES_UUID_VERSION,
                 TYPESCRIPT_ESLINT_VERSION, UNIVERSAL_SDK_VERSION, UUID_VERSION,
                 UWEBSOCKETS_VERSION, VALIDATOR_VERSION, WORKER_INTERFACES_VERSION,
-                WORKER_REDIS_VERSION, ZOD_VERSION, project_clean_script, project_dev_local_script,
-                project_dev_local_worker_script, project_dev_server_script,
-                project_dev_worker_client_script, project_format_script, project_lint_fix_script,
-                project_lint_script, project_migrate_script, project_mlse_scripts,
-                project_retention_enforce_script, project_start_server_script,
-                project_start_worker_script, project_test_script, project_up_latest_script,
+                WORKER_REDIS_VERSION, ZOD_VERSION, project_cac_refresh_code_sets_script,
+                project_clean_script, project_dev_local_script, project_dev_local_worker_script,
+                project_dev_server_script, project_dev_worker_client_script, project_format_script,
+                project_lint_fix_script, project_lint_script, project_migrate_script,
+                project_mlse_scripts, project_retention_enforce_script,
+                project_start_server_script, project_start_worker_script, project_test_script,
+                project_up_latest_script,
             },
             project_package_json::{
                 MIKRO_ORM_CONFIG_PATHS, ProjectDependencies, ProjectDevDependencies,
@@ -576,6 +577,11 @@ pub(crate) fn generate_service_package_json(
                     project_mlse_scripts(&manifest_data.runtime.parse()?)
                         .into_iter()
                         .collect()
+                } else if manifest_data.is_cac {
+                    HashMap::from([(
+                        "code-sets:refresh".to_string(),
+                        project_cac_refresh_code_sets_script(&manifest_data.runtime.parse()?),
+                    )])
                 } else {
                     HashMap::new()
                 },
@@ -787,7 +793,7 @@ pub(crate) fn generate_service_package_json(
                     None
                 },
                 dotenv: Some(DOTENV_VERSION.to_string()),
-                jose: if manifest_data.is_iam || manifest_data.is_billing {
+                jose: if manifest_data.is_iam || manifest_data.is_billing || manifest_data.is_cac {
                     Some(JOSE_VERSION.to_string())
                 } else {
                     None
