@@ -39,7 +39,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/core": "^3.3.0",
+    "@forklaunch/core": "^4.1.0",
     "@forklaunch/interfaces-mlse": "workspace:^",
     "fast-xml-parser": "^5.11.1"
   },
@@ -54,7 +54,7 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },
