@@ -183,6 +183,7 @@ fn print_config(stdout: &mut StandardStream, detail: &ResourceDetailResponse) ->
     print_field!("message_retention_seconds:", cfg.message_retention_seconds);
     print_field!("port:", cfg.port);
     print_field!("multi_az:", cfg.multi_az);
+    print_field!("backup_retention_period:", cfg.backup_retention_period);
     print_field!("node_type:", cfg.node_type);
     print_field!("broker_node_type:", cfg.broker_node_type);
     print_field!("kafka_version:", cfg.kafka_version);
