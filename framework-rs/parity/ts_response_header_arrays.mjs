@@ -47,12 +47,12 @@ try{
  writeFileSync(join(temporary,'service.ts'),`
 import {forklaunchExpress} from '@forklaunch/express';
 import {SchemaValidator} from '@forklaunch/validator/zod';
-import {safeStringify} from '@forklaunch/common';
+import {toPlainString} from '@forklaunch/common';
 import {z} from 'zod/v3';
 import {OpenTelemetryCollector} from '@forklaunch/core/http';
 const app=forklaunchExpress(SchemaValidator(),new OpenTelemetryCollector('headers','silent'),{mcp:false});
 const cases={cookies:['set-cookie',['a=1; Path=/','b=2; Path=/']],accept:['accept',['application/json','text/plain']],duplicate:['x-duplicate',['one','two']],scalar:['x-scalar','plain'],object:['x-object',{value:123}],mixed:['x-mixed',['first',2,{value:true}]],empty:['x-empty',[]],crlf:['x-invalid',['safe','unsafe\\r\\nInjected: yes']],scalarcrlf:['x-invalid','unsafe\\nInjected: yes']};
-function serve(req,res,raw){const [name,value]=cases[req.params.kind];try{res.setHeader(name,raw?(Array.isArray(value)?value.map(safeStringify):safeStringify(value)):value);res.json({ok:true});}catch(error){res.status(400).json({code:error.code});}}
+function serve(req,res,raw){const [name,value]=cases[req.params.kind];try{res.setHeader(name,raw?(Array.isArray(value)?value.map(item=>toPlainString(item)):toPlainString(value)):value);res.json({ok:true});}catch(error){res.status(400).json({code:error.code});}}
 app.internal.get('/reference/:kind',(req,res)=>serve(req,res,true));
 for(const mode of ['none','warning','error'])app.get('/'+mode+'/:kind',{name:'Headers'+mode,summary:'Headers',params:{kind:z.string()},options:{responseValidation:mode},responses:{200:z.unknown(),400:z.unknown()}},(req,res)=>serve(req,res,false));
 const server=app.listen(0,'127.0.0.1');server.on('listening',()=>console.log('READY http://127.0.0.1:'+server.address().port));process.on('SIGTERM',()=>server.close(()=>process.exit(0)));

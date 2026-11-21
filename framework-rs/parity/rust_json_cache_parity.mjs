@@ -69,12 +69,18 @@ try{
    await assert.rejects(actual.readRecord(rustKey,{tenantId:'wrong-tenant'}));
   }
   for(const text of ['', 'plain text', 'null', 'false', '0', '123', '01', '"quoted"', '[1,false]', '{"ok":true}', '{bad', '用户\n😀']) {
-   const tsKey=key(),rustKey=key(),expected=JSON.parse(JSON.stringify(common.safeParse(text)));
+   const tsKey=key(),rustKey=key(),legacyKey=key();
+   // strings are stored as JSON, so each one reads back as the same string on both sides
    await actual.putRecord({key:tsKey,value:text},compliance);
-   assert.deepEqual(await native([{op:'get',key:tsKey}],{format}),[{found:true,value:expected}]);
+   assert.deepEqual(await native([{op:'get',key:tsKey}],{format}),[{found:true,value:text}]);
    await native([{op:'put',key:rustKey,value:text}],{format});
-   assert.deepEqual(JSON.parse(JSON.stringify((await actual.readRecord(rustKey,compliance)).value)),expected);
-   assert.equal(new FieldEncryptor(master,{previousKeys:previous}).decrypt(await transport.command('GET',rustKey),tenant),text);
+   assert.equal((await actual.readRecord(rustKey,compliance)).value,text);
+   assert.equal(new FieldEncryptor(master,{previousKeys:previous}).decrypt(await transport.command('GET',rustKey),tenant),JSON.stringify(text));
+   // a record written unquoted, before strings were quoted, still reads on both sides as safeParse reads it
+   const legacy=JSON.parse(JSON.stringify(common.safeParse(text)));
+   await transport.command('SET',legacyKey,new FieldEncryptor(master,{previousKeys:previous,format}).encrypt(text,tenant));
+   assert.deepEqual(await native([{op:'get',key:legacyKey}],{format}),[{found:true,value:legacy}]);
+   assert.deepEqual(JSON.parse(JSON.stringify((await actual.readRecord(legacyKey,compliance)).value)),legacy);
   }
   const queue=key();
   await actual.enqueueBatchRecords(queue,[{order:1},{order:2}],compliance);
@@ -166,5 +172,5 @@ try{
   await new Promise(resolve=>setTimeout(resolve,10));
   assert.deepEqual(await native([{op:'get',key:expires},{op:'peek',key:expires}]),[{found:false,value:null},false]);
  }
- console.log('PASS actual TypeScript/native encrypted Redis cache/queue JSON: actual safeParse/safeStringify string semantics, strict JSON opt-out, per-record batch/millisecond/persistent TTL metadata, literal prefix scans, prevalidated writes/deletes, typed existence batches without decryption, opt-in falsy queue filtering and zero-count peeks, raw client access, FIFO/batches/peeks, v2/v3 both directions, rotation, plaintext migration, falsy values, missing/expired keys and wrong-tenant/corruption rejection');
+ console.log('PASS actual TypeScript/native encrypted Redis cache/queue JSON: actual safeParse/safeStringify string semantics (strings stored as JSON, legacy unquoted records still read), strict JSON opt-out, per-record batch/millisecond/persistent TTL metadata, literal prefix scans, prevalidated writes/deletes, typed existence batches without decryption, opt-in falsy queue filtering and zero-count peeks, raw client access, FIFO/batches/peeks, v2/v3 both directions, rotation, plaintext migration, falsy values, missing/expired keys and wrong-tenant/corruption rejection');
 }finally{for(const key of keys)await transport.command('DEL',key);}
