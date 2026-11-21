@@ -188,6 +188,8 @@ impl CliCommand for ModuleCommand {
         )?
         .parse()?;
 
+        crate::core::modules::ensure_module_database_supported(&module, &database)?;
+
         let dryrun = matches.get_flag("dryrun");
 
         let name = manifest_data.app_name.clone();
@@ -286,8 +288,10 @@ impl CliCommand for ModuleCommand {
                 || module.clone() == Module::TwilioMessaging,
             is_twilio: module.clone() == Module::TwilioMessaging,
             is_cac: module.clone() == Module::BaseCac,
+            is_mlse: module.clone() == Module::BaseMlse,
             is_ecommerce: module.clone() == Module::StripeEcommerce,
-            ships_worker: module.clone() == Module::StripeEcommerce,
+            ships_worker: module.clone() == Module::StripeEcommerce
+                || module.clone() == Module::BaseMlse,
 
             is_iam_configured: manifest_data.projects.iter().any(|project_entry| {
                 if project_entry.name == "iam" {

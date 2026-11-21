@@ -49,6 +49,7 @@ By default, you will not need to run any scripts to get going, but if your modul
 | `iam-base` | Authorization only | Base Identity and Access Management with JWT support and custom auth methods |
 | `iam-better-auth` | Better auth implementation for IAM | BetterAuth integration for advanced authentication features |
 | `cac-base` | Computer-assisted coding hooks only | Base medical claim coding/scrubbing infrastructure with an extensible procedure code-set provider interface |
+| `mlse-base` | Medical literature search | Evidence search and cited answers over free medical sources (FDA labels, ClinicalTrials.gov, PubMed, PubMed Central), with a licensed-content extension point. Requires PostgreSQL (pgvector) |
 | `relay` | Managed-apps OAuth relay session-ingest endpoint | Injects the instance-side `/relay/session-ingest` endpoint into an existing better-auth iam service (HMAC verify, nonce replay guard, one-time handoff ticket, session cookie); leaves token storage as one hook |
 
 > Note: messaging is not a module. Services send email and SMS through the
@@ -70,7 +71,7 @@ By default, you will not need to run any scripts to get going, but if your modul
 
 | Option | Short | Description | Valid Values |
 | :----- | :---- | :---------- | :----------- |
-| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `ecommerce-stripe`, `cac-base`, `relay` |
+| `--module` | `-m` | The module type to initialize | `billing-base`, `billing-stripe`, `iam-base`, `iam-better-auth`, `ecommerce-stripe`, `cac-base`, `mlse-base`, `relay` |
 | `--database` | `-d` | The database to use | `postgresql`, `mysql`, `mariadb`, `mssql`, `mongodb`, `libsql`, `sqlite`, `better-sqlite` |
 | `--path` | `-p` | The application path to initialize the module in | Any valid directory path |
 | `--dryrun` | `-n` | Dry run the command | Flag (no value) |

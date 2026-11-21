@@ -340,6 +340,8 @@ pub(crate) const MESSAGING_BASE_VERSION: &str = "~2.0.0";
 pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-cac-base
 pub(crate) const CAC_BASE_VERSION: &str = "~0.3.1";
+// @forklaunch/implementation-mlse-base
+pub(crate) const MLSE_BASE_VERSION: &str = "~0.1.0";
 // @forklaunch/implementation-worker-bullmq
 pub(crate) const WORKER_BULLMQ_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-worker-redis
@@ -362,6 +364,8 @@ pub(crate) const IAM_INTERFACES_VERSION: &str = "~2.0.0";
 pub(crate) const MESSAGING_INTERFACES_VERSION: &str = "~2.0.0";
 // @forklaunch/interfaces-cac
 pub(crate) const CAC_INTERFACES_VERSION: &str = "~0.3.0";
+// @forklaunch/interfaces-mlse
+pub(crate) const MLSE_INTERFACES_VERSION: &str = "~0.1.0";
 // @forklaunch/interfaces-worker
 pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.37";
 // @forklaunch/internal
@@ -398,6 +402,8 @@ pub(crate) const DOTENV_VERSION: &str = "^18.0.10";
 pub(crate) const JOSE_VERSION: &str = "^6.2.18";
 // sqlite3
 pub(crate) const SQLITE3_VERSION: &str = "^6.0.1";
+// @anthropic-ai/sdk
+pub(crate) const ANTHROPIC_SDK_VERSION: &str = "^0.128.0";
 // stripe
 pub(crate) const STRIPE_VERSION: &str = "^22.6.2";
 // uuid
@@ -448,6 +454,28 @@ pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
         Runtime::Bun => "bun run scripts/enforce-retention.ts",
         Runtime::Node => "pnpm tsx scripts/enforce-retention.ts",
     })
+}
+
+// MLSE corpus maintenance, run from the service directory. The worker drains
+// what corpus:refresh queues; mesh:load reads NLM's annual descriptor file.
+pub(crate) fn project_mlse_scripts(runtime: &Runtime) -> Vec<(String, String)> {
+    let run = match runtime {
+        Runtime::Bun => "bun run",
+        Runtime::Node => "pnpm tsx",
+    };
+    [
+        ("corpus:refresh", "scripts/refresh-corpus.ts"),
+        ("mesh:load", "scripts/load-mesh.ts"),
+        ("eval:run", "scripts/run-eval.ts"),
+    ]
+    .into_iter()
+    .map(|(name, file)| {
+        (
+            name.to_string(),
+            format!("DOTENV_FILE_PATH=.env.local {run} {file}"),
+        )
+    })
+    .collect()
 }
 
 pub(crate) fn project_format_script(formatter: &Formatter) -> String {

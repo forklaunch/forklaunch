@@ -13,6 +13,7 @@ packages:
   - iam-better-auth
   - messaging-base
   - messaging-twilio
+  - mlse-base
   - sample-worker
   - interfaces/billing
   - interfaces/cac

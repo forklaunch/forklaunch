@@ -1,20 +1,21 @@
 name: MLSE Tests
 
-# The mlse packages' unit tests: the safety classifier and its evaluation set,
-# label matching, the support checks, fetchers against recorded responses and
-# the Claude provider through the real SDK. The mlse-base module adds its
-# service suite (Postgres with pgvector) to this workflow.
+# The mlse module's unit tests and its service suite (Postgres with pgvector
+# through testcontainers, which use the runner's Docker). Unit tests run first
+# so a logic failure shows before the slower service suite starts.
 on:
   workflow_dispatch:
   push:
     branches:
       - main
     paths:
+      - 'blueprint/mlse-base/**'
       - 'blueprint/implementations/mlse/**'
       - 'blueprint/interfaces/mlse/**'
       - '.github/workflows/mlse_tests.yml'
   pull_request:
     paths:
+      - 'blueprint/mlse-base/**'
       - 'blueprint/implementations/mlse/**'
       - 'blueprint/interfaces/mlse/**'
       - '.github/workflows/mlse_tests.yml'
@@ -47,8 +48,12 @@ jobs:
 
       - name: Build mlse packages
         working-directory: ./blueprint
-        run: pnpm --filter '@forklaunch/implementation-mlse-base...' run build
+        run: pnpm --filter '@forklaunch/blueprint-mlse-base...' run build
 
       - name: Unit tests (implementation-mlse-base)
         working-directory: ./blueprint/implementations/mlse/base
         run: pnpm exec vitest run
+
+      - name: Service tests (mlse-base, pgvector)
+        working-directory: ./blueprint/mlse-base
+        run: pnpm exec vitest run --testTimeout 60000

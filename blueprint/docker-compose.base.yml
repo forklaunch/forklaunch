@@ -181,7 +181,10 @@ services:
     # health_check extension on :13133 (published for host-side probes).
 
   postgres:
-    image: postgres:latest
+    # pgvector build of PostgreSQL 18 (same major and Debian base as
+    # postgres:latest) so mlse-base's vector search works; every other module
+    # runs on it unchanged.
+    image: pgvector/pgvector:pg18-trixie
     hostname: postgres
     container_name: forklaunch-pg
     restart: unless-stopped
