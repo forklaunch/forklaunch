@@ -60,6 +60,7 @@ fn is_metadata_only(config: &ResourceConfig) -> bool {
         message_retention_seconds,
         port,
         multi_az,
+        backup_retention_period,
         node_type,
         broker_node_type,
         kafka_version,
@@ -77,6 +78,7 @@ fn is_metadata_only(config: &ResourceConfig) -> bool {
         && message_retention_seconds.is_none()
         && port.is_none()
         && multi_az.is_none()
+        && backup_retention_period.is_none()
         && node_type.is_none()
         && broker_node_type.is_none()
         && kafka_version.is_none()
@@ -144,6 +146,11 @@ fn print_config_diff(
     );
     diff_field!("port:", current.port, requested.port);
     diff_field!("multi_az:", current.multi_az, requested.multi_az);
+    diff_field!(
+        "backup_retention_period:",
+        current.backup_retention_period,
+        requested.backup_retention_period
+    );
     diff_field!("node_type:", current.node_type, requested.node_type);
     diff_field!(
         "broker_node_type:",
@@ -355,6 +362,17 @@ mod tests {
     #[test]
     fn nothing_to_change_true_when_everything_unset() {
         assert!(nothing_to_change(&ResourceConfig::default(), &None, &None));
+    }
+
+    #[test]
+    fn backup_retention_alone_is_a_change_sent_as_backup_retention_period() {
+        let config = ResourceConfig {
+            backup_retention_period: Some(30),
+            ..Default::default()
+        };
+        assert!(!nothing_to_change(&config, &None, &None));
+        let body = serde_json::to_value(&config).unwrap();
+        assert_eq!(body["backupRetentionPeriod"], 30);
     }
 
     #[test]
