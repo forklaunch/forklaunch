@@ -13,7 +13,38 @@ export const COMPLIANCE_KEY = '~compliance' as const;
 // Registry
 // ---------------------------------------------------------------------------
 
-const complianceRegistry = new Map<string, Map<string, ComplianceLevel>>();
+/**
+ * One map per name for the whole process, however many copies of this module
+ * are loaded.
+ *
+ * The package is bundled per entry point: `@forklaunch/core/persistence`
+ * (where `defineComplianceEntity` registers an entity) and
+ * `@forklaunch/core/services` (where `RetentionService` reads the policies)
+ * each carry their own copy of this file, and the CommonJS and ES builds are
+ * separate copies again. With plain module-level maps, entities registered
+ * into one copy and the retention job read another, empty one: every
+ * `retention:enforce` run reported "No retention policies registered" and
+ * deleted nothing (ForkLaunch staging, 2026-11-20). Keying the maps on
+ * `globalThis` by a registered symbol makes every copy share them.
+ */
+function sharedRegistry<K, V>(name: string): Map<K, V> {
+  const key = Symbol.for(`@forklaunch/core/${name}`);
+  const holder = globalThis as unknown as Record<
+    symbol,
+    Map<K, V> | undefined
+  >;
+  let map = holder[key];
+  if (!map) {
+    map = new Map<K, V>();
+    holder[key] = map;
+  }
+  return map;
+}
+
+const complianceRegistry = sharedRegistry<
+  string,
+  Map<string, ComplianceLevel>
+>('complianceRegistry');
 
 export function registerEntityCompliance(
   entityName: string,
@@ -112,14 +143,18 @@ export function subtractDuration(from: Date, duration: ParsedDuration): Date {
   return result;
 }
 
-const retentionRegistry = new Map<string, RetentionPolicy>();
+const retentionRegistry = sharedRegistry<string, RetentionPolicy>(
+  'retentionRegistry'
+);
 
 // ---------------------------------------------------------------------------
 // User ID field registry — maps entity name to the field linking records to a user
 // ---------------------------------------------------------------------------
 
 const DEFAULT_USER_ID_FIELD = 'userId';
-const userIdFieldRegistry = new Map<string, string>();
+const userIdFieldRegistry = sharedRegistry<string, string>(
+  'userIdFieldRegistry'
+);
 
 export function registerEntityUserIdField(
   entityName: string,

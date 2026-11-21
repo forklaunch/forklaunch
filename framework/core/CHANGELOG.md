@@ -1,5 +1,11 @@
 # @forklaunch/core
 
+## 2.1.2
+
+### Patch Changes
+
+- Retention enforcement finds the entities' retention policies again. The compliance, retention and user-id-field registries are now shared across the package's separately bundled entry points (`persistence`, `services`, CommonJS and ES builds); before, `RetentionService` read an empty copy and every run reported "No retention policies registered". Backport of the 4.x fix to the 2.1 line.
+
 ## 2.1.1
 
 ### Patch Changes
