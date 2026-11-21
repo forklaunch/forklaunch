@@ -353,6 +353,7 @@ export async function startTestServer(): Promise<string> {
   const authCacheService = createAuthCacheService(ci.resolve(tokens.TtlCache));
 
   const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+    cors: 'environment',
     auth: {
       surfacePermissions: createSurfacePermissions({
         authCacheService,
