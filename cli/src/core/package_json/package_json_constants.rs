@@ -339,7 +339,7 @@ pub(crate) const MESSAGING_BASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-messaging-twilio
 pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-cac-base
-pub(crate) const CAC_BASE_VERSION: &str = "~0.3.0";
+pub(crate) const CAC_BASE_VERSION: &str = "~0.3.1";
 // @forklaunch/implementation-worker-bullmq
 pub(crate) const WORKER_BULLMQ_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-worker-redis

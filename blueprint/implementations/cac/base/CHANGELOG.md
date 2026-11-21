@@ -1,5 +1,16 @@
 # @forklaunch/implementation-cac-base
 
+## 0.3.1
+
+### Patch Changes
+
+- Add the claim-scrubbing engine and the real-CPT extension point, and fix the package's `exports` map.
+
+  - `ScrubbingService` checks a claim's charge lines and diagnosis codes in four layers: required fields (CO-16), NCCI procedure-to-procedure conflicts (CO-97), NCCI unit caps (CO-151) and LCD/NCD medical necessity (CO-50). Each finding carries a `message` and, when it is about one line or code, the 1-based `chargeLine` and the `code`. The rule tables are mock data; see the README section "Not production scrubbing yet".
+  - `CptCodeProvider` and the `CptCodeSource` interface let an organization that holds its own AMA CPT license supply its own codes. The package contains no CPT content.
+  - `normalizeCode` puts codes in one form (no dot, no spaces, upper case), so `E11.9`, `E119` and `e11.9` are the same code in every lookup. `MockProcedureCodeProvider` looks codes up through it.
+  - `exports["./services"]` pointed at `lib/services/index.{js,mjs}`, which the build never emitted; it now points at `lib/index.{js,mjs}`. The published 0.2.9 and 0.3.0 ship only `lib/index.{js,mjs}`, so importing `@forklaunch/implementation-cac-base/services` at runtime could not resolve.
+
 ## 0.3.0
 
 ### Minor Changes
