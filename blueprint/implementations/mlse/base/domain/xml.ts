@@ -43,10 +43,10 @@ export function createXmlParser(): XMLParser {
     // keep every value as text: ids and dates like "03" must not become
     // numbers and lose their leading zeros
     parseTagValue: false,
-    processEntities: true,
+    processEntities: true
     // DTD declarations in NCBI responses are not needed and must not be
-    // expanded.
-    htmlEntities: false
+    // expanded. HTML entities stay off: that is the parser's default, and
+    // its htmlEntities option is deprecated.
   });
 }
 
