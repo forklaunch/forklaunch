@@ -16,6 +16,10 @@ use super::rendered_template::RenderedTemplate;
 /// pnpm differs: `minimumReleaseAgeExclude` there does honour `@forklaunch/*`,
 /// which is why `pnpm_workspace.rs` gets away with a single pattern.
 ///
+/// Packages that apps only reach through another one (`hyper-express-fork` and
+/// `ws` through `hyper-express`, the hyper-express OpenTelemetry instrumentation
+/// through `core`) are listed too, because exclusions do not cascade.
+///
 /// Kept in sync with `package_json_constants.rs` by a test below, so adding a
 /// package there without adding it here fails the build rather than silently
 /// reintroducing release-day breakage.
@@ -30,6 +34,7 @@ const FORKLAUNCH_PACKAGES: &[&str] = &[
     "@forklaunch/core",
     "@forklaunch/express",
     "@forklaunch/hyper-express",
+    "@forklaunch/hyper-express-fork",
     "@forklaunch/implementation-billing-base",
     "@forklaunch/implementation-billing-stripe",
     "@forklaunch/implementation-cac-base",
@@ -54,9 +59,11 @@ const FORKLAUNCH_PACKAGES: &[&str] = &[
     "@forklaunch/interfaces-mlse",
     "@forklaunch/interfaces-worker",
     "@forklaunch/internal",
+    "@forklaunch/opentelemetry-instrumentation-hyper-express",
     "@forklaunch/testing",
     "@forklaunch/universal-sdk",
     "@forklaunch/validator",
+    "@forklaunch/ws",
 ];
 
 /// Bun equivalent of pnpm_workspace.rs's minimumReleaseAge default. Bun's

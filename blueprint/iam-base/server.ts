@@ -18,6 +18,7 @@ const userService = ci.resolve(tokens.UserService);
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     surfacePermissions: async (payload: { sub?: string }) => {
       if (!payload.sub) {

@@ -507,8 +507,9 @@ fn production_files(project_path: &Path) -> Vec<(String, String)> {
     out
 }
 
-/// Signals that a service is written to run as a managed instance: it reads
-/// the instance-gateway contract the platform injects.
+/// The instance-gateway contract the platform injects into a managed
+/// instance; a service that reads these as its own configuration is written
+/// to run as one (see [`is_managed_instance`]).
 const MANAGED_INSTANCE_MARKERS: &[&str] = &["INSTANCE_HMAC_KEY", "PLATFORM_GATEWAY_URL"];
 
 /// The module specifiers a source imports or requires, in order of appearance.
@@ -716,15 +717,47 @@ pub(crate) fn protected_data_in_email_subjects(sources: &str) -> Vec<String> {
     found
 }
 
-/// Whether a project is written to run as a managed instance: it reads the
-/// instance-gateway contract, or carries the relay the managed installer adds.
-pub(crate) fn is_managed_instance(project_path: &Path, sources: &str) -> bool {
-    MANAGED_INSTANCE_MARKERS
-        .iter()
-        .any(|marker| sources.contains(marker))
-        || project_path
-            .join("api/controllers/relay.controller.ts")
-            .exists()
+/// Whether a project is written to run as a managed instance: its own code
+/// reads the instance-gateway contract from its own environment.
+///
+/// That is a read of `INSTANCE_HMAC_KEY` or `PLATFORM_GATEWAY_URL` as this
+/// process's configuration: `getEnvVar('…')`, `process.env.…` /
+/// `process.env['…']` (or `Bun.env`, `import.meta.env`, `Deno.env.get`), a
+/// destructure of `process.env`, or resolving the config value from the
+/// container (`tokens.INSTANCE_HMAC_KEY`, as the installed relay controllers
+/// do). `forklaunch infra add` and `init relay` write exactly these reads.
+///
+/// Comments are ignored, and so is any other mention of the names: the
+/// platform that issues the keys, relays sessions or documents the contract
+/// names them as strings (`key: 'INSTANCE_HMAC_KEY'`) but never reads them as
+/// its own configuration. A file named `relay.controller.ts` is no signal on
+/// its own either: the platform's product relay has one too.
+pub(crate) fn is_managed_instance(_project_path: &Path, sources: &str) -> bool {
+    reads_instance_gateway_contract(sources)
+}
+
+/// Whether `sources` read one of [`MANAGED_INSTANCE_MARKERS`] as their own
+/// environment configuration (see [`is_managed_instance`]).
+fn reads_instance_gateway_contract(sources: &str) -> bool {
+    static READS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let reads = READS.get_or_init(|| {
+        let names = MANAGED_INSTANCE_MARKERS.join("|");
+        regex::Regex::new(&format!(
+            concat!(
+                r#"(?:\bgetEnvVar\s*(?:<[^>]*>)?\s*\(\s*|\bDeno\.env\.get\s*\(\s*|"#,
+                r#"\b(?:process|Bun)\.env\s*\[\s*|\bimport\.meta\.env\s*\[\s*)['"`](?:{names})['"`]"#,
+                r#"|\b(?:process|Bun)\.env\.(?:{names})\b|\bimport\.meta\.env\.(?:{names})\b"#,
+                r#"|\btokens\.(?:{names})\b"#,
+                r#"|\{{[^{{}}]*\b(?:{names})\b[^{{}}]*\}}\s*=\s*(?:process|Bun)\.env\b"#,
+            ),
+            names = names
+        ))
+        .expect("gateway contract read pattern")
+    });
+    if !MANAGED_INSTANCE_MARKERS.iter().any(|m| sources.contains(m)) {
+        return false;
+    }
+    reads.is_match(&super::tenancy::strip_comments(sources))
 }
 
 /// Stripe credentials a service might read.
@@ -1205,6 +1238,195 @@ pub(crate) fn suggest_classification(field_name: &str) -> Option<&'static str> {
     None
 }
 
+/// Container registrations that are the database itself: resolving one, or a
+/// registration whose factory depends on one, opens the ORM.
+const DATABASE_REGISTRATIONS: &[&str] = &["Orm", "EntityMgr", "EntityManager"];
+
+/// Project files that define the dependency container. They register the ORM
+/// factory (lazily) but do not open it: an entrypoint reaches the database
+/// only by resolving a registration that does, which is followed instead.
+const CONTAINER_FILES: &[&str] = &["registrations.ts", "bootstrapper.ts"];
+
+/// Text that opens or resolves the ORM in a TypeScript module, comments
+/// stripped: building one (`MikroORM.init(`, `new MikroORM(`), loading the
+/// module's ORM config (`mikro-orm.config`), or building an entity manager
+/// (`new EntityManager(`).
+fn opens_orm_directly(source: &str) -> Option<&'static str> {
+    static OPENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let opens = OPENS.get_or_init(|| {
+        regex::Regex::new(
+            r#"\bMikroORM\s*\.\s*init\b|\bnew\s+MikroORM\b|['"`][^'"`]*mikro-orm\.config(?:\.[jt]s)?['"`]|\bnew\s+EntityManager\b"#,
+        )
+        .expect("orm open pattern")
+    });
+    opens.find(source).map(|m| {
+        let text = m.as_str();
+        if text.contains("mikro-orm.config") {
+            "mikro-orm.config"
+        } else if text.contains("EntityManager") {
+            "new EntityManager"
+        } else if text.contains("init") {
+            "MikroORM.init"
+        } else {
+            "new MikroORM"
+        }
+    })
+}
+
+/// The container registrations in `registrations` (`Name: { lifetime: …,
+/// factory: ({ Dep, … }) => … }`), each with the registrations its factory
+/// destructures and whether its factory builds an ORM itself.
+fn container_registrations(
+    registrations: &str,
+) -> std::collections::HashMap<String, (Vec<String>, bool)> {
+    static ENTRY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static FACTORY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let entry = ENTRY.get_or_init(|| regex::Regex::new(r"\b([A-Za-z_$][\w$]*)\s*:\s*\{").unwrap());
+    let factory = FACTORY.get_or_init(|| {
+        regex::Regex::new(r"\bfactory\s*:\s*(?:async\s*)?\(\s*\{([^{}]*)\}").unwrap()
+    });
+    let mut out = std::collections::HashMap::new();
+    for m in entry.captures_iter(registrations) {
+        let name = m[1].to_string();
+        if out.contains_key(&name) {
+            continue;
+        }
+        let whole = m.get(0).unwrap();
+        let body = balanced_object(registrations, whole.end() - 1);
+        if !body.contains("lifetime") {
+            continue;
+        }
+        let deps = factory
+            .captures(body)
+            .map(|c| {
+                c[1].split(',')
+                    .map(|d| d.split(':').next().unwrap_or("").trim().to_string())
+                    .filter(|d| !d.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.insert(name, (deps, opens_orm_directly(body).is_some()));
+    }
+    out
+}
+
+/// Whether resolving registration `name` opens the database: it is the
+/// database, builds an ORM, or depends (transitively) on one that does.
+fn registration_opens_database(
+    name: &str,
+    registrations: &std::collections::HashMap<String, (Vec<String>, bool)>,
+    seen: &mut std::collections::HashSet<String>,
+) -> bool {
+    if DATABASE_REGISTRATIONS.contains(&name) {
+        return true;
+    }
+    if !seen.insert(name.to_string()) {
+        return false;
+    }
+    let Some((deps, builds_orm)) = registrations.get(name) else {
+        return false;
+    };
+    *builds_orm
+        || deps
+            .iter()
+            .any(|dep| registration_opens_database(dep, registrations, seen))
+}
+
+/// Project-local modules a source imports by value (`import … from './x'`,
+/// `export … from './x'`, `import('./x')`, `require('./x')`), resolved to
+/// files under `project_path`. Type-only imports load nothing at runtime and
+/// are skipped.
+fn local_imports(source: &str, from: &Path, project_path: &Path) -> Vec<std::path::PathBuf> {
+    static IMPORTS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = IMPORTS.get_or_init(|| {
+        regex::Regex::new(
+            r#"\b(?:import|export)\s+(type\s+)?(?:[^'";]*?\s+from\s*)?['"](\.{1,2}/[^'"]+)['"]|\b(?:import|require)\s*\(\s*['"](\.{1,2}/[^'"]+)['"]"#,
+        )
+        .expect("local import pattern")
+    });
+    let dir = from.parent().unwrap_or(project_path);
+    let mut out = Vec::new();
+    for c in re.captures_iter(source) {
+        if c.get(1).is_some() {
+            continue;
+        }
+        let Some(spec) = c.get(2).or_else(|| c.get(3)) else {
+            continue;
+        };
+        let base = dir.join(spec.as_str());
+        let stem = base.to_string_lossy().trim_end_matches(".js").to_string();
+        let candidates = [
+            base.clone(),
+            std::path::PathBuf::from(format!("{stem}.ts")),
+            std::path::PathBuf::from(format!("{stem}.tsx")),
+            base.join("index.ts"),
+        ];
+        if let Some(found) = candidates
+            .into_iter()
+            .find(|p| p.is_file() && p.extension().is_some_and(|e| e == "ts" || e == "tsx"))
+        {
+            out.push(found);
+        }
+    }
+    out
+}
+
+/// Whether a runtime entrypoint opens the project's database, and what shows
+/// it (`file: marker`). The entrypoint and every project-local module it
+/// imports by value are read, comments stripped; any one of them that
+/// builds the ORM (see [`opens_orm_directly`]) or resolves a container
+/// registration that is or depends on `Orm` / `EntityMgr` / `EntityManager`
+/// (`ci.resolve(tokens.Orm)`, a database `WorkerConsumer` built from
+/// `EntityMgr`, a service whose factory takes the entity manager) opens it.
+///
+/// The container files themselves are not followed: registering the ORM
+/// factory does not open it.
+pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path) -> Option<String> {
+    static TOKENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let token = TOKENS.get_or_init(|| regex::Regex::new(r"\btokens\.([A-Za-z_$][\w$]*)").unwrap());
+    let registrations = container_registrations(
+        &CONTAINER_FILES
+            .iter()
+            .filter_map(|f| fs::read_to_string(project_path.join(f)).ok())
+            .map(|s| super::tenancy::strip_comments(&s))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    let root = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+    let mut queue = vec![entrypoint.to_path_buf()];
+    let mut visited = std::collections::HashSet::new();
+    while let Some(file) = queue.pop() {
+        let canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
+        if !canonical.starts_with(&root) || !visited.insert(canonical.clone()) {
+            continue;
+        }
+        let relative = canonical
+            .strip_prefix(&root)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if CONTAINER_FILES.contains(&relative.as_str()) {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&canonical) else {
+            continue;
+        };
+        let source = super::tenancy::strip_comments(&text);
+        if let Some(marker) = opens_orm_directly(&source) {
+            return Some(format!("{relative}: {marker}"));
+        }
+        for c in token.captures_iter(&source) {
+            let name = &c[1];
+            if registration_opens_database(name, &registrations, &mut Default::default()) {
+                return Some(format!("{relative}: tokens.{name}"));
+            }
+        }
+        queue.extend(local_imports(&source, &canonical, &root));
+    }
+    None
+}
+
 /// Which tenant gates an entrypoint source is missing.
 pub(crate) fn missing_tenant_gates(source: &str) -> Vec<&'static (&'static str, &'static str)> {
     TENANT_GATES
@@ -1440,13 +1662,20 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
             }
         }
 
-        // 1. Tenant-isolation wiring in every runtime entrypoint
+        // 1. Tenant-isolation wiring in every runtime entrypoint that opens
+        //    the database. A worker that holds no ORM (it calls the service
+        //    over HTTP) has nothing to gate; one that opens it, directly or
+        //    through a module or container registration, must gate it.
         if owns_persistence {
             for entrypoint in ENTRYPOINTS {
                 let entrypoint_path = project_path.join(entrypoint);
                 if !entrypoint_path.exists() {
                     continue;
                 }
+                let Some(opened_by) = entrypoint_database_access(&project_path, &entrypoint_path)
+                else {
+                    continue;
+                };
                 let source = fs::read_to_string(&entrypoint_path)?;
                 for (_, consequence) in missing_tenant_gates(&source) {
                     findings.push(LocalFinding {
@@ -1454,7 +1683,10 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                         project: project.clone(),
                         check: "tenant-isolation-wiring".to_string(),
                         subject: (*entrypoint).to_string(),
-                        message: format!("{} {}", entrypoint, consequence),
+                        message: format!(
+                            "{} {} (it opens the database: {})",
+                            entrypoint, consequence, opened_by
+                        ),
                     });
                 }
             }
@@ -2467,7 +2699,11 @@ mod fs_tests {
         let proj = dir.join("svc");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(proj.join("persistence")).unwrap();
-        std::fs::write(proj.join("server.ts"), "const app = express();").unwrap();
+        std::fs::write(
+            proj.join("server.ts"),
+            "const orm = ci.resolve(tokens.Orm);\nconst app = express();",
+        )
+        .unwrap();
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
@@ -2800,9 +3036,15 @@ mod wiring_tests {
         std::fs::create_dir_all(&dir).unwrap();
         assert!(is_managed_instance(&dir, "getEnvVar('INSTANCE_HMAC_KEY')"));
         assert!(!is_managed_instance(&dir, "getEnvVar('DB_HOST')"));
+        // A relay controller is a signal only when it resolves the instance's
+        // own key, as the one `init relay` installs does.
         std::fs::create_dir_all(dir.join("api/controllers")).unwrap();
         std::fs::write(dir.join("api/controllers/relay.controller.ts"), "").unwrap();
-        assert!(is_managed_instance(&dir, ""));
+        assert!(!is_managed_instance(&dir, ""));
+        assert!(is_managed_instance(
+            &dir,
+            "const INSTANCE_HMAC_KEY = ci.resolve(tokens.INSTANCE_HMAC_KEY);"
+        ));
         let _ = std::fs::remove_dir_all(&dir);
 
         assert_eq!(
@@ -4178,5 +4420,369 @@ struct QueueEnvelope {
         assert!(!rust_stripe_webhook_unverified("fn health() {}"));
         let _ = std::fs::remove_dir_all(&unverified);
         let _ = std::fs::remove_dir_all(&verified);
+    }
+}
+
+#[cfg(test)]
+mod tenant_entrypoint_tests {
+    use super::*;
+
+    /// A module with a persistence directory, the given container files and
+    /// project files, and the tenant-isolation findings it yields (subject:
+    /// entrypoint).
+    fn tenant_findings(name: &str, files: &[(&str, &str)]) -> Vec<String> {
+        let dir = std::env::temp_dir().join(format!("fl-tenant-entry-{name}"));
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence")).unwrap();
+        for (path, text) in files {
+            let path = proj.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let mut found: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check == "tenant-isolation-wiring")
+            .map(|f| f.subject)
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        found.dedup();
+        found
+    }
+
+    const REGISTRATIONS: &str = "
+const runtimeDependencies = environmentConfig.chain({
+  Orm: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
+  },
+  EntityMgr: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ Orm }, context) => Orm.em.fork(context?.entityManagerOptions)
+  },
+  OtelCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: ({ OTEL_SERVICE_NAME }) => new OpenTelemetryCollector(OTEL_SERVICE_NAME)
+  },
+  BuildReporter: {
+    lifetime: Lifetime.Singleton,
+    type: BuildReporter,
+    factory: ({ SERVICE_URL, HMAC_SECRET_KEY, OtelCollector }) =>
+      new BuildReporter(SERVICE_URL, HMAC_SECRET_KEY, OtelCollector)
+  },
+  ReportRepository: {
+    lifetime: Lifetime.Scoped,
+    type: ReportRepository,
+    factory: ({ EntityMgr }) => new ReportRepository(EntityMgr)
+  },
+  ReportService: {
+    lifetime: Lifetime.Scoped,
+    type: ReportService,
+    factory: ({ ReportRepository, OtelCollector }) => new ReportService(ReportRepository, OtelCollector)
+  },
+  WorkerConsumer: {
+    lifetime: Lifetime.Scoped,
+    type: function_([], type<DatabaseWorkerConsumer>()),
+    factory: ({ EntityMgr, WorkerOptions }) => (process, fail) =>
+      new DatabaseWorkerConsumer(EventRecord, EntityMgr, WorkerOptions, process, fail)
+  }
+});";
+
+    const GATED_SERVER: &str = "import { ci, tokens } from './bootstrapper';\nconst orm = ci.resolve(tokens.Orm);\nsetupTenantFilter(orm);\nsetupRls(orm);";
+
+    #[test]
+    fn a_worker_that_calls_the_service_over_http_needs_no_gates() {
+        // The managed-apps shape: the worker resolves HTTP reporters only and
+        // imports a local client; the ORM is registered but never resolved.
+        let found = tenant_findings(
+            "http-worker",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                (
+                    "bootstrapper.ts",
+                    "import { createDependencyContainer } from './registrations';\nexport const { ci, tokens } = createDependencyContainer();",
+                ),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "// tenant isolation (setupTenantFilter) lives in server.ts; this worker never\n// calls ci.resolve(tokens.Orm) or opens mikro-orm.config.\n\
+                     import { ci, tokens } from './bootstrapper';\n\
+                     import type { Sdk } from './sdk';\n\
+                     import type { EntityManager } from '@mikro-orm/core';\n\
+                     import { InternalClient } from './domain/internal.client';\n\
+                     const otel = ci.resolve(tokens.OtelCollector);\n\
+                     const reporter = ci.resolve(tokens.BuildReporter);\n\
+                     const client = new InternalClient(ci.resolve(tokens.SERVICE_URL));",
+                ),
+                (
+                    "domain/internal.client.ts",
+                    "export class InternalClient { constructor(readonly url: string) {} }",
+                ),
+                ("sdk.ts", "const em = ci.resolve(tokens.EntityMgr);"),
+            ],
+        );
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn a_worker_resolving_the_orm_or_a_database_registration_needs_gates() {
+        for (name, worker) in [
+            ("orm", "const orm = ci.resolve(tokens.Orm);"),
+            ("em", "const em = ci.scopedResolver(tokens.EntityMgr)();"),
+            // The generated database worker: the consumer is built from EntityMgr.
+            (
+                "consumer",
+                "await ci.resolve(tokens.WorkerConsumer)(processEvents, processErrors).start();",
+            ),
+            // A service two registrations away from the entity manager.
+            (
+                "service",
+                "const service = ci.resolve(tokens.ReportService);",
+            ),
+            ("mikro-init", "const orm = await MikroORM.init(config);"),
+        ] {
+            let found = tenant_findings(
+                &format!("db-worker-{name}"),
+                &[
+                    ("registrations.ts", REGISTRATIONS),
+                    ("server.ts", GATED_SERVER),
+                    (
+                        "worker.ts",
+                        &format!("import {{ ci, tokens }} from './bootstrapper';\n{worker}"),
+                    ),
+                ],
+            );
+            assert_eq!(found, vec!["worker.ts"], "{name}");
+        }
+    }
+
+    #[test]
+    fn a_worker_opening_the_orm_through_an_imported_module_needs_gates() {
+        // The studio-orchestrator shape: the worker skips the container and a
+        // bootstrap module it imports initializes the module's own ORM config.
+        let files = [
+            ("server.ts", GATED_SERVER),
+            (
+                "worker.ts",
+                "import { openRuntime } from './domain/services/runtime/bootstrap';\nconst runtime = await openRuntime();",
+            ),
+            (
+                "domain/services/runtime/bootstrap.ts",
+                "import { MikroORM } from '@mikro-orm/postgresql';\nimport { helper } from './helper.js';\nexport async function openRuntime() {\n  const { default: database } = await import('../../../mikro-orm.config');\n  return MikroORM.init(database);\n}",
+            ),
+            (
+                "domain/services/runtime/helper.ts",
+                "export const helper = 1;",
+            ),
+        ];
+        assert_eq!(tenant_findings("imported-open", &files), vec!["worker.ts"]);
+
+        let dir = std::env::temp_dir().join("fl-tenant-entry-evidence");
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            std::fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
+            std::fs::write(dir.join(path), text).unwrap();
+        }
+        assert_eq!(
+            entrypoint_database_access(&dir, &dir.join("worker.ts")).as_deref(),
+            Some("domain/services/runtime/bootstrap.ts: mikro-orm.config")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn gated_entrypoints_and_type_only_imports_are_clean() {
+        let found = tenant_findings(
+            "gated",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "import { ci, tokens } from './bootstrapper';\nimport type { Db } from './db';\nconst orm = ci.resolve(tokens.Orm);\nsetupTenantFilter(orm);\nsetupRls(orm);",
+                ),
+                ("db.ts", "export const orm = await MikroORM.init(config);"),
+            ],
+        );
+        assert!(found.is_empty(), "{found:?}");
+        // A server whose routes reach a database-backed service is still checked.
+        let found = tenant_findings(
+            "ungated-server",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                (
+                    "server.ts",
+                    "import { reportRouter } from './api/routes/report.routes';\napp.use(reportRouter);",
+                ),
+                (
+                    "api/routes/report.routes.ts",
+                    "export { reportRouter } from '../controllers/report.controller';",
+                ),
+                (
+                    "api/controllers/report.controller.ts",
+                    "const serviceFactory = ci.scopedResolver(tokens.ReportService);",
+                ),
+            ],
+        );
+        assert_eq!(found, vec!["server.ts"]);
+    }
+}
+
+#[cfg(test)]
+mod managed_detection_tests {
+    use super::*;
+
+    const MANAGED_CHECKS: &[&str] = &[
+        "managed-provider-credentials",
+        "email-provider-direct-in-managed",
+        "sms-provider-direct-in-managed",
+        "whatsapp-provider-direct-in-managed",
+        "voice-provider-direct-in-managed",
+    ];
+
+    /// Vendor access every managed check fires on: a Twilio key, SES, a
+    /// Pinpoint SMS client, AWS Social Messaging and Connect.
+    const VENDORS: &str = "import { SESv2Client } from '@aws-sdk/client-sesv2';\n\
+        import { PinpointSMSVoiceV2Client } from '@aws-sdk/client-pinpoint-sms-voice-v2';\n\
+        import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging';\n\
+        import { ConnectClient } from '@aws-sdk/client-connect';\n\
+        const token = getEnvVar('TWILIO_AUTH_TOKEN');\n\
+        const connectInstance = getEnvVar('CONNECT_INSTANCE_ID');\n";
+
+    fn managed_checks(name: &str, files: &[(&str, &str)]) -> Vec<String> {
+        let dir = std::env::temp_dir().join(format!("fl-managed-detect-{name}"));
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = proj.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let mut found: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.check)
+            .filter(|c| MANAGED_CHECKS.contains(&c.as_str()))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    fn all_managed_checks() -> Vec<String> {
+        let mut all: Vec<String> = MANAGED_CHECKS.iter().map(|c| c.to_string()).collect();
+        all.sort();
+        all
+    }
+
+    #[test]
+    fn a_managed_customer_app_still_triggers_every_managed_check() {
+        // The gateway contract as `forklaunch infra add` writes it.
+        let registrations = "const environmentConfig = configInjector.chain({\n\
+              PLATFORM_GATEWAY_URL: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('PLATFORM_GATEWAY_URL') ?? undefined },\n\
+              INSTANCE_ID: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('INSTANCE_ID') ?? undefined },\n\
+              INSTANCE_HMAC_KEY: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined }\n\
+            });";
+        assert_eq!(
+            managed_checks(
+                "customer",
+                &[
+                    ("registrations.ts", registrations),
+                    ("domain/vendors.ts", VENDORS)
+                ],
+            ),
+            all_managed_checks()
+        );
+        // A raw environment read is the same signal.
+        assert_eq!(
+            managed_checks(
+                "customer-env",
+                &[(
+                    "domain/vendors.ts",
+                    &format!("const key = process.env.INSTANCE_HMAC_KEY;\n{VENDORS}")
+                )],
+            ),
+            all_managed_checks()
+        );
+        // So is the relay `init relay` installs, which resolves the instance key.
+        assert_eq!(
+            managed_checks(
+                "customer-relay",
+                &[
+                    (
+                        "api/controllers/relay.controller.ts",
+                        "const INSTANCE_HMAC_KEY = ci.resolve(tokens.INSTANCE_HMAC_KEY);"
+                    ),
+                    ("domain/vendors.ts", VENDORS),
+                ],
+            ),
+            all_managed_checks()
+        );
+    }
+
+    #[test]
+    fn the_platform_gateway_that_issues_the_contract_is_not_a_managed_instance() {
+        // The gateway issues the keys, documents them and runs the product
+        // relay; it names the contract but never reads it as its own config.
+        let provisioner = "/** The deploy hands the app PLATFORM_GATEWAY_URL + INSTANCE_ID + INSTANCE_HMAC_KEY. */\n\
+            // getEnvVar('INSTANCE_HMAC_KEY') is what the instance calls.\n\
+            export const GATEWAY_CONTRACT = ['PLATFORM_GATEWAY_URL', 'INSTANCE_ID', 'INSTANCE_HMAC_KEY'] as const;\n\
+            export function instanceEnv(principal: { url: string; hmacKey: string }) {\n\
+              return [\n\
+                { key: 'INSTANCE_HMAC_KEY', value: principal.hmacKey },\n\
+                { key: 'PLATFORM_GATEWAY_URL', value: principal.url }\n\
+              ];\n\
+            }\n\
+            const answer = { PLATFORM_GATEWAY_URL: url, INSTANCE_HMAC_KEY: key };\n\
+            const prompt = `authenticate with the instance's \\`INSTANCE_HMAC_KEY\\`; no provider key`;\n";
+        assert!(
+            managed_checks(
+                "gateway",
+                &[
+                    (
+                        "registrations.ts",
+                        "const HMAC_SECRET_KEY = getEnvVar('HMAC_SECRET_KEY');"
+                    ),
+                    ("domain/provisioner.ts", provisioner),
+                    (
+                        "api/controllers/relay.controller.ts",
+                        "const relay = ci.scopedResolver(tokens.RelayService);"
+                    ),
+                    ("domain/vendors.ts", VENDORS),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn gateway_contract_reads_are_recognized_in_every_form() {
+        let dir = std::env::temp_dir();
+        for read in [
+            "getEnvVar('INSTANCE_HMAC_KEY')",
+            "getEnvVar(\"PLATFORM_GATEWAY_URL\")",
+            "process.env.PLATFORM_GATEWAY_URL",
+            "process.env['INSTANCE_HMAC_KEY']",
+            "Bun.env.INSTANCE_HMAC_KEY",
+            "const { INSTANCE_ID, INSTANCE_HMAC_KEY } = process.env;",
+            "ci.resolve(tokens.PLATFORM_GATEWAY_URL)",
+        ] {
+            assert!(is_managed_instance(&dir, read), "{read}");
+        }
+        for mention in [
+            "// getEnvVar('INSTANCE_HMAC_KEY')",
+            "/* process.env.PLATFORM_GATEWAY_URL */",
+            "{ key: 'INSTANCE_HMAC_KEY', value }",
+            "const names = ['PLATFORM_GATEWAY_URL'];",
+            "getEnvVar('FORKLAUNCH_INSTANCE_HMAC_KEY')",
+            "process.env.MY_INSTANCE_HMAC_KEY",
+        ] {
+            assert!(!is_managed_instance(&dir, mention), "{mention}");
+        }
     }
 }

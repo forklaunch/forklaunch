@@ -8,6 +8,7 @@ use crate::{
         validate::require_manifest,
     },
 };
+use super::audit::{EntityReport, FieldReport};
 use anyhow::Result;
 use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde::{Deserialize, Serialize};
@@ -129,6 +130,56 @@ pub(crate) struct Field {
     classification: String,
     nullable: bool,
 }
+/// The classified fields of every validly declared Rust entity, in the shape
+/// of the field inventory a release carries. TypeScript entities are read from
+/// source; a Rust crate exports its declarations when it compiles, so they are
+/// the only record of what a Rust service stores.
+///
+/// `encrypted` is true when the entity's `ProtectedField` model names the
+/// member. That is a declared binding, the same strength of claim as the
+/// TypeScript scan's "the owning module registers an encryptor".
+pub(crate) fn entity_reports(declarations: &RustDeclarations) -> Vec<EntityReport> {
+    let mut reports = Vec::new();
+    for project in &declarations.projects {
+        if project.status != "valid-declarations" {
+            continue;
+        }
+        let Some(artifact) = &project.declarations else {
+            continue;
+        };
+        for entity in &artifact.entities {
+            let protected: Vec<&str> = match &entity.binding {
+                Some(Binding::ProtectedModel { protected_members }) => {
+                    protected_members.iter().map(|m| m.member.as_str()).collect()
+                }
+                _ => Vec::new(),
+            };
+            let mut fields: Vec<FieldReport> = entity
+                .fields
+                .iter()
+                .filter(|field| field.classification != "none")
+                .map(|field| {
+                    FieldReport::declared(
+                        field.member.clone(),
+                        field.classification.clone(),
+                        protected.contains(&field.member.as_str()),
+                    )
+                })
+                .collect();
+            if fields.is_empty() {
+                continue;
+            }
+            fields.sort_by(|a, b| a.name().cmp(b.name()));
+            reports.push(EntityReport::declared(
+                entity.entity.clone(),
+                project.project.clone(),
+                fields,
+            ));
+        }
+    }
+    reports
+}
+
 fn valid_name(s: &str) -> bool {
     !s.trim().is_empty() && s.len() <= 256 && !s.chars().any(char::is_control)
 }
@@ -355,6 +406,39 @@ mod tests {
             "email_ciphertext"
         );
         assert!(!json.to_string().contains("\"encrypted\":true"));
+    }
+    #[test]
+    fn declared_entities_become_field_inventory_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut value = artifact();
+        value["entities"] = json!([
+            {"entity":"Owner","storage":"owners","kind":"postgres-table",
+             "binding":{"kind":"protected-model","protectedMembers":[{"member":"ssn_ciphertext","purpose":"owner-ssn-v1"}]},
+             "fields":[
+                {"member":"id","column":"id","classification":"none","nullable":false},
+                {"member":"ssn_ciphertext","column":"ssn_ciphertext","classification":"pii","nullable":false},
+                {"member":"email","column":"email","classification":"pii","nullable":false}]},
+            {"entity":"Session","storage":"sessions","kind":"postgres-table",
+             "binding":{"kind":"declarations-only"},
+             "fields":[{"member":"id","column":"id","classification":"none","nullable":false}]}
+        ]);
+        write(dir.path(), &value);
+        let declarations = scan(dir.path(), "src", &[project("notes", "src/notes")]);
+        let json = serde_json::to_value(entity_reports(&declarations)).unwrap();
+        // Only entities with classified fields, only their classified fields,
+        // and `encrypted` only for members the protected model names.
+        assert_eq!(
+            json,
+            json!([{"name":"Owner","module":"notes","fields":[
+                {"name":"email","compliance":"pii","encrypted":false},
+                {"name":"ssn_ciphertext","compliance":"pii","encrypted":true}]}])
+        );
+        // An artifact that failed validation contributes nothing.
+        let mut bad = artifact();
+        bad["runtimeEnforcement"] = json!("certified");
+        write(dir.path(), &bad);
+        let declarations = scan(dir.path(), "src", &[project("notes", "src/notes")]);
+        assert!(entity_reports(&declarations).is_empty());
     }
     #[test]
     fn missing_invalid_and_overclaiming_artifacts_remain_visible() {

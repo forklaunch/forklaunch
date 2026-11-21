@@ -1,5 +1,5 @@
 import {
-  getCurrentTenantId,
+  getBoundTenantId,
   withEncryptionContext
 } from '@forklaunch/core/persistence';
 
@@ -21,7 +21,7 @@ export function createAuthEncryptionOrm<
   const protectedModel = (entity: unknown) =>
     ['account', 'jwks'].includes(modelName(entity));
   const assertScope = () => {
-    if (getCurrentTenantId() !== AUTH_ENCRYPTION_CONTEXT)
+    if (getBoundTenantId() !== AUTH_ENCRYPTION_CONTEXT)
       throw new Error(
         'IAM service encryption policy scope is missing or incompatible.'
       );

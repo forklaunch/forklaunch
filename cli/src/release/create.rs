@@ -204,9 +204,10 @@ use crate::compliance::scan::FieldInventory;
 /// a scan error is reported and the release goes out without an inventory.
 fn scan_release_field_inventory(
     modules_path: &std::path::Path,
+    rust: &crate::compliance::rust_artifact::RustDeclarations,
     stdout: &mut termcolor::StandardStream,
 ) -> Result<Option<FieldInventory>> {
-    match crate::compliance::scan::scan_field_inventory(modules_path) {
+    match crate::compliance::scan::scan_field_inventory(modules_path, rust) {
         Ok(inventory) => Ok(Some(inventory)),
         Err(e) => {
             log_warn!(
@@ -1264,8 +1265,16 @@ impl CliCommand for CreateCommand {
                 manifest_json.len()
             );
 
-            let field_inventory =
-                scan_release_field_inventory(&app_root.join(&manifest.modules_path), &mut stdout)?;
+            let rust_declarations = crate::compliance::rust_artifact::scan(
+                &app_root,
+                &manifest.modules_path,
+                &manifest.projects,
+            );
+            let field_inventory = scan_release_field_inventory(
+                &app_root.join(&manifest.modules_path),
+                &rust_declarations,
+                &mut stdout,
+            )?;
             upload_release(
                 &application_id,
                 release_manifest,

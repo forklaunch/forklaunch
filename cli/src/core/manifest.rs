@@ -647,7 +647,7 @@ macro_rules! config_struct {
             }
         }
 
-        paste::paste! {
+        pastey::paste! {
             crate::internal_config_struct! {
                 $(#[$meta])*
                 #[derive(Deserialize)]

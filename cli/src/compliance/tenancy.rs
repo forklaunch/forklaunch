@@ -165,7 +165,7 @@ fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// Strip `//` line comments and `/* */` blocks so prose about the entity
 /// manager does not count as a dependency on it.
-fn strip_comments(source: &str) -> String {
+pub(crate) fn strip_comments(source: &str) -> String {
     let mut out = String::with_capacity(source.len());
     let mut chars = source.chars().peekable();
     let mut in_block = false;

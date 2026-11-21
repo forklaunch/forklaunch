@@ -50,7 +50,7 @@
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },

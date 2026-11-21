@@ -12,7 +12,7 @@ macro_rules! mutable_enum {
             $($variant(&$lt $($ty)*)),*
         }
 
-        paste::paste! {
+        pastey::paste! {
             $(#[$meta])*
             $vis enum [<Mutable $name>]<$lt> {
                 $($variant(&$lt mut $($ty)*)),*
