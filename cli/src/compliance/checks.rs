@@ -1371,8 +1371,25 @@ fn local_imports(source: &str, from: &Path, project_path: &Path) -> Vec<std::pat
     out
 }
 
-/// Whether a runtime entrypoint opens the project's database, and what shows
-/// it (`file: marker`). The entrypoint and every project-local module it
+/// Just the `opened_by` of [`entrypoint_database_opening`].
+#[cfg(test)]
+pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path) -> Option<String> {
+    entrypoint_database_opening(project_path, entrypoint).map(|opening| opening.opened_by)
+}
+
+/// Where a runtime entrypoint opens the database.
+pub(crate) struct DatabaseOpening {
+    /// What shows it, as `file: marker`.
+    pub(crate) opened_by: String,
+    /// The comment-stripped source of every file on the import chain from
+    /// the entrypoint to the file that opens the database, both included.
+    /// The tenant gates may sit anywhere on it: a bootstrap module that
+    /// initializes the ORM and gates it right away covers the entrypoint.
+    pub(crate) chain_sources: Vec<String>,
+}
+
+/// Whether a runtime entrypoint opens the project's database, where (see
+/// [`DatabaseOpening`]). The entrypoint and every project-local module it
 /// imports by value are read, comments stripped; any one of them that
 /// builds the ORM (see [`opens_orm_directly`]) or resolves a container
 /// registration that is or depends on `Orm` / `EntityMgr` / `EntityManager`
@@ -1381,7 +1398,10 @@ fn local_imports(source: &str, from: &Path, project_path: &Path) -> Vec<std::pat
 ///
 /// The container files themselves are not followed: registering the ORM
 /// factory does not open it.
-pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path) -> Option<String> {
+pub(crate) fn entrypoint_database_opening(
+    project_path: &Path,
+    entrypoint: &Path,
+) -> Option<DatabaseOpening> {
     static TOKENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let token = TOKENS.get_or_init(|| regex::Regex::new(r"\btokens\.([A-Za-z_$][\w$]*)").unwrap());
     let registrations = container_registrations(
@@ -1395,9 +1415,27 @@ pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path)
     let root = project_path
         .canonicalize()
         .unwrap_or_else(|_| project_path.to_path_buf());
-    let mut queue = vec![entrypoint.to_path_buf()];
+    use std::path::PathBuf;
+    /// Each file read: its comment-stripped source and the file that imported it.
+    type Read = std::collections::HashMap<PathBuf, (String, Option<PathBuf>)>;
+    /// The opener's source, then each importer's back to the entrypoint.
+    fn chain(opener: &Path, source: String, importer: Option<PathBuf>, read: &Read) -> Vec<String> {
+        let mut sources = vec![source];
+        let mut seen = std::collections::HashSet::from([opener.to_path_buf()]);
+        let mut next = importer;
+        while let Some(file) = next {
+            let Some((text, parent)) = read.get(&file).filter(|_| seen.insert(file.clone())) else {
+                break;
+            };
+            sources.push(text.clone());
+            next = parent.clone();
+        }
+        sources
+    }
+    let mut queue: Vec<(PathBuf, Option<PathBuf>)> = vec![(entrypoint.to_path_buf(), None)];
     let mut visited = std::collections::HashSet::new();
-    while let Some(file) = queue.pop() {
+    let mut read = Read::default();
+    while let Some((file, importer)) = queue.pop() {
         let canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
         if !canonical.starts_with(&root) || !visited.insert(canonical.clone()) {
             continue;
@@ -1413,16 +1451,27 @@ pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path)
             continue;
         };
         let source = super::tenancy::strip_comments(&text);
-        if let Some(marker) = opens_orm_directly(&source) {
-            return Some(format!("{relative}: {marker}"));
+        let opened_by = opens_orm_directly(&source)
+            .map(|marker| format!("{relative}: {marker}"))
+            .or_else(|| {
+                token.captures_iter(&source).find_map(|c| {
+                    let name = &c[1];
+                    registration_opens_database(name, &registrations, &mut Default::default())
+                        .then(|| format!("{relative}: tokens.{name}"))
+                })
+            });
+        if let Some(opened_by) = opened_by {
+            return Some(DatabaseOpening {
+                opened_by,
+                chain_sources: chain(&canonical, source, importer, &read),
+            });
         }
-        for c in token.captures_iter(&source) {
-            let name = &c[1];
-            if registration_opens_database(name, &registrations, &mut Default::default()) {
-                return Some(format!("{relative}: tokens.{name}"));
-            }
-        }
-        queue.extend(local_imports(&source, &canonical, &root));
+        queue.extend(
+            local_imports(&source, &canonical, &root)
+                .into_iter()
+                .map(|import| (import, Some(canonical.clone()))),
+        );
+        read.insert(canonical, (source, importer));
     }
     None
 }
@@ -1672,12 +1721,15 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                 if !entrypoint_path.exists() {
                     continue;
                 }
-                let Some(opened_by) = entrypoint_database_access(&project_path, &entrypoint_path)
+                let Some(opening) = entrypoint_database_opening(&project_path, &entrypoint_path)
                 else {
                     continue;
                 };
-                let source = fs::read_to_string(&entrypoint_path)?;
-                for (_, consequence) in missing_tenant_gates(&source) {
+                // The gates count anywhere between the entrypoint and the
+                // file that opens the ORM (comments stripped).
+                let opened_by = opening.opened_by;
+                let chain = opening.chain_sources.join("\n");
+                for (_, consequence) in missing_tenant_gates(&chain) {
                     findings.push(LocalFinding {
                         severity: Severity::Warning,
                         project: project.clone(),
@@ -4592,6 +4644,136 @@ const runtimeDependencies = environmentConfig.chain({
             Some("domain/services/runtime/bootstrap.ts: mikro-orm.config")
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A worker importing a bootstrap module (through a middle module) that
+    /// opens the ORM with the given body after `MikroORM.init(..)`.
+    fn imported_bootstrap(bootstrap_tail: &str) -> Vec<(&'static str, String)> {
+        vec![
+            ("server.ts", GATED_SERVER.to_string()),
+            (
+                "worker.ts",
+                "import { start } from './domain/runtime';\nawait start();".to_string(),
+            ),
+            (
+                "domain/runtime.ts",
+                "import { bootstrap } from './services/bootstrap';\nexport const start = () => bootstrap();".to_string(),
+            ),
+            (
+                "domain/services/bootstrap.ts",
+                format!(
+                    "import {{ MikroORM }} from '@mikro-orm/postgresql';\n\
+                     export async function bootstrap() {{\n\
+                       const {{ default: database }} = await import('../../mikro-orm.config');\n\
+                       const orm = await MikroORM.init(database);\n\
+                       {bootstrap_tail}\n\
+                       return orm;\n\
+                     }}"
+                ),
+            ),
+        ]
+    }
+
+    fn findings_for(name: &str, files: &[(&'static str, String)]) -> Vec<String> {
+        let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        tenant_findings(name, &files)
+    }
+
+    #[test]
+    fn gates_in_the_imported_module_that_opens_the_orm_count() {
+        // The studio-orchestrator shape: package-library-bootstrap.ts opens
+        // the ORM and gates it right away; worker.ts never touches it.
+        let found = findings_for(
+            "bootstrap-gated",
+            &imported_bootstrap(
+                "setupTenantFilter(orm, { exempt: [] });\nexcludePlatformTenantFromRowFilter(orm);\nawait setupRls(orm, { schema });",
+            ),
+        );
+        assert!(found.is_empty(), "{found:?}");
+
+        // Gates split between the entrypoint and the opener also count.
+        let mut files = imported_bootstrap("await setupRls(orm, { schema });");
+        files[1].1.push_str("\nsetupTenantFilter(orm);");
+        assert!(findings_for("bootstrap-split", &files).is_empty());
+    }
+
+    #[test]
+    fn an_imported_module_that_opens_the_orm_without_gates_still_fails() {
+        assert_eq!(
+            findings_for("bootstrap-ungated", &imported_bootstrap("")),
+            vec!["worker.ts"]
+        );
+        // Only one gate wired: the other is still reported.
+        let dir = std::env::temp_dir().join("fl-tenant-entry-bootstrap-half");
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence")).unwrap();
+        for (path, text) in imported_bootstrap("setupTenantFilter(orm);") {
+            std::fs::create_dir_all(proj.join(path).parent().unwrap()).unwrap();
+            std::fs::write(proj.join(path), text).unwrap();
+        }
+        let messages: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check == "tenant-isolation-wiring")
+            .map(|f| f.message)
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(messages.len(), 1, "{messages:?}");
+        assert!(
+            messages[0].contains("does not call setupRls"),
+            "{messages:?}"
+        );
+        assert!(
+            messages[0].contains("domain/services/bootstrap.ts: mikro-orm.config"),
+            "{messages:?}"
+        );
+    }
+
+    #[test]
+    fn gates_only_in_comments_do_not_count() {
+        for (name, tail) in [
+            ("line", "// setupTenantFilter(orm); setupRls(orm);"),
+            (
+                "block",
+                "/* TODO: setupTenantFilter(orm);\n   setupRls(orm); */",
+            ),
+        ] {
+            assert_eq!(
+                findings_for(
+                    &format!("bootstrap-comment-{name}"),
+                    &imported_bootstrap(tail)
+                ),
+                vec!["worker.ts"],
+                "{name}"
+            );
+        }
+        // Same for an entrypoint that opens the ORM itself.
+        let found = tenant_findings(
+            "entry-comment",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "const orm = ci.resolve(tokens.Orm);\n// setupTenantFilter(orm);\n/* setupRls(orm); */",
+                ),
+            ],
+        );
+        assert_eq!(found, vec!["worker.ts"]);
+    }
+
+    #[test]
+    fn gates_in_a_sibling_import_off_the_opening_chain_do_not_count() {
+        // A module the worker imports that never leads to the ORM is not
+        // where this runtime gates its database.
+        let mut files = imported_bootstrap("");
+        files[1].1 = format!("import './unrelated';\n{}", files[1].1);
+        files.push((
+            "unrelated.ts",
+            "export const x = (orm) => { setupTenantFilter(orm); setupRls(orm); };".to_string(),
+        ));
+        assert_eq!(findings_for("bootstrap-sibling", &files), vec!["worker.ts"]);
     }
 
     #[test]
