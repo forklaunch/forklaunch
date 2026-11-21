@@ -167,6 +167,36 @@ describe('CORS defaults', () => {
     });
   });
 
+  describe("cors: 'environment'", () => {
+    it('resolves exactly like leaving the option out', () => {
+      for (const env of [
+        { NODE_ENV: 'production' },
+        { NODE_ENV: 'development' },
+        { NODE_ENV: 'production', CORS_ORIGINS: 'https://app.example.com' },
+        { CORS_ORIGINS: '*' }
+      ]) {
+        const stated = resolveCorsOptions('environment', env);
+        const omitted = resolveCorsOptions(undefined, env);
+        expect(String(stated.options.origin)).toBe(
+          String(omitted.options.origin)
+        );
+        expect(stated.warning).toBe(omitted.warning);
+      }
+    });
+
+    it('never falls through to the wildcard the cors package uses for a missing origin', () => {
+      const { options } = resolveCorsOptions('environment', {
+        NODE_ENV: 'production'
+      });
+      expect(options.origin).toBe(false);
+      expect(
+        respond(options, 'https://elsewhere.example')[
+          'access-control-allow-origin'
+        ]
+      ).toBeUndefined();
+    });
+  });
+
   describe('the app passes cors options', () => {
     it('uses them exactly as given', () => {
       for (const appCors of [

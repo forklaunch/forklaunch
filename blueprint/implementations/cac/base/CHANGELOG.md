@@ -1,6 +1,6 @@
 # @forklaunch/implementation-cac-base
 
-## 0.2.10
+## 0.3.1
 
 ### Patch Changes
 
@@ -8,8 +8,21 @@
 
   - `ScrubbingService` checks a claim's charge lines and diagnosis codes in four layers: required fields (CO-16), NCCI procedure-to-procedure conflicts (CO-97), NCCI unit caps (CO-151) and LCD/NCD medical necessity (CO-50). Each finding carries a `message` and, when it is about one line or code, the 1-based `chargeLine` and the `code`. The rule tables are mock data; see the README section "Not production scrubbing yet".
   - `CptCodeProvider` and the `CptCodeSource` interface let an organization that holds its own AMA CPT license supply its own codes. The package contains no CPT content.
-  - `normalizeCode` puts codes in one form (no dot, no spaces, upper case), so `E11.9`, `E119` and `e11.9` are the same code in every lookup.
-  - `exports["./services"]` pointed at `lib/services/index.{js,mjs}`, which the build never emitted; it now points at `lib/index.{js,mjs}`. The published 0.2.9 ships only `lib/index.{js,mjs}`, so importing `@forklaunch/implementation-cac-base/services` at runtime could not resolve.
+  - `normalizeCode` puts codes in one form (no dot, no spaces, upper case), so `E11.9`, `E119` and `e11.9` are the same code in every lookup. `MockProcedureCodeProvider` looks codes up through it.
+  - `exports["./services"]` pointed at `lib/services/index.{js,mjs}`, which the build never emitted; it now points at `lib/index.{js,mjs}`. The published 0.2.9 and 0.3.0 ship only `lib/index.{js,mjs}`, so importing `@forklaunch/implementation-cac-base/services` at runtime could not resolve.
+
+## 0.3.0
+
+### Minor Changes
+
+- 4ec1f4b: Built on `@forklaunch/core` 4 and `@mikro-orm/core` 7.2.10. The previous versions depend on core 3 and pin MikroORM 7.2.5, so an application on core 4 that used them installed two copies of each and its entity types stopped matching.
+
+  Breaking, because core 4 changes defaults these packages run with: cross-origin browser access is denied unless the application names its origins (`CORS_ORIGINS` or a `cors` option), an HMAC-signed request is accepted once and only within 5 minutes of the server clock (multi-instance services need a shared nonce store), and JWT verification pins the signature algorithm. See the `@forklaunch/core` 4.0.0 changelog for what to change. 0.x packages take a minor bump, the 0.x equivalent of a major.
+
+### Patch Changes
+
+- Updated dependencies [4ec1f4b]
+  - @forklaunch/interfaces-cac@0.3.0
 
 ## 0.2.9
 

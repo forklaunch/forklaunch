@@ -127,7 +127,9 @@ jobs:
           (cd .github/workflows/scripts/check_blueprint_deps && cargo run --quiet)
       - name: Only release files changed
         run: |
-          outside=$(git status --porcelain -- . ':(exclude)framework-rs' ':(exclude)blueprint-rs' ':(exclude)cli/Cargo.lock')
+          # cli/Cargo.toml changes only when the bump is outside the CLI's
+          # requirement (see rust_release.py bridge_cli).
+          outside=$(git status --porcelain -- . ':(exclude)framework-rs' ':(exclude)blueprint-rs' ':(exclude)cli/Cargo.lock' ':(exclude)cli/Cargo.toml')
           if [ -n "$outside" ]; then
             echo "::error::the version bump changed files outside the release set:"
             echo "$outside"

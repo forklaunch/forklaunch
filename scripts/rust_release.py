@@ -178,7 +178,54 @@ def bump(version: str, root: Path = ROOT) -> list[Path]:
         for package in release_plan(root, scope):
             if package["version"] != version and package["name"] not in vendored_names(root):
                 raise ValueError(f"{package['name']} did not move to {version}")
+    if bridge_cli(version, root):
+        changed.append(root / CLI_MANIFEST)
     return changed
+
+
+def caret_compatible(requirement: str, version: str) -> bool:
+    """Whether a bare (caret) requirement accepts version."""
+    if not SEMVER.fullmatch(requirement):
+        return False
+    wanted, offered = version_key(requirement), version_key(version)
+    if offered < wanted:
+        return False
+    significant = next((index for index, part in enumerate(wanted) if part), len(wanted) - 1)
+    return wanted[:significant + 1] == offered[:significant + 1]
+
+
+def bridge_cli(version: str, root: Path = ROOT) -> bool:
+    """Keep the CLI resolvable across a bump its requirement would reject.
+
+    The CLI builds against the framework by path but is packaged against
+    crates.io, so its requirement normally waits for the publish (`pin-cli`).
+    A bump within the requirement (0.2.5 -> 0.2.6) needs nothing. A bump
+    outside it (0.2.5 -> 0.3.0) would leave the CLI unable to resolve its path
+    dependency, so the requirement becomes a range that accepts both the
+    published version and the new one until `pin-cli` narrows it again.
+    Returns True if the CLI manifest changed.
+    """
+    manifest = root / CLI_MANIFEST
+    if not manifest.is_file():
+        return False
+    moving = workspace_crates(root)
+
+    def block(match: re.Match) -> str:
+        text = match.group(0)
+        target = PATH_KEY.search(text)
+        current = VERSION_KEY.search(text)
+        if not target or not current or (manifest.parent / target.group(1)).resolve() not in moving:
+            return text
+        requirement = current.group(3)
+        if current.group(2) or not SEMVER.fullmatch(requirement) or caret_compatible(requirement, version):
+            return text
+        return VERSION_KEY.sub(lambda m: f"{m.group(1)}>={requirement}, <={version}{m.group(4)}", text, count=1)
+
+    text = manifest.read_text()
+    updated = DOTTED_DEPENDENCY.sub(block, INLINE_TABLE.sub(block, text))
+    if updated != text:
+        manifest.write_text(updated)
+    return updated != text
 
 
 def workspace_manifests(root: Path) -> list[Path]:

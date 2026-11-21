@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/hyper-express",
-  "version": "1.3.0",
+  "version": "2.2.0",
   "description": "Forklaunch framework for hyper-express.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -43,12 +43,12 @@
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/validator": "workspace:^",
     "@forklaunch/ws": "workspace:^",
-    "@scalar/express-api-reference": "^0.10.35",
+    "@scalar/express-api-reference": "^0.10.39",
     "cors": "^2.8.6",
     "live-directory": "^3.0.3",
     "openapi3-ts": "^4.6.2",
     "qs": "^6.17.1",
-    "swagger-ui-dist": "^5.34.1",
+    "swagger-ui-dist": "^5.35.1",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
@@ -59,7 +59,7 @@
     "@types/swagger-ui-dist": "^3.30.6",
     "@types/swagger-ui-express": "^4.1.8",
     "kill-port-process": "^5.0.0",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",

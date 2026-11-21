@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-redis",
-  "version": "1.4.22",
+  "version": "1.5.0",
   "description": "Redis infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -49,8 +49,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "globals": "^17.14.0",
-    "prettier": "^3.9.10",
-    "testcontainers": "^12.2.1",
+    "prettier": "^3.10.1",
+    "testcontainers": "^12.2.2",
     "ts-node": "^10.9.2",
     "tsup": "^9.0.0",
     "typescript": "^7.0.2",

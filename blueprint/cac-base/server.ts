@@ -27,6 +27,7 @@ const authCacheService = createAuthCacheService(ci.resolve(tokens.TtlCache));
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     // RBAC verification pass (§14 PR 5): real coder/biller permissions and
     // roles surfaced from IAM, not the hardcoded placeholder this used to

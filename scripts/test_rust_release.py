@@ -72,6 +72,23 @@ class ReleaseTests(unittest.TestCase):
         for stale in ("0.1.1", "0.1.0", "1.0"):
             with self.assertRaisesRegex(ValueError, "already at|MAJOR.MINOR.PATCH"):
                 release.bump(stale, self.root)
+        # A bump the CLI's requirement would reject (0.1.x -> 0.2.0) widens the
+        # requirement to cover the published version and the new one, so the
+        # CLI still resolves its path dependency; pin-cli narrows it afterwards.
+        release.bump("0.2.0", self.root)
+        self.assertIn('forklaunch-core = { version = ">=0.1.1, <=0.2.0"', cli.read_text())
+        self.assertIn('serde = { version = "0.1.0" }', cli.read_text())
+        self.assertTrue(release.pin_cli(self.root))
+        self.assertIn('forklaunch-core = { version = "0.2.0"', cli.read_text())
+
+    def test_caret_compatibility_follows_cargo(self):
+        for requirement, version, expected in (
+            ("0.2.5", "0.2.6", True), ("0.2.5", "0.3.0", False), ("0.2.5", "0.2.4", False),
+            ("1.2.3", "1.9.0", True), ("1.2.3", "2.0.0", False),
+            ("0.0.3", "0.0.4", False), ("0.0.3", "0.0.3", True),
+            (">=0.2.5, <=0.3.0", "0.3.0", False),
+        ):
+            self.assertEqual(release.caret_compatible(requirement, version), expected, (requirement, version))
 
     def test_framework_default_excludes_blueprint_and_all_is_explicit(self):
         self.crate("forklaunch-base")
