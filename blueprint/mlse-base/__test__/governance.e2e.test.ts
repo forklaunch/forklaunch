@@ -259,7 +259,11 @@ describe('saved searches and history', () => {
     await answers.answer({ query: 'my patient weighs 80 kg, how much propofol', live: false, organizationId: ORG_A, userId: 'user-3' });
 
     const history = await saved.history(ORG_A, 'user-3');
-    expect(history.map((h) => [h.queryClass, h.query ?? null]).sort()).toEqual([
+    expect(
+      history
+        .map((h) => [h.queryClass, h.query ?? null])
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0])))
+    ).toEqual([
       ['literature_lookup', 'laparoscopic cholecystectomy blood loss'],
       ['patient_specific_treatment', null]
     ]);

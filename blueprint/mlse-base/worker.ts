@@ -70,5 +70,5 @@ const consumer = ingestionJobConsumerFactory(
   processFailures
 );
 
-consumer.start();
+void consumer.start();
 openTelemetryCollector.info('MLSE worker started, consuming ingestion queue');
