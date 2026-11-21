@@ -125,7 +125,7 @@ INERT = [
     Rule(['framework/.changeset/**', 'blueprint/.changeset/**']),
     # Workflows that are not pull-request checks, or filter themselves.
     Rule(['.github/dependabot.yml',
-          '.github/workflows/{cli_release,rust_release,ts_release,rust_parity,blueprint_depcheck_sync}.yml',
+          '.github/workflows/{cli_release,rust_release,ts_release,rust_parity,blueprint_depcheck_sync,mlse_tests}.yml',
           '.github/workflows/scripts/ts_release/**', '.github/workflows/scripts/parity_shards.py']),
     # Release and maintenance scripts, run by the release workflows above or
     # by hand.

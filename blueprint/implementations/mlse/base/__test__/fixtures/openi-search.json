@@ -1,0 +1,264 @@
+{
+ "_comment": "Synthetic Open-i search response (shape of openi.nlm.nih.gov/api/search?query=appendectomy&coll=pmc) for the image search tests. Every article, author, caption and image path is made up; only the Creative Commons licence URLs are real, since the licence filter reads them. Of the 12 figures, 5 list no licence, 4 are CC BY, 2 CC BY-NC and 1 CC BY-NC-ND.",
+ "total": 240,
+ "count": 12,
+ "list": [
+  {
+   "uid": "PMC900000001",
+   "pmcid": "900000001",
+   "title": "A synthetic study of immune cells in the colon after removal of the appendix",
+   "authors": "Example A, Sample S, Placeholder P",
+   "journal_title": "Example journal of gastroenterology",
+   "journal_date": {
+    "day": "01",
+    "month": "11",
+    "year": "2022"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000001",
+   "imgLarge": "/imgs/512/0/900000001/PMC900000001_fig10.png",
+   "image": {
+    "caption": "<b>Appendectomy</b> and immune cell density in made-up tumour samples. Twelve invented samples were stained: four from patients with a history of <b>appendectomy</b> and eight without (control group). (A) Representative staining in samples with and without <b>appendectomy</b>. (B) Cell density in the <b>appendectomy</b> and control groups. In all dot plots the bars show the median and quartiles.",
+    "id": "fig10",
+    "modalityMajor": "mp",
+    "modalityMinor": "mc"
+   },
+   "imgGrid150": "/imgs/150/0/900000001/PMC900000001_fig10.png"
+  },
+  {
+   "uid": "PMC900000002",
+   "pmcid": "900000002",
+   "title": "Single-surgeon and conventional laparoscopic appendectomy: a synthetic comparison",
+   "authors": "Sample S, Example A",
+   "journal_title": "Example imaging reports",
+   "journal_date": {
+    "day": "19",
+    "month": "09",
+    "year": "2022"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000002",
+   "imgLarge": "/imgs/512/0/900000002/PMC900000002_fig1.png",
+   "image": {
+    "caption": "Conventional laparoscopic appendectomy during the operation.",
+    "id": "fig1",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000002/PMC900000002_fig1.png"
+  },
+  {
+   "uid": "PMC900000003",
+   "pmcid": "900000003",
+   "title": "A cyst at the appendiceal stump years after appendectomy: two synthetic cases",
+   "authors": "Example A, Placeholder P, Sample S",
+   "journal_title": "Example surgical case reports",
+   "journal_date": {
+    "day": "13",
+    "month": "06",
+    "year": "2024"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000003",
+   "ccLicense": "by",
+   "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+   "imgLarge": "/imgs/512/0/900000003/PMC900000003_Fig1.png",
+   "image": {
+    "caption": "Changes over time in the appendiceal stump on CT images (Case 1). a The stump just before <b>appendectomy</b>. b A remnant one month after <b>appendectomy</b> (12 × 11 mm). c The remnant five years after <b>appendectomy</b> (10 × 8 mm). d A cyst nine years after <b>appendectomy</b> (40 × 30 mm)",
+    "id": "Fig1",
+    "modalityMajor": "c"
+   },
+   "imgGrid150": "/imgs/150/0/900000003/PMC900000003_Fig1.png"
+  },
+  {
+   "uid": "PMC900000004",
+   "pmcid": "900000004",
+   "title": "Incidental findings in appendectomy specimens: a synthetic single-centre review",
+   "authors": "Placeholder P, Example A",
+   "journal_title": "Example emergency medicine",
+   "journal_date": {
+    "day": "03",
+    "month": "09",
+    "year": "2020"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000004",
+   "ccLicense": "by",
+   "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+   "imgLarge": "/imgs/512/0/900000004/PMC900000004_fig4.png",
+   "image": {
+    "caption": "Marked area of a suspected nodule in the appendectomy specimen.",
+    "id": "fig4",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000004/PMC900000004_fig4.png"
+  },
+  {
+   "uid": "PMC900000005",
+   "pmcid": "900000005",
+   "title": "Bleeding from the appendiceal stump: a synthetic case series",
+   "authors": "Sample S, Placeholder P, Example A",
+   "journal_title": "Example gastroenterology",
+   "journal_date": {
+    "day": "03",
+    "month": "11",
+    "year": "2023"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000005",
+   "ccLicense": "by",
+   "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+   "imgLarge": "/imgs/512/0/900000005/PMC900000005_Fig4.png",
+   "image": {
+    "caption": "Bleeding after <b>appendectomy</b>: (a) Fresh blood at the wound &amp; dressing after <b>appendectomy</b>. (b) Two clips closing the appendiceal opening",
+    "id": "Fig4",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000005/PMC900000005_Fig4.png"
+  },
+  {
+   "uid": "PMC900000006",
+   "pmcid": "900000006",
+   "title": "Fever after appendectomy in a synthetic patient with constipation",
+   "authors": "Example A, Sample S",
+   "journal_title": "Example case reports in surgery",
+   "journal_date": {
+    "day": "01",
+    "month": "12",
+    "year": "2025"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000006",
+   "imgLarge": "/imgs/512/0/900000006/PMC900000006_fig3.png",
+   "image": {
+    "caption": "Abdominal CT findings on day 12. (a–c) No fluid around the appendectomy site (arrows), with stool retained near the appendectomy site (arrowheads).",
+    "id": "fig3",
+    "modalityMajor": "mp",
+    "modalityMinor": "c"
+   },
+   "imgGrid150": "/imgs/150/0/900000006/PMC900000006_fig3.png"
+  },
+  {
+   "uid": "PMC900000007",
+   "pmcid": "900000007",
+   "title": "A nodule in an appendectomy scar: a synthetic case report",
+   "authors": "Placeholder P, Sample S",
+   "journal_title": "Example journal of digestive diseases",
+   "journal_date": {
+    "day": "14",
+    "month": "03",
+    "year": "2018"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000007",
+   "ccLicense": "bync",
+   "licenseURL": "https://creativecommons.org/licenses/by-nc/4.0/",
+   "imgLarge": "/imgs/512/0/900000007/PMC900000007_g002.png",
+   "image": {
+    "caption": "Gross examination of the <b>appendectomy</b> scar nodule.",
+    "id": "F2",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000007/PMC900000007_g002.png"
+  },
+  {
+   "uid": "PMC900000007",
+   "pmcid": "900000007",
+   "title": "A nodule in an appendectomy scar: a synthetic case report",
+   "authors": "Placeholder P, Sample S",
+   "journal_title": "Example journal of digestive diseases",
+   "journal_date": {
+    "day": "14",
+    "month": "03",
+    "year": "2018"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000007",
+   "ccLicense": "bync",
+   "licenseURL": "https://creativecommons.org/licenses/by-nc/4.0/",
+   "imgLarge": "/imgs/512/0/900000007/PMC900000007_g003.png",
+   "image": {
+    "caption": "Microscopic examination of the <b>appendectomy</b> scar nodule.",
+    "id": "F3",
+    "modalityMajor": "mc"
+   },
+   "imgGrid150": "/imgs/150/0/900000007/PMC900000007_g003.png"
+  },
+  {
+   "uid": "PMC900000008",
+   "pmcid": "900000008",
+   "title": "Appendectomy and tumour growth in a synthetic mouse experiment",
+   "authors": "Sample S, Example A, Placeholder P",
+   "journal_title": "Example science",
+   "journal_date": {
+    "day": "25",
+    "month": "07",
+    "year": "2024"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000008",
+   "imgLarge": "/imgs/512/0/900000008/PMC900000008_fig4.png",
+   "image": {
+    "caption": "Tumour growth in made-up mice with <b>appendectomy</b>(A) Representative pictures of mice with or without <b>appendectomy</b>.(B) Tumour growth in mice with <b>appendectomy</b> and controls, followed by live imaging.(C) Tumour volumes and weights compared between the groups.(D) The flow chart of the experiment in mice with/without <b>appendectomy</b>.",
+    "id": "fig4",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000008/PMC900000008_fig4.png"
+  },
+  {
+   "uid": "PMC900000009",
+   "pmcid": "900000009",
+   "title": "A low-cost bench trainer for laparoscopic appendectomy: a synthetic validation",
+   "authors": "Example A, Placeholder P",
+   "journal_title": "Example updates in surgery",
+   "journal_date": {
+    "day": "08",
+    "month": "02",
+    "year": "2025"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000009",
+   "ccLicense": "by",
+   "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+   "imgLarge": "/imgs/512/0/900000009/PMC900000009_Fig1.png",
+   "image": {
+    "caption": "A Trainee at the bench trainer during a session; B <b>Appendectomy</b> model before use",
+    "id": "Fig1",
+    "modalityMajor": "mp",
+    "modalityMinor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000009/PMC900000009_Fig1.png"
+  },
+  {
+   "uid": "PMC900000010",
+   "pmcid": "900000010",
+   "title": "Return to theatre after single-port laparoscopic appendectomy in children: a synthetic cohort",
+   "authors": "Placeholder P, Example A, Sample S",
+   "journal_title": "Example frontiers in paediatrics",
+   "journal_date": {
+    "day": "17",
+    "month": "02",
+    "year": "2025"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000010",
+   "imgLarge": "/imgs/512/0/900000010/PMC900000010_F1.png",
+   "image": {
+    "caption": "<b>Appendectomy</b> through a single umbilical port.",
+    "id": "F1",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000010/PMC900000010_F1.png"
+  },
+  {
+   "uid": "PMC900000011",
+   "pmcid": "900000011",
+   "title": "The appendix inside a groin hernia: a synthetic case report",
+   "authors": "Sample S, Example A",
+   "journal_title": "Example journal of surgery case reports",
+   "journal_date": {
+    "day": "10",
+    "month": "09",
+    "year": "2018"
+   },
+   "pmc_url": "https://example.org/pmc/articles/PMC900000011",
+   "ccLicense": "byncnd",
+   "licenseURL": "http://creativecommons.org/licenses/by-nc-nd/4.0/",
+   "imgLarge": "/imgs/512/0/900000011/PMC900000011_gr2.png",
+   "image": {
+    "caption": "The appendix freed before <b>appendectomy</b>.",
+    "id": "fig0010",
+    "modalityMajor": "ph"
+   },
+   "imgGrid150": "/imgs/150/0/900000011/PMC900000011_gr2.png"
+  }
+ ]
+}
