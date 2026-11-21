@@ -1,0 +1,280 @@
+import { createInterface } from 'node:readline';
+import { Readable } from 'node:stream';
+import { CodeSetRow } from './codeSetLoader.service';
+
+export interface CsvColumnMap {
+  /** 0-indexed column position of the code. */
+  code: number;
+  /** 0-indexed column position of the description. */
+  description: number;
+  /** 0-indexed column position of an optional effective-date column. */
+  effectiveDate?: number;
+  /** Column delimiter. Defaults to ','. */
+  delimiter?: string;
+  /** Skip the first line (header row). Defaults to true. */
+  hasHeader?: boolean;
+}
+
+/** Lines a row source could not use, so a bad file is not loaded silently. */
+export interface ParseStats {
+  skipped: number;
+  // the first few skipped line numbers, for the error message
+  skippedLines: number[];
+}
+
+export function newParseStats(): ParseStats {
+  return { skipped: 0, skippedLines: [] };
+}
+
+function recordSkip(stats: ParseStats | undefined, lineNumber: number): void {
+  if (!stats) return;
+  stats.skipped += 1;
+  if (stats.skippedLines.length < 5) stats.skippedLines.push(lineNumber);
+}
+
+function splitLine(line: string, delimiter: string): string[] {
+  // CSV split per RFC 4180 for one line: a quoted field may contain the
+  // delimiter, and a quote inside it is written doubled (""). The CMS HCPCS
+  // release needs both: descriptions contain commas, quoted words ("y set")
+  // and inch marks (5"), which a spreadsheet's CSV export writes as
+  // "...""y set""..." and "...5"" or greater". A quote in an unquoted field
+  // is kept as written. Embedded newlines are not supported (no published
+  // code-set file uses them).
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (inQuotes) {
+      if (char === '"') {
+        if (line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += char;
+      }
+    } else if (char === '"' && current.trim() === '') {
+      inQuotes = true;
+      current = '';
+    } else if (char === delimiter) {
+      fields.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  fields.push(current.trim());
+
+  return fields;
+}
+
+/**
+ * Parses a delimited text stream into {@link CodeSetRow}s. This is the
+ * reference row source for the free code sets (ICD-10-CM, HCPCS) — the
+ * exact real file layout CMS/CDC publish varies by release and isn't
+ * pinned here; adjust {@link CsvColumnMap} to match whatever the actual
+ * downloaded file looks like. See plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §7.
+ */
+export async function* parseCsvRows(
+  source: Readable,
+  columnMap: CsvColumnMap,
+  stats?: ParseStats
+): AsyncIterable<CodeSetRow> {
+  for (const [name, value] of Object.entries({
+    code: columnMap.code,
+    description: columnMap.description,
+    effectiveDate: columnMap.effectiveDate
+  })) {
+    if (value !== undefined && (!Number.isInteger(value) || value < 0)) {
+      throw new Error(`Column map: ${name} must be a column index (0 or more), got ${value}`);
+    }
+  }
+  const delimiter = columnMap.delimiter ?? ',';
+  const hasHeader = columnMap.hasHeader ?? true;
+  const rl = createInterface({ input: source, crlfDelay: Infinity });
+
+  let lineNumber = 0;
+  for await (const line of rl) {
+    lineNumber += 1;
+    if (line.trim().length === 0) continue;
+    if (hasHeader && lineNumber === 1) continue;
+
+    const fields = splitLine(line, delimiter);
+    const code = fields[columnMap.code]?.trim();
+    const description = fields[columnMap.description]?.trim();
+    if (!code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
+
+    const row: CodeSetRow = { code, description };
+    if (columnMap.effectiveDate != null) {
+      const raw = fields[columnMap.effectiveDate]?.trim();
+      if (raw) {
+        const parsed = new Date(raw);
+        if (!Number.isNaN(parsed.getTime())) {
+          row.effectiveDate = parsed;
+        }
+      }
+    }
+
+    yield row;
+  }
+}
+
+/**
+ * Parses the CDC/NCHS ICD-10-CM codes file (icd10cm_codes_YYYY.txt): one
+ * code per line, the code without its dot, then spaces, then the
+ * description, and no header row:
+ *
+ *   A000    Cholera due to Vibrio cholerae 01, biovar cholerae
+ *
+ * A comma-delimited parse of this file reads the whole line as the code.
+ */
+export async function* parseCodeThenDescriptionLines(
+  source: Readable,
+  stats?: ParseStats
+): AsyncIterable<CodeSetRow> {
+  const rl = createInterface({ input: source, crlfDelay: Infinity });
+  let lineNumber = 0;
+  for await (const raw of rl) {
+    lineNumber += 1;
+    const line = raw.trim();
+    if (line.length === 0) continue;
+    const gap = line.search(/\s/);
+    const code = gap > 0 ? line.slice(0, gap) : '';
+    const description = gap > 0 ? line.slice(gap).trim() : '';
+    if (!code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
+    yield { code, description };
+  }
+}
+
+// RECID values in the CMS HCPCS Level II release: 3 starts a procedure
+// code's record and 4 continues its long description; 7 and 8 are the
+// same for modifiers, which are not procedure codes and are not loaded.
+const HCPCS_RECID_PROCEDURE = '3';
+const HCPCS_RECID_PROCEDURE_CONTINUED = '4';
+const HCPCS_RECID_MODIFIER = new Set(['7', '8']);
+
+// Header names of the plain two-column layout, compared in upper case.
+const HCPCS_PLAIN_CODE_HEADERS = new Set(['CODE', 'HCPC', 'HCPCS', 'HCPCS CODE']);
+const HCPCS_PLAIN_DESCRIPTION_HEADERS = new Set(['DESCRIPTION', 'LONG DESCRIPTION']);
+// A HCPCS Level II code: one letter, then four digits.
+const HCPCS_CODE_SHAPE = /^[A-Z][0-9]{4}$/i;
+
+/**
+ * Parses a CSV export of the CMS HCPCS Level II release
+ * (HCPC2026_JAN_ANWEB and similar). Columns are found by header name, so
+ * extra or reordered columns are fine:
+ *
+ *   HCPC,SEQNUM,RECID,LONG DESCRIPTION,SHORT DESCRIPTION,...
+ *   A0021,00100,3,"Ambulance service, outside state per mile, transport",...
+ *   A0021,00200,4,"(Medicaid only)",...
+ *
+ * A long description longer than one record continues on RECID 4 rows;
+ * those are joined onto the code's description. Modifier rows (RECID 7
+ * and 8) are left out. A row with any other RECID, or without a code or
+ * description, counts as skipped.
+ *
+ * The other layout read here is a plain two-column code,description CSV,
+ * with a "code,description" header row or with no header row at all (the
+ * first line is then a code and its description, and is loaded).
+ *
+ * Any other first line is refused with an error instead of guessed at. A
+ * CMS export whose header names differ slightly (LONG_DESCRIPTION, say)
+ * would otherwise be read as the plain layout, loading SEQNUM as every
+ * code's description and reporting success. Pass a column map to
+ * loadHcpcsCodes for a layout that is neither of the two.
+ */
+export async function* parseHcpcsReleaseRows(
+  source: Readable,
+  stats?: ParseStats
+): AsyncIterable<CodeSetRow> {
+  const rl = createInterface({ input: source, crlfDelay: Infinity });
+  let lineNumber = 0;
+  let layout:
+    | { kind: 'cms'; code: number; recid: number; description: number }
+    | { kind: 'plain' }
+    | undefined;
+  let pending: CodeSetRow | undefined;
+
+  for await (const line of rl) {
+    lineNumber += 1;
+    if (line.trim().length === 0) continue;
+    const fields = splitLine(line, ',');
+
+    if (!layout) {
+      // a spreadsheet's "CSV UTF-8" export starts the file with a byte
+      // order mark, which would otherwise be read as part of the first name
+      fields[0] = fields[0].replace(/^\uFEFF/, '').trim();
+      const headers = fields.map((h) => h.trim().toUpperCase());
+      const code = headers.indexOf('HCPC');
+      const recid = headers.indexOf('RECID');
+      const description = headers.indexOf('LONG DESCRIPTION');
+      if (code >= 0 && recid >= 0 && description >= 0) {
+        layout = { kind: 'cms', code, recid, description };
+        continue;
+      }
+      if (
+        HCPCS_PLAIN_CODE_HEADERS.has(headers[0]) &&
+        HCPCS_PLAIN_DESCRIPTION_HEADERS.has(headers[1] ?? '')
+      ) {
+        layout = { kind: 'plain' };
+        continue;
+      }
+      // No header row: the first line is already a code and its
+      // description. Only taken for exactly two columns; a headerless file
+      // with more has no way to say which one is the description.
+      if (
+        fields.length === 2 &&
+        HCPCS_CODE_SHAPE.test(fields[0]) &&
+        fields[1] !== ''
+      ) {
+        layout = { kind: 'plain' };
+        yield { code: fields[0], description: fields[1] };
+        continue;
+      }
+      throw new Error(
+        `HCPCS file: the first line (${fields
+          .map((field) => JSON.stringify(field.slice(0, 40)))
+          .join(
+            ', '
+          )}) is not a header row this loader recognises. Expected the CMS release columns HCPC, RECID and LONG DESCRIPTION (any order, extra columns allowed), or a two-column code,description file with or without that header row. Nothing was loaded; fix the header names or pass a column map.`
+      );
+    }
+
+    if (layout.kind === 'plain') {
+      const code = fields[0]?.trim();
+      const description = fields[1]?.trim();
+      if (!code || !description) {
+        recordSkip(stats, lineNumber);
+        continue;
+      }
+      yield { code, description };
+      continue;
+    }
+
+    const code = fields[layout.code]?.trim();
+    const recid = fields[layout.recid]?.trim();
+    const description = fields[layout.description]?.trim();
+    if (recid && HCPCS_RECID_MODIFIER.has(recid)) continue;
+    if (recid === HCPCS_RECID_PROCEDURE_CONTINUED && pending && code === pending.code) {
+      if (description) pending.description += ` ${description}`;
+      continue;
+    }
+    if (recid !== HCPCS_RECID_PROCEDURE || !code || !description) {
+      recordSkip(stats, lineNumber);
+      continue;
+    }
+    if (pending) yield pending;
+    pending = { code, description };
+  }
+  if (pending) yield pending;
+}
