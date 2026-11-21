@@ -219,7 +219,7 @@ function encodeMultipart(body: unknown): FormData {
   const form = new FormData();
   for (const [name, raw] of Object.entries(body)) {
     for (const value of Array.isArray(raw) ? raw : [raw]) {
-      form.append(name, value instanceof Blob ? value : safeStringify(value));
+      form.append(name, value instanceof Blob ? value : toPlainString(value));
     }
   }
   return form;

@@ -1213,10 +1213,12 @@ the worker channel v3 envelope; their version numbers are not interchangeable.
 Passing no tenant still selects the explicitly unencrypted JSON path.
 
 `JsonRecordCodec::with_typescript_safe_values()` explicitly enables TypeScript's
-`safeStringify`/`safeParse` behavior for JSON-compatible values. It writes top-level
-strings verbatim and treats non-JSON plaintext as a string. Strings containing
-valid JSON change type on read: `"false"` becomes a boolean, and `"[1]"` becomes an
-array. A requested Rust type may reject that result. Strict JSON remains the
+`safeStringify`/`safeParse` behavior for JSON-compatible values. Like
+`safeStringify`, it writes every value as JSON, so a string is stored quoted and
+reads back as the same string. On read it also accepts non-JSON plaintext as a
+string, so records written unquoted by older TypeScript or Rust writers still
+read; a legacy record whose text is valid JSON (`false`, `[1]`) reads as that JSON
+value. A requested Rust type may reject that result. Strict JSON remains the
 codec default. Both profiles reject invalid UTF-8 and enforce authentication
 before parsing encrypted values; missing tenant context, wrong keys and tampering
 never become plaintext fallbacks. JavaScript class/BigInt serialization, number
@@ -1230,8 +1232,8 @@ count reads the entire current queue, matching TypeScript's LRANGE behavior.
 Ordinary native methods continue preserving falsy values and return empty batches
 for zero counts. Both profiles authenticate before filtering, retain FIFO order
 and propagate decoding errors. Dequeue failures do not requeue removed messages.
-Select `with_typescript_safe_values` on the codec as well when TS producers write
-unquoted string values. These typed APIs accept nonnegative integer counts.
+Select `with_typescript_safe_values` on the codec as well when TS producers may
+have written unquoted string values before `safeStringify` quoted strings. These typed APIs accept nonnegative integer counts.
 
 The optional `zod-uri` feature on validation (or its Axum feature forwarder) adds
 `ZodStringFormat::Uri`. It matches the WHATWG URL admission used by Node 24.2.0 /
