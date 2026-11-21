@@ -22,9 +22,12 @@ impl JsonRecordCodec {
     }
 
     /// Enable TypeScript `safeStringify`/`safeParse` behavior for JSON-compatible
-    /// values: top-level strings are written verbatim, and non-JSON plaintext is
-    /// read as a string. Strings containing valid JSON parse into that JSON value.
-    /// This does not emulate JavaScript classes, `BigInt` or number rounding.
+    /// values: every value is written as JSON (a string is quoted, as
+    /// `safeStringify` does), and non-JSON plaintext is read as a string, so
+    /// records written unquoted by older TypeScript or Rust writers still read.
+    /// Such a legacy record whose text is valid JSON (`123`, `false`) reads as that
+    /// JSON value. This does not emulate JavaScript classes, `BigInt` or number
+    /// rounding.
     /// Authentication errors still fail closed before parsing; strict JSON remains
     /// the default. Typed callers can reject the resulting value during decoding.
     #[must_use]
@@ -49,10 +52,7 @@ impl JsonRecordCodec {
         value: &T,
         tenant: Option<&TenantContext>,
     ) -> FrameworkResult<Vec<u8>> {
-        let mut json = serde_json::to_string(value).map_err(|_| json_error())?;
-        if self.typescript_safe_values && json.starts_with('"') {
-            json = serde_json::from_str::<String>(&json).map_err(|_| json_error())?;
-        }
+        let json = serde_json::to_string(value).map_err(|_| json_error())?;
         match tenant {
             Some(tenant) => self
                 .encryptor
@@ -99,7 +99,8 @@ impl JsonRecordCodec {
     /// Decode and apply JavaScript truthiness before converting to a Rust type.
     /// Null, false, numeric zero and empty strings are omitted; empty arrays and
     /// objects remain present. Enable `with_typescript_safe_values` separately
-    /// when interoperating with TypeScript's top-level string wire encoding.
+    /// to also read string records TypeScript wrote unquoted, before
+    /// `safeStringify` quoted strings.
     ///
     /// # Errors
     /// Authentication and parsing failures propagate before filtering. Retained
@@ -169,7 +170,15 @@ mod tests {
     fn safe_value_fallback_does_not_hide_type_or_authentication_failures() {
         let codec = JsonRecordCodec::new(FieldEncryptor::new("safe-value-fixture").unwrap())
             .with_typescript_safe_values();
-        assert_eq!(codec.encode("plain", None).unwrap(), b"plain");
+        // strings are written as JSON, so one that looks like JSON keeps its type
+        assert_eq!(codec.encode("plain", None).unwrap(), b"\"plain\"");
+        for text in ["123", "false", "null", "{\"a\":1}", ""] {
+            let bytes = codec.encode(text, None).unwrap();
+            assert_eq!(codec.decode::<String>(&bytes, None).unwrap(), text);
+            assert_eq!(codec.decode::<Value>(&bytes, None).unwrap(), json!(text));
+        }
+        // records written unquoted by older writers still read
+        assert_eq!(codec.decode::<String>(b"plain", None).unwrap(), "plain");
         assert_eq!(
             codec.decode::<String>(b"{invalid", None).unwrap(),
             "{invalid"
