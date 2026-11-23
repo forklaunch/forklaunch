@@ -20,9 +20,6 @@ RUN pip install setuptools --break-system-packages
 # Install dependencies
 {{#is_node}}RUN npm install -g pnpm
 RUN apk update
-# Patch the base image's system packages (openssl, zlib, musl, ...) past the
-# tag's snapshot. Docker caches this step: it reruns when the base image or an
-# earlier step changes; build with --pull --no-cache to force fresh packages.
 RUN apk upgrade --no-cache
 RUN apk add --no-cache libc6-compat
 RUN apk add --no-cache git
