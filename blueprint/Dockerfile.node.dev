@@ -1,4 +1,4 @@
-FROM node:23-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
@@ -7,6 +7,7 @@ COPY . .
 
 # Install dependencies
 RUN npm install -g pnpm
+RUN apk upgrade --no-cache
 RUN apk add --no-cache git
 RUN apk add --no-cache curl
 
