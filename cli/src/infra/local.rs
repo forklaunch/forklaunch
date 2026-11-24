@@ -813,11 +813,7 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         if adding { "to" } else { "from" },
     );
     if own_registration {
-        println!(
-            "  registrations.ts has its own ObjectStore registration, so only the manifest \
-             declaration changed: the code, its environment variables, tests, env files and \
-             docker-compose.yaml are as they were."
-        );
+        println!("{}", own_registration_report(adding));
     }
     if let Some(existing) = &existing {
         print!("{}", existing_bucket_report(existing, &scopes));
@@ -829,6 +825,22 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         eprint!("{note}");
     }
     Ok(())
+}
+
+/// What `infra add|remove` says when the ObjectStore registration is not one
+/// it wrote: the declaration changed and the code did not.
+fn own_registration_report(adding: bool) -> &'static str {
+    if adding {
+        "  registrations.ts already registers an ObjectStore of its own, so only the manifest \
+         declaration was added: the registration, its environment variables, tests, env files \
+         and docker-compose.yaml are as they were, and no new environment variables were \
+         introduced."
+    } else {
+        "  The ObjectStore registration in registrations.ts is not the one `infra add` writes, \
+         so only the manifest declaration was removed: the registration, its environment \
+         variables, dependency, tests, env files and docker-compose.yaml are as they were. \
+         Take them out by hand if the service no longer stores files."
+    }
 }
 
 /// What an existing-bucket declaration means once deployed.
@@ -1053,7 +1065,8 @@ impl CliCommand for RemoveCommand {
 mod tests {
     use super::{
         ExistingBucket, check_project_type, component_scopes, existing_bucket_report,
-        manual_compose_note, new_environment_report, parse_type, type_help, worker_events_note,
+        manual_compose_note, new_environment_report, own_registration_report, parse_type,
+        type_help, worker_events_note,
     };
     use crate::{
         constants::Infrastructure,
@@ -1166,6 +1179,22 @@ mod tests {
             "{report}"
         );
         assert!(report.contains("'a/', 'b/' of it only"), "{report}");
+    }
+
+    #[test]
+    fn a_registration_of_the_services_own_is_reported_as_left_alone() {
+        let added = own_registration_report(true);
+        assert!(
+            added.contains("only the manifest declaration was added"),
+            "{added}"
+        );
+        assert!(added.contains("no new environment variables"), "{added}");
+        let removed = own_registration_report(false);
+        assert!(
+            removed.contains("only the manifest declaration was removed"),
+            "{removed}"
+        );
+        assert!(removed.contains("by hand"), "{removed}");
     }
 
     #[test]
