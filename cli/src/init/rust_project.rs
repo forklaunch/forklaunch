@@ -2901,6 +2901,30 @@ pub(super) fn render_static_rust_template(template_path: &str) -> String {
     render_rust_template(template_path, &EmptyRustTemplate {})
 }
 
+/// The runtime-stage line added to `rust/application/Dockerfile` so generated
+/// images upgrade the base image's OS packages (openssl, zlib, ...).
+const RUST_DOCKERFILE_UPGRADE_LINE: &str = "    && apt-get upgrade -y \\\n";
+
+/// `rust/application/Dockerfile` as the CLI rendered it before the runtime
+/// stage gained [`RUST_DOCKERFILE_UPGRADE_LINE`]. Unstamped applications
+/// generated from it are still CLI-owned and must keep being regenerated.
+pub(super) fn rust_dockerfile_previous() -> String {
+    render_static_rust_template("rust/application/Dockerfile").replacen(
+        RUST_DOCKERFILE_UPGRADE_LINE,
+        "",
+        1,
+    )
+}
+
+/// Whether `actual` is an unedited rendering of the CLI's Rust Dockerfile:
+/// the current template or [`rust_dockerfile_previous`], ignoring trailing
+/// whitespace.
+pub(super) fn is_generated_rust_dockerfile(actual: &str) -> bool {
+    let actual = actual.trim_end();
+    actual == render_static_rust_template("rust/application/Dockerfile").trim_end()
+        || actual == rust_dockerfile_previous().trim_end()
+}
+
 fn root_cargo_toml(license: &str, author: &str) -> String {
     let authors = if author.trim().is_empty() {
         "[]".to_string()

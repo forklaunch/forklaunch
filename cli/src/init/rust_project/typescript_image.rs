@@ -1051,9 +1051,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
         docker.push_str("RUN mkdir -p /out/.certs && cp core/certs/aws-rds-global-bundle.pem /out/.certs/aws-rds-global-bundle.pem\n");
     }
     if bun {
-        docker.push_str(&format!("FROM oven/bun:{BUN_VERSION} AS runtime\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"));
+        docker.push_str(&format!("FROM oven/bun:{BUN_VERSION} AS runtime\nUSER root\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"));
     } else {
-        docker.push_str("FROM node:22-bookworm-slim AS runtime\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n");
+        docker.push_str("FROM node:22-bookworm-slim AS runtime\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n");
     }
     if has_ca_bundle {
         docker.push_str("ENV NODE_EXTRA_CA_CERTS=/app/.certs/aws-rds-global-bundle.pem\n");
@@ -1508,6 +1508,10 @@ mod tests {
             crate::constants::BUN_VERSION
         )));
         assert!(docker.contains("bun install --production --frozen-lockfile --ignore-scripts"));
+        assert!(docker.contains(&format!(
+            "FROM oven/bun:{} AS runtime\nUSER root\nRUN apt-get update && apt-get upgrade -y && apt-get install",
+            crate::constants::BUN_VERSION
+        )));
         assert!(
             docker.contains(
                 "cp .forklaunch/universal-sdk/package.json /out/.forklaunch/universal-sdk/"
@@ -1768,6 +1772,9 @@ mod tests {
                 && docker.contains("--prod deploy --frozen-lockfile")
                 && !docker.contains("--offline")
         );
+        assert!(docker.contains(
+            "FROM node:22-bookworm-slim AS runtime\nRUN apt-get update && apt-get upgrade -y && apt-get install"
+        ));
         assert!(docker.contains("USER node"));
         let compose: JsonValue =
             serde_yml::from_str(&read_to_string(root.path().join("docker-compose.yaml")).unwrap())

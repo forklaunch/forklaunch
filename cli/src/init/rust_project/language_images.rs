@@ -299,7 +299,7 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
         ));
     }
     docker.push_str("ENV SQLX_OFFLINE=true\nARG CARGO_BUILD_JOBS=2\nRUN cargo build --locked --release --workspace --bins");
-    docker.push_str("\nFROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n");
+    docker.push_str("\nFROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n");
     // Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
     docker.push_str(&format!(
         "ADD --chmod=0644 {RDS_CA_BUNDLE_URL} {RDS_CA_BUNDLE_PATH}\n"
@@ -408,7 +408,6 @@ fn reconcile_images(root: &Path) -> Result<()> {
     }
     let destination = root.join("Dockerfile.rust");
     let actual = read_to_string(&destination).ok();
-    let template = render_static_rust_template("rust/application/Dockerfile");
     if let Some(unchanged) = forklaunch_state::file_stamped(&destination) {
         anyhow::ensure!(
             unchanged,
@@ -416,7 +415,7 @@ fn reconcile_images(root: &Path) -> Result<()> {
         );
     } else if actual
         .as_deref()
-        .is_some_and(|source| source.trim_end() != template.trim_end())
+        .is_some_and(|source| !super::is_generated_rust_dockerfile(source))
     {
         // An existing custom image is authoritative; never adopt it by heuristic.
         return Ok(());
@@ -577,6 +576,33 @@ mod tests {
         let edited = docker.replace("FROM rust", "FROM custom-rust");
         write(root.path().join("Dockerfile.rust"), &edited).unwrap();
         assert!(reconcile(root.path()).is_err());
+        assert_eq!(
+            read_to_string(root.path().join("Dockerfile.rust")).unwrap(),
+            edited
+        );
+    }
+    /// An unstamped copy of the Rust template from before the runtime stage
+    /// upgraded OS packages is still CLI-owned: it is replaced by the shared
+    /// image. An edited unstamped file stays the user's.
+    #[test]
+    fn previous_unstamped_template_is_regenerated_and_edits_are_kept() {
+        let previous = super::super::rust_dockerfile_previous();
+        let current = render_static_rust_template("rust/application/Dockerfile");
+        assert_ne!(previous, current);
+        assert!(!previous.contains("apt-get upgrade -y"));
+        assert!(current.contains("apt-get upgrade -y"));
+
+        let root = fixture();
+        write(root.path().join("Dockerfile.rust"), &previous).unwrap();
+        reconcile(root.path()).unwrap();
+        let docker = read_to_string(root.path().join("Dockerfile.rust")).unwrap();
+        assert_eq!(forklaunch_state::stamped(&docker), Some(true));
+        assert!(docker.contains("FROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get upgrade -y && apt-get install"));
+
+        let root = fixture();
+        let edited = previous.replace("FROM debian:bookworm-slim", "FROM debian:bookworm-custom");
+        write(root.path().join("Dockerfile.rust"), &edited).unwrap();
+        reconcile(root.path()).unwrap();
         assert_eq!(
             read_to_string(root.path().join("Dockerfile.rust")).unwrap(),
             edited

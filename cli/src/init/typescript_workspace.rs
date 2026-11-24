@@ -247,16 +247,7 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     let native_dockerfile = output_path(stage, Path::new(native_relative))?;
     let native_default =
         super::rust_project::render_static_rust_template("rust/application/Dockerfile");
-    let marked = crate::core::watermark::apply_watermark(
-        &crate::core::rendered_template::RenderedTemplate {
-            path: native_dockerfile.clone(),
-            content: native_default.clone(),
-            context: None,
-        },
-    )?;
-    let owned_native = fs::read_to_string(&native_dockerfile).is_ok_and(|actual| {
-        actual.trim_end() == native_default.trim_end() || actual.trim_end() == marked.trim_end()
-    });
+    let owned_native = owns_native_dockerfile(&native_dockerfile)?;
     let compose_relative = original
         .get("docker_compose_path")
         .and_then(Value::as_str)
@@ -400,7 +391,9 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     if owned_native {
         let destination = stage.join("Dockerfile.rust");
         if destination.exists()
-            && fs::read_to_string(&destination)?.trim_end() != native_default.trim_end()
+            && !super::rust_project::is_generated_rust_dockerfile(&fs::read_to_string(
+                &destination,
+            )?)
         {
             bail!("Owned Rust Dockerfile conflicts with existing shared image");
         }
@@ -631,9 +624,60 @@ pub(super) fn attach_if_needed(matches: &ArgMatches) -> Result<bool> {
     Ok(true)
 }
 
+/// Whether the native Dockerfile is an unedited CLI rendering: the current or
+/// the previous `rust/application/Dockerfile`, with or without its watermark.
+fn owns_native_dockerfile(native_dockerfile: &Path) -> Result<bool> {
+    let Ok(actual) = fs::read_to_string(native_dockerfile) else {
+        return Ok(false);
+    };
+    if super::rust_project::is_generated_rust_dockerfile(&actual) {
+        return Ok(true);
+    }
+    for content in [
+        super::rust_project::render_static_rust_template("rust/application/Dockerfile"),
+        super::rust_project::rust_dockerfile_previous(),
+    ] {
+        let marked = crate::core::watermark::apply_watermark(
+            &crate::core::rendered_template::RenderedTemplate {
+                path: native_dockerfile.to_path_buf(),
+                content,
+                context: None,
+            },
+        )?;
+        if actual.trim_end() == marked.trim_end() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An unstamped native Dockerfile identical to the previous template is
+    /// still CLI-owned and gets replaced; an edited one stays the user's.
+    #[test]
+    fn previous_native_template_is_owned_and_edits_are_not() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("Dockerfile");
+        let previous = super::super::rust_project::rust_dockerfile_previous();
+        fs::write(&path, &previous).unwrap();
+        assert!(owns_native_dockerfile(&path).unwrap());
+        fs::write(
+            &path,
+            super::super::rust_project::render_static_rust_template("rust/application/Dockerfile"),
+        )
+        .unwrap();
+        assert!(owns_native_dockerfile(&path).unwrap());
+        fs::write(
+            &path,
+            previous.replace("FROM debian:bookworm-slim", "FROM debian:custom"),
+        )
+        .unwrap();
+        assert!(!owns_native_dockerfile(&path).unwrap());
+        assert!(!owns_native_dockerfile(&dir.path().join("missing")).unwrap());
+    }
 
     #[test]
     fn staged_arguments_keep_project_options_and_replace_path_and_dryrun() {
