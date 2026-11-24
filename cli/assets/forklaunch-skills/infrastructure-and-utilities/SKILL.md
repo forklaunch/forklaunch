@@ -216,8 +216,10 @@ the project may use:
 forklaunch infra add <service> object-store --existing-bucket <bucket> --prefix uploads/ --prefix exports/
 ```
 
-The platform then creates no bucket and grants the task role those prefixes
-only. See `/cli` for what the command prints about new environment variables.
+A platform that supports existing buckets then creates no bucket and grants
+the task role those prefixes only. Until a deploy shows that grant, keep the
+bucket settings and credentials the environment already has. See `/cli` for
+what the command prints about new environment variables.
 
 ### How it is configured
 

@@ -745,8 +745,14 @@ pub(crate) fn remove_from_registrations(
             .map(|(k, _)| k)
             .collect())
     };
-    let mut out = remove_entries(text, "environmentConfig", &keys(spec.env_first_key)?)?;
-    out = remove_entries(&out, "runtimeDependencies", &keys(spec.runtime_first_key)?)?;
+    let mut out = remove_entries(text, "runtimeDependencies", &keys(spec.runtime_first_key)?)?;
+    // An environment entry something else still reads (another S3 client's
+    // region, say) was not this registration's alone, and stays.
+    let unread: Vec<String> = keys(spec.env_first_key)?
+        .into_iter()
+        .filter(|key| !read_beyond_its_entry(&out, key))
+        .collect();
+    out = remove_entries(&out, "environmentConfig", &unread)?;
     let (source, names) = spec.own_import;
     out = drop_imports(&out, source, names);
     // A shared name goes only when the removed lines were its last use; an
@@ -768,10 +774,19 @@ pub(crate) fn registers(text: &str, infrastructure: &Infrastructure) -> bool {
     let Ok((open, close)) = config_object(text, &class, "runtimeDependencies") else {
         return false;
     };
-    let key = spec(infrastructure).runtime_first_key;
-    list_items(text, &class, open, close)
+    let spec = spec(infrastructure);
+    let explicit = list_items(text, &class, open, close)
         .iter()
-        .any(|item| item_key(text, item) == key)
+        .any(|item| item_key(text, item) == spec.runtime_first_key);
+    // A registration can also arrive another way (spread in from an object
+    // built elsewhere, say). The adapter being constructed in this file is
+    // what the wiring check counts as registered, so it counts here too.
+    explicit
+        || spec
+            .own_import
+            .1
+            .first()
+            .is_some_and(|adapter| used_outside_imports(text, adapter))
 }
 
 /// Whether that registration is the one `infra add` writes (whitespace,
@@ -828,6 +843,27 @@ pub(crate) fn new_environment_keys(
         .map(|(key, _)| key)
         .filter(|key| !defined.contains(key))
         .collect())
+}
+
+/// Whether code other than the `environmentConfig` entry named `key` reads
+/// it: a factory's parameter list, a `tokens.KEY`, another entry's value.
+fn read_beyond_its_entry(text: &str, key: &str) -> bool {
+    let class = classify(text);
+    let own = config_object(text, &class, "environmentConfig")
+        .ok()
+        .and_then(|(open, close)| {
+            list_items(text, &class, open, close)
+                .into_iter()
+                .find(|item| item_key(text, item) == key)
+        })
+        .map(|item| (item.start, item.end));
+    Regex::new(&format!(r"\b{}\b", regex::escape(key)))
+        .unwrap()
+        .find_iter(text)
+        .any(|found| {
+            class[found.start()] == Class::Code
+                && !own.is_some_and(|(start, end)| found.start() >= start && found.start() < end)
+        })
 }
 
 /// Keys of `runtimeDependencies` that still read `name` (for a warning when
@@ -1554,6 +1590,43 @@ export const createDependencyContainer = (envFilePath: string) => ({
         assert_ne!(own, added);
         assert!(registers(&own, &Infrastructure::S3));
         assert!(!registration_is_generated(&own, &Infrastructure::S3));
+    }
+
+    #[test]
+    fn a_registration_spread_in_from_elsewhere_counts_as_the_services_own() {
+        let import = "import { S3ObjectStore } from '@forklaunch/infrastructure-s3';\nimport { RedisTtlCache }";
+        let spread = REGISTRATIONS
+            .replace(
+                "const runtimeDependencies = environmentConfig.chain({\n",
+                "const storage = {\n  ObjectStore: {\n    lifetime: Lifetime.Singleton,\n    type: S3ObjectStore,\n    factory: () => new S3ObjectStore()\n  }\n};\n\nconst runtimeDependencies = environmentConfig.chain({\n  ...storage,\n",
+            )
+            .replace("import { RedisTtlCache }", import);
+        assert!(spread.contains("  ...storage,\n") && spread.contains(import));
+        assert!(registers(&spread, &Infrastructure::S3));
+        assert!(!registration_is_generated(&spread, &Infrastructure::S3));
+        // Importing the adapter without building one is not a registration.
+        let imported_only = REGISTRATIONS.replace("import { RedisTtlCache }", import);
+        assert!(!registers(&imported_only, &Infrastructure::S3));
+    }
+
+    #[test]
+    fn removal_keeps_an_environment_entry_something_else_still_reads() {
+        // The service had S3_REGION before the object store, for a client of
+        // its own that reads it.
+        let with_region = REGISTRATIONS
+            .replace(
+                "  // Epic SMART/PKCE OAuth. Optional until a registration exists.\n",
+                "  S3_REGION: {\n    lifetime: Lifetime.Singleton,\n    type: optional(string),\n    value: getEnvVar('S3_REGION')\n  },\n  // Epic SMART/PKCE OAuth. Optional until a registration exists.\n",
+            )
+            .replace(
+                "  // Tenant-scoped entity manager.\n",
+                "  ArchiveRegion: {\n    lifetime: Lifetime.Singleton,\n    type: string,\n    factory: ({ S3_REGION }) => S3_REGION ?? 'us-east-1'\n  },\n  // Tenant-scoped entity manager.\n",
+            );
+        assert!(with_region.contains("factory: ({ S3_REGION })"));
+        let added = add_to_registrations(&with_region, &Infrastructure::S3, "hv").unwrap();
+        assert_eq!(added.matches("  S3_REGION: {").count(), 1);
+        let removed = remove_from_registrations(&added, &Infrastructure::S3, "hv").unwrap();
+        assert_eq!(removed, with_region);
     }
 
     #[test]

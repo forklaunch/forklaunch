@@ -582,7 +582,9 @@ forklaunch score --offline                    # afterwards: the wiring checks sh
 ```
 
 Run it from the app root (or pass `-p <app-root>`). It refuses a type the
-project already has, a type it lacks on remove, and a library. A worker may
+project already has (except an object store given `--existing-bucket`, which
+updates the declaration; see below), a type it lacks on remove, and a
+library. A worker may
 hold an object store and every managed gateway capability (its worker and
 server containers both get the settings); a TypeScript worker's cache is its
 queue backend, which `forklaunch change worker --type` sets, so `infra add
@@ -595,8 +597,11 @@ been edited by hand (comments, anchors, `<<: *shared` merge keys, its own
 layout) is changed line by line: settings are added at the end of the
 service's own `environment:` block, MinIO or the gateway mock at the end of
 `services:`, and a setting the service already has (its own or merged in) is
-left alone. When a change cannot be placed that way the file is not written;
-the command prints the YAML to add by hand.
+left alone. When a change cannot be placed that way, or would reach another
+service through a shared anchor, the file is not written; the command prints
+the YAML to add by hand. `infra remove` takes out only what `infra add` wrote:
+a value you changed in docker-compose or `.env.local`, and an environment
+entry in `registrations.ts` that other code still reads, stay.
 
 When the registration is new, the command lists the environment variables it
 introduced and which deployed scopes read them (a worker is two:
@@ -610,10 +615,14 @@ and compose settings are not touched, and nothing new is introduced.
 the object store on a bucket that already exists. The manifest records
 `object_store_bucket` and `object_store_prefixes` beside `object_store =
 "s3"`; the release carries them as the resource's `existingBucket` and
-`prefixes`, and the platform then creates no bucket and grants the project's
-task role those prefixes only. Run it again with other prefixes to change
-them. At least one prefix is required: the whole bucket is never granted. A
-worker can send, call or charge; events (delivery receipts, replies, call and
+`prefixes`. A platform that supports existing buckets then creates no bucket
+and grants the project's task role those prefixes only. The command only
+records the declaration: keep the bucket settings and credentials the
+environment has (`S3_BUCKET`, any stored S3 keys) until a deploy shows the
+task-role grant in place. Run it again with other prefixes to change them. At
+least one prefix is required: the whole bucket is never granted.
+
+A worker can send, call or charge; events (delivery receipts, replies, call and
 payment events) are delivered over HTTP to `/platform-events/<capability>`,
 never to the worker process. When no HTTP service holds the capability, `infra
 add <worker>` prints a note saying so: add it to an HTTP service as well if the

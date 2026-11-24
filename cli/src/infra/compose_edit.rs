@@ -82,7 +82,60 @@ pub(crate) fn rewrite(original: &str, after: &DockerCompose) -> Result<ComposeRe
             "its layout could not be edited in place safely".to_owned(),
         ));
     }
+    // And nothing else moved. A line added to an anchored block reaches
+    // every block that merges it (`<<: *shared`), which the model cannot
+    // see: with the merges resolved, the file may differ only where the
+    // command changed it.
+    let (Some(resolved_before), Some(resolved_after)) = (resolved(original), resolved(&edited))
+    else {
+        return Ok(manual(
+            "its anchors and merge keys could not be resolved".to_owned(),
+        ));
+    };
+    let mut reached = Vec::new();
+    diff(
+        &resolved_before,
+        &resolved_after,
+        &mut Vec::new(),
+        &mut reached,
+    );
+    if let Some(stray) = reached.iter().map(location).find(|place| {
+        !ops.iter()
+            .map(location)
+            .any(|meant| overlaps(place, &meant))
+    }) {
+        return Ok(manual(format!(
+            "the change would also reach `{}` through a YAML anchor",
+            stray.join(".")
+        )));
+    }
     Ok(ComposeRewrite::Edited(edited))
+}
+
+/// The document with its merge keys resolved, as Compose reads it; `None`
+/// when it does not parse or a merge cannot be resolved.
+fn resolved(text: &str) -> Option<Value> {
+    let mut value = serde_yml::from_str::<Value>(text).ok()?;
+    // A merged block can itself merge another; each pass resolves a level.
+    for _ in 0..8 {
+        value.apply_merge().ok()?;
+        if !has_merge_key(&value) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+/// Where an operation acts: its path and key.
+fn location(op: &Op) -> Vec<String> {
+    let (Op::Add { path, key, .. } | Op::Remove { path, key } | Op::Replace { path, key, .. }) = op;
+    path.iter().chain(std::iter::once(key)).cloned().collect()
+}
+
+/// Whether one location is the other or lies inside it. (A list-form
+/// environment changes as a whole where the model changes one variable.)
+fn overlaps(a: &[String], b: &[String]) -> bool {
+    a.iter().zip(b).all(|(left, right)| left == right)
 }
 
 /// A model without its merge keys. The model holds `<<: *shared` as the text
@@ -106,15 +159,9 @@ fn comparable(value: serde_json::Value) -> serde_json::Value {
 /// The environment variable names `service` sets, merge keys (`<<: *shared`)
 /// and list form (`- KEY=value`) included.
 pub(crate) fn effective_environment(text: &str, service: &str) -> BTreeSet<String> {
-    let Ok(mut value) = serde_yml::from_str::<Value>(text) else {
+    let Some(value) = resolved(text) else {
         return BTreeSet::new();
     };
-    // A merged block can itself merge another; each pass resolves a level.
-    for _ in 0..8 {
-        if value.apply_merge().is_err() || !has_merge_key(&value) {
-            break;
-        }
-    }
     let Some(environment) = value
         .get("services")
         .and_then(|services| services.get(service))
@@ -134,6 +181,28 @@ pub(crate) fn effective_environment(text: &str, service: &str) -> BTreeSet<Strin
             .collect(),
         _ => BTreeSet::new(),
     }
+}
+
+/// The named volumes any service mounts, mounts merged in through `<<`
+/// included; `None` when the file's merges cannot be resolved.
+pub(crate) fn mounted_volumes(text: &str) -> Option<BTreeSet<String>> {
+    let value = resolved(text)?;
+    let mut mounted = BTreeSet::new();
+    let services = value.get("services").and_then(Value::as_mapping);
+    for (_, service) in services.into_iter().flatten() {
+        let volumes = service.get("volumes").and_then(Value::as_sequence);
+        for mount in volumes.into_iter().flatten() {
+            let source = match mount {
+                Value::String(short) => short.split(':').next().map(str::to_owned),
+                other => other
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .map(str::to_owned),
+            };
+            mounted.extend(source);
+        }
+    }
+    Some(mounted)
 }
 
 fn has_merge_key(value: &Value) -> bool {
@@ -508,7 +577,6 @@ fn add(
     if at.kind != Kind::Block {
         return Err(format!("`{}` is not a block mapping", path.join(".")));
     }
-    end_with_newline(lines);
     let first = first_content(lines, at.start, at.end);
     let rendered = match first {
         Some(first) if is_sequence_item(&lines[first]) => {
@@ -534,6 +602,10 @@ fn add(
         None => render_entry(key, value, at.indent.map_or(0, |indent| indent + step))?,
     };
     let position = if first.is_some() { at.end } else { at.start };
+    // Only the line the entry follows needs its line ending.
+    if position > 0 && !lines[position - 1].ends_with('\n') {
+        lines[position - 1].push('\n');
+    }
     lines.splice(position..position, rendered);
     Ok(())
 }
@@ -634,7 +706,7 @@ fn replace(
 
 #[cfg(test)]
 mod tests {
-    use super::{ComposeRewrite, effective_environment, rewrite};
+    use super::{ComposeRewrite, effective_environment, mounted_volumes, rewrite};
     use crate::core::docker::DockerCompose;
 
     const CUSTOM: &str = r#"# Local stack. Pins are raised on purpose, one image at a time.
@@ -747,7 +819,16 @@ services:
                 ("S3_BUCKET", "demo-api-dev"),
             ],
         );
-        set_env(&mut after, "jobs-worker", &[("S3_BUCKET", "demo-jobs-dev")]);
+        // The worker merges the API's block, so it gets its own lines for
+        // everything the API gains.
+        set_env(
+            &mut after,
+            "jobs-worker",
+            &[
+                ("S3_URL", "http://minio:9000"),
+                ("S3_BUCKET", "demo-jobs-dev"),
+            ],
+        );
         set_env(&mut after, "listed", &[("S3_BUCKET", "demo-listed-dev")]);
         crate::core::docker::add_s3_to_docker_compose(
             "demo",
@@ -773,7 +854,7 @@ services:
         assert!(text.contains("      DB_HOST: postgresql\n      S3_URL: http://minio:9000\n      S3_BUCKET: demo-api-dev\n"), "{text}");
         assert!(
             text.contains(
-                "      QUEUE_NAME: jobs\n      S3_BUCKET: demo-jobs-dev\n    command: |\n"
+                "      QUEUE_NAME: jobs\n      S3_URL: http://minio:9000\n      S3_BUCKET: demo-jobs-dev\n    command: |\n"
             ),
             "{text}"
         );
@@ -802,6 +883,7 @@ services:
     fn removing_what_was_added_restores_every_byte() {
         let mut added = model(CUSTOM);
         set_env(&mut added, "api", &[("S3_BUCKET", "demo-api-dev")]);
+        set_env(&mut added, "jobs-worker", &[("S3_BUCKET", "demo-jobs-dev")]);
         set_env(&mut added, "listed", &[("S3_BUCKET", "demo-listed-dev")]);
         crate::core::docker::add_s3_to_docker_compose(
             "demo",
@@ -844,6 +926,55 @@ services:
             rewrite(original, &after).unwrap(),
             ComposeRewrite::Manual { .. }
         ));
+    }
+
+    #[test]
+    fn a_change_that_would_reach_another_service_through_an_anchor_is_not_made() {
+        // `files` merges the API's whole environment block: a setting added
+        // to the API would become one of its own.
+        let original = "# mine\nservices:\n  api:\n    image: demo\n    environment: &api-environment\n      PORT: '8000'\n  files:\n    image: demo\n    environment:\n      <<: *api-environment\n      PORT: '8002'\n";
+        let mut after = model(original);
+        set_env(&mut after, "api", &[("S3_BUCKET", "demo-api-dev")]);
+        match rewrite(original, &after).unwrap() {
+            ComposeRewrite::Manual { reason, .. } => {
+                assert!(
+                    reason.contains("services.files.environment.S3_BUCKET")
+                        && reason.contains("anchor"),
+                    "{reason}"
+                );
+            }
+            _ => panic!("expected a manual change"),
+        }
+        // Set on both, it is what was asked for: each gets its own line.
+        set_env(&mut after, "files", &[("S3_BUCKET", "demo-api-dev")]);
+        let text = edited(original, &after);
+        assert_eq!(
+            text.matches("S3_BUCKET: demo-api-dev\n").count(),
+            2,
+            "{text}"
+        );
+        assert_eq!(lost(original, &text), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_file_without_a_final_newline_keeps_its_last_line_as_it_is() {
+        let original = "# mine\nservices:\n  api:\n    image: demo\n    environment:\n      PORT: '8000'\n  web:\n    image: nginx";
+        let mut after = model(original);
+        set_env(&mut after, "api", &[("S3_BUCKET", "demo-api-dev")]);
+        let text = edited(original, &after);
+        assert!(text.ends_with("  web:\n    image: nginx"), "{text:?}");
+        assert!(text.contains("      PORT: '8000'\n      S3_BUCKET: demo-api-dev\n  web:\n"));
+    }
+
+    #[test]
+    fn mounts_merged_in_through_an_anchor_count_as_mounts() {
+        let text = "x-data: &data\n  volumes:\n    - minio-data:/data\nservices:\n  backup:\n    <<: *data\n    image: demo\n  api:\n    image: demo\n    volumes:\n      - type: volume\n        source: uploads\n        target: /uploads\n";
+        let mounted = mounted_volumes(text).unwrap();
+        assert!(
+            mounted.contains("minio-data") && mounted.contains("uploads"),
+            "{mounted:?}"
+        );
+        assert!(mounted_volumes("services: [").is_none());
     }
 
     #[test]

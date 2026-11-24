@@ -186,9 +186,10 @@ fn existing_bucket_args(cmd: Command) -> Command {
             .long("existing-bucket")
             .value_name("BUCKET")
             .help(
-                "object-store only: use this bucket, which already exists, instead of having the \
-                 platform create one. Needs --prefix. The platform creates no bucket and grants \
-                 the project's task role access to those prefixes of it only",
+                "object-store only: declare the store on this bucket, which already exists, \
+                 instead of one the platform creates. Needs --prefix. A platform that supports \
+                 existing buckets then creates none and grants the project's task role those \
+                 prefixes only; nothing deployed changes until then",
             ),
     )
     .arg(
@@ -227,7 +228,9 @@ fn check_bucket_name(bucket: &str) -> Result<()> {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.')
         && edge(bucket.chars().next())
         && edge(bucket.chars().last())
-        && !bucket.contains("..");
+        && !bucket.contains("..")
+        // S3 refuses a name formatted as an IP address.
+        && bucket.parse::<std::net::Ipv4Addr>().is_err();
     if !valid {
         bail!(
             "'{bucket}' is not a bucket name: give the bucket's name alone (3 to 63 lowercase \
@@ -366,27 +369,38 @@ fn new_environment_report(keys: &[String], scopes: &[String]) -> String {
     out
 }
 
-/// The docker-compose services that run a TypeScript project's code: a
-/// service is one; a worker is its consumer and its HTTP server, whichever
-/// of the names generated and hand-written stacks give them exist.
+/// The docker-compose services that run a TypeScript project's code. A
+/// service is one. A worker is two: its HTTP server (`<name>-server` in a
+/// generated stack; `<name>` or `<name>-service` in hand-written ones, the
+/// first that exists) and its consumer (`<name>-worker`). A name that is
+/// another project of the application is that project's, never the worker's.
 fn typescript_compose_keys(
     compose: &crate::core::docker::DockerCompose,
+    projects: &[crate::core::manifest::ProjectEntry],
     project: &str,
     project_type: &ProjectType,
 ) -> Vec<String> {
-    let candidates = match project_type {
-        ProjectType::Worker => vec![
-            project.to_owned(),
-            format!("{project}-server"),
-            format!("{project}-service"),
-            format!("{project}-worker"),
-        ],
-        _ => vec![project.to_owned()],
+    let runs_here = |key: &String| {
+        compose.services.contains_key(key)
+            && (key == project || !projects.iter().any(|other| &other.name == key))
     };
-    candidates
-        .into_iter()
-        .filter(|key| compose.services.contains_key(key))
-        .collect()
+    match project_type {
+        ProjectType::Worker => {
+            let server = [
+                format!("{project}-server"),
+                project.to_owned(),
+                format!("{project}-service"),
+            ]
+            .into_iter()
+            .find(runs_here);
+            let consumer = Some(format!("{project}-worker")).filter(runs_here);
+            server.into_iter().chain(consumer).collect()
+        }
+        _ => Some(project.to_owned())
+            .filter(runs_here)
+            .into_iter()
+            .collect(),
+    }
 }
 
 /// What to tell the user when docker-compose.yaml could not be edited in
@@ -398,7 +412,8 @@ pub(crate) fn manual_compose_note(reason: &str, snippet: &str) -> String {
         .collect();
     format!(
         "note: docker-compose.yaml was left exactly as it is ({reason}). To match, make this \
-         change by hand:\n{snippet}"
+         change by hand:\n{snippet}  Where a block is an alias today (`environment: *shared`), \
+         keep what it brings in by making it a merge key (`<<: *shared`) above the new entries.\n"
     )
 }
 
@@ -609,8 +624,9 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
         } else {
             let env_local = service_path.join(".env.local");
             if let Some(text) = edit.read(&env_local)? {
-                let keys: Vec<&str> = env.iter().map(|(k, _)| *k).collect();
-                let changed = in_place::remove_env_lines(&text, &keys);
+                // Only the lines still holding what `infra add` wrote: a
+                // value the developer set is theirs.
+                let changed = in_place::remove_env_pairs(&text, &env);
                 if changed.trim().is_empty() {
                     edit.delete(env_local);
                 } else {
@@ -656,7 +672,7 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
     let compose_path = app_root.join("docker-compose.yaml");
     if !own_registration && let Some(text) = edit.read(&compose_path)? {
         let mut compose: DockerCompose = serde_yml::from_str(&text)?;
-        let keys = typescript_compose_keys(&compose, &service, &project.r#type);
+        let keys = typescript_compose_keys(&compose, &manifest.projects, &service, &project.r#type);
         if keys.is_empty() {
             eprintln!(
                 "warning: no '{service}' service in docker-compose.yaml; add its settings by hand"
@@ -668,12 +684,11 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
             (Infrastructure::S3, true) if !keys.is_empty() => {
                 let mut generated = indexmap::IndexMap::new();
                 add_s3_to_docker_compose(&app_name, &service, &mut compose, &mut generated)?;
-                // One process at a time, against the file as edited so far:
-                // a process that merges in a block an earlier one just
-                // gained the settings through has them already.
-                let mut current = text.clone();
+                // Each process gets its own lines, also when one merges in
+                // another's block: what a process inherits is not this
+                // command's to rely on (see `compose_edit::rewrite`).
                 for key in &keys {
-                    let set = compose_edit::effective_environment(&current, key);
+                    let set = compose_edit::effective_environment(&text, key);
                     let environment = compose
                         .services
                         .get_mut(key)
@@ -684,11 +699,6 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
                         if !set.contains(name) && !environment.contains_key(name) {
                             environment.insert(name.clone(), value.clone());
                         }
-                    }
-                    if let ComposeRewrite::Edited(updated) =
-                        compose_edit::rewrite(&current, &compose)?
-                    {
-                        current = updated;
                     }
                 }
             }
@@ -756,26 +766,27 @@ fn change_infrastructure(matches: &ArgMatches, adding: bool) -> Result<()> {
             let backends: Vec<String> = generated_stack.services.keys().cloned().collect();
             clean_up_unused_infrastructure_services(&mut compose, projects)?;
             // The backend's volume goes with it when it is still the one
-            // `infra add` wrote and nothing else mounts it.
+            // `infra add` wrote and nothing mounts it, a mount merged in
+            // through an anchor included. When that cannot be told, it stays.
             if backends
                 .iter()
                 .any(|backend| !compose.services.contains_key(backend))
             {
+                let mounted = match compose_edit::rewrite(&text, &compose)? {
+                    ComposeRewrite::Edited(updated) => compose_edit::mounted_volumes(&updated),
+                    _ => None,
+                };
                 for (name, generated) in &generated_stack.volumes {
-                    let mounted = compose.services.values().any(|process| {
-                        process.volumes.as_ref().is_some_and(|volumes| {
-                            volumes
-                                .iter()
-                                .any(|mount| mount.split(':').next() == Some(name.as_str()))
-                        })
-                    });
                     let ours = compose
                         .volumes
                         .get(name)
                         .map(serde_json::to_value)
                         .transpose()?
                         == Some(serde_json::to_value(generated)?);
-                    if ours && !mounted {
+                    let unmounted = mounted
+                        .as_ref()
+                        .is_some_and(|mounted| !mounted.contains(name));
+                    if ours && unmounted {
                         compose.volumes.shift_remove(name);
                     }
                 }
@@ -843,24 +854,26 @@ fn own_registration_report(adding: bool) -> &'static str {
     }
 }
 
-/// What an existing-bucket declaration means once deployed.
+/// What an existing-bucket declaration means once deployed. It only records
+/// what the platform should do, so it says what to keep until a deploy shows
+/// the platform did it.
 pub(crate) fn existing_bucket_report(existing: &ExistingBucket, scopes: &[String]) -> String {
+    let quoted = |items: &[String], joiner: &str| {
+        items
+            .iter()
+            .map(|item| format!("'{item}'"))
+            .collect::<Vec<_>>()
+            .join(joiner)
+    };
     format!(
-        "  Declared on the existing bucket '{}': no bucket is created. The platform grants {} \
-         read and write access to {} of it only, through the task role (no access keys). \
-         S3_BUCKET stays as the environment has it.\n",
+        "  Recorded: the object store is the existing bucket '{}', limited to {}.\n  \
+         A platform that supports existing buckets creates no bucket for it and grants {} read \
+         and write access to those prefixes only, through the task role. This command changes \
+         nothing that is deployed: keep the bucket settings and credentials the environment \
+         has (S3_BUCKET and any stored S3 keys) until a deploy shows that grant in place.\n",
         existing.bucket,
-        scopes
-            .iter()
-            .map(|scope| format!("'{scope}'"))
-            .collect::<Vec<_>>()
-            .join(" and "),
-        existing
-            .prefixes
-            .iter()
-            .map(|prefix| format!("'{prefix}'"))
-            .collect::<Vec<_>>()
-            .join(", "),
+        quoted(&existing.prefixes, ", "),
+        quoted(scopes, " and "),
     )
 }
 
@@ -1171,14 +1184,22 @@ mod tests {
         let report =
             existing_bucket_report(&existing, &component_scopes("jobs", &ProjectType::Worker));
         assert!(
-            report.contains("existing bucket 'shared': no bucket is created"),
+            report.contains("existing bucket 'shared', limited to 'a/', 'b/'"),
             "{report}"
         );
         assert!(
             report.contains("'jobs-service' and 'jobs-worker'"),
             "{report}"
         );
-        assert!(report.contains("'a/', 'b/' of it only"), "{report}");
+        // It records a declaration; it does not claim access is in place.
+        assert!(
+            report.contains("A platform that supports existing buckets"),
+            "{report}"
+        );
+        assert!(
+            report.contains("keep the bucket settings and credentials"),
+            "{report}"
+        );
     }
 
     #[test]
@@ -1658,18 +1679,25 @@ mod typescript_fixture {
             ),
             "{compose}"
         );
-        // The worker's two containers share one anchored block: the settings
-        // go into it once, and the consumer inherits them through `<<`.
+        // The worker's two containers share one anchored block. Each still
+        // gets its own lines: nothing is left to what a merge key brings in.
         assert!(
             compose.contains(
                 "      REDIS_URL: redis://redis:6379/1\n      S3_URL: http://minio:9000\n      S3_BUCKET: demo-jobs-dev\n"
             ),
             "{compose}"
         );
-        assert_eq!(gained.iter().filter(|l| l.contains("S3_BUCKET")).count(), 2);
-        assert!(compose.contains("      <<: *jobs-environment\n      WORKER_CONCURRENCY: \"4\"\n"));
-        let inherited = crate::infra::compose_edit::effective_environment(compose, "jobs-worker");
-        assert!(inherited.contains("S3_BUCKET") && inherited.contains("OTEL_LEVEL"));
+        assert!(
+            compose.contains(
+                "      <<: *jobs-environment\n      WORKER_CONCURRENCY: \"4\"\n      S3_URL: http://minio:9000\n      S3_BUCKET: demo-jobs-dev\n"
+            ),
+            "{compose}"
+        );
+        assert_eq!(gained.iter().filter(|l| l.contains("S3_BUCKET")).count(), 3);
+        // The service with storage of its own keeps its endpoint and bucket.
+        assert!(compose.contains(
+            "      S3_URL: http://host.docker.internal:9100\n      S3_BUCKET: demo-shared-files\n"
+        ));
         // MinIO and its volume are appended; the file still parses as YAML
         // with its aliases resolved.
         assert!(
@@ -1859,6 +1887,64 @@ mod typescript_fixture {
     }
 
     #[test]
+    fn local_settings_the_developer_set_survive_a_remove() {
+        let root = fixture();
+        let root = root.path();
+        let env_local = root.join("src/modules/jobs/.env.local");
+        fs::write(&env_local, "S3_BUCKET=shared-local\nQUEUE_NAME=jobs\n").unwrap();
+        run(&AddCommand, root, &["jobs", "object-store"]);
+        let added = fs::read_to_string(&env_local).unwrap();
+        assert!(
+            added.starts_with("S3_BUCKET=shared-local\nQUEUE_NAME=jobs\n"),
+            "{added}"
+        );
+        assert!(added.contains("S3_URL=http://localhost:9000\n"), "{added}");
+        assert!(!added.contains("S3_BUCKET=demo-jobs-dev"), "{added}");
+        run(&RemoveCommand, root, &["jobs", "object-store"]);
+        assert_eq!(
+            fs::read_to_string(&env_local).unwrap(),
+            "S3_BUCKET=shared-local\nQUEUE_NAME=jobs\n"
+        );
+    }
+
+    #[test]
+    fn a_workers_compose_processes_never_include_another_project() {
+        use crate::core::docker::DockerCompose;
+
+        let manifest: ApplicationManifestData = toml::from_str(
+            &fs::read_to_string(fixture().path().join(MANIFEST))
+                .unwrap()
+                .replace("name = \"files\"", "name = \"jobs-service\""),
+        )
+        .unwrap();
+        let compose = |services: &[&str]| -> DockerCompose {
+            let body: String = services
+                .iter()
+                .map(|name| format!("  {name}:\n    image: demo\n"))
+                .collect();
+            serde_yml::from_str(&format!("services:\n{body}")).unwrap()
+        };
+        let keys = |services: &[&str]| {
+            super::typescript_compose_keys(
+                &compose(services),
+                &manifest.projects,
+                "jobs",
+                &crate::core::manifest::ProjectType::Worker,
+            )
+        };
+        // A generated stack.
+        assert_eq!(
+            keys(&["jobs-server", "jobs-worker", "api"]),
+            ["jobs-server", "jobs-worker"]
+        );
+        // Hand-written stacks name the server after the project.
+        assert_eq!(keys(&["jobs", "jobs-worker"]), ["jobs", "jobs-worker"]);
+        // `jobs-service` is another project here, so it is not the worker's server.
+        assert_eq!(keys(&["jobs-service", "jobs-worker"]), ["jobs-worker"]);
+        assert!(keys(&["api"]).is_empty());
+    }
+
+    #[test]
     fn dryrun_writes_nothing() {
         let root = fixture();
         let root = root.path();
@@ -1909,6 +1995,7 @@ mod typescript_fixture {
             "Demo_Bucket",
             "ab",
             "demo/files",
+            "192.168.5.4",
         ] {
             let error = refused(&[
                 "api",
