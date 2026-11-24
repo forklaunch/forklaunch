@@ -1360,12 +1360,6 @@ pub(crate) fn env_key(line: &str) -> Option<&str> {
     .then_some(key)
 }
 
-pub(crate) fn remove_env_lines(text: &str, keys: &[&str]) -> String {
-    text.split_inclusive('\n')
-        .filter(|line| !env_key(line).is_some_and(|key| keys.contains(&key)))
-        .collect()
-}
-
 /// Remove `KEY=value` lines that still hold the value `infra add` wrote (a
 /// key set to anything else was the developer's).
 pub(crate) fn remove_env_pairs(text: &str, pairs: &[(&str, &str)]) -> String {
@@ -2040,10 +2034,13 @@ hostingType = "ecs-ec2"
     }
 
     #[test]
-    fn env_lines_are_removed_by_key() {
+    fn env_lines_are_removed_only_while_they_hold_the_value_written() {
         assert_eq!(
-            remove_env_lines("A=1\nS3_URL=x\nS3_URL_EXTRA=y\n", &["S3_URL"]),
-            "A=1\nS3_URL_EXTRA=y\n"
+            remove_env_pairs(
+                "A=1\nS3_URL=x\nS3_URL_EXTRA=x\nS3_BUCKET=mine\n",
+                &[("S3_URL", "x"), ("S3_BUCKET", "demo-dev")]
+            ),
+            "A=1\nS3_URL_EXTRA=x\nS3_BUCKET=mine\n"
         );
     }
 }
