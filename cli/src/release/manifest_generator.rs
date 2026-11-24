@@ -1271,6 +1271,50 @@ fn add_capability_resources(
     }
 }
 
+/// The project's object store as a resource bound to `service_name`.
+///
+/// A store declared on a bucket that already exists carries it in `config`:
+/// `existingBucket` (the bucket's name) and `prefixes` (the key prefixes of
+/// it this component may read and write). The platform then creates no
+/// bucket, key or CORS rule for the resource and grants the component's task
+/// role those prefixes only.
+fn add_object_store_resource(
+    service_name: &str,
+    inventory: &ResourceInventory,
+    resources: &mut Vec<ResourceDefinition>,
+) {
+    let Some(object_store) = &inventory.object_store else {
+        return;
+    };
+    let config = inventory.object_store_bucket.as_ref().map(|bucket| {
+        HashMap::from([
+            ("existingBucket".to_string(), Value::String(bucket.clone())),
+            (
+                "prefixes".to_string(),
+                Value::Array(
+                    inventory
+                        .object_store_prefixes
+                        .iter()
+                        .flatten()
+                        .cloned()
+                        .map(Value::String)
+                        .collect(),
+                ),
+            ),
+        ])
+    });
+    resources.push(ResourceDefinition {
+        id: format!("{}-storage", service_name),
+        // Object storage maps to the "objectstore" integration type
+        resource_type: "objectstore".to_string(),
+        name: format!("{}-storage", service_name),
+        technology: object_store.clone(),
+        region: None,
+        config,
+        service_name: Some(service_name.to_string()),
+    });
+}
+
 fn add_resources_from_inventory(
     service_name: &str,
     inventory: &ResourceInventory,
@@ -1334,18 +1378,7 @@ fn add_resources_from_inventory(
 
     add_capability_resources(service_name, inventory, resources);
 
-    if let Some(object_store) = &inventory.object_store {
-        resources.push(ResourceDefinition {
-            id: format!("{}-storage", service_name),
-            // Object storage maps to the "objectstore" integration type
-            resource_type: "objectstore".to_string(),
-            name: format!("{}-storage", service_name),
-            technology: object_store.clone(),
-            region: None,
-            config: None,
-            service_name: Some(service_name.to_string()),
-        });
-    }
+    add_object_store_resource(service_name, inventory, resources);
 }
 
 /// Adds non-database resources from inventory (cache, queue, object_store).
@@ -1387,17 +1420,7 @@ fn add_non_db_resources(
 
     add_capability_resources(service_name, inventory, resources);
 
-    if let Some(object_store) = &inventory.object_store {
-        resources.push(ResourceDefinition {
-            id: format!("{}-storage", service_name),
-            resource_type: "objectstore".to_string(),
-            name: format!("{}-storage", service_name),
-            technology: object_store.clone(),
-            region: None,
-            config: None,
-            service_name: Some(service_name.to_string()),
-        });
-    }
+    add_object_store_resource(service_name, inventory, resources);
 }
 
 #[cfg(test)]
@@ -1452,6 +1475,8 @@ mod tests {
                         object_store: None,
                         redis_partition: None,
                         capabilities: None,
+                        object_store_bucket: None,
+                        object_store_prefixes: None,
                     }),
                     routers: Some(vec!["users".to_string()]),
                     metadata: Some(ProjectMetadata {
@@ -1477,6 +1502,8 @@ mod tests {
                         object_store: None,
                         redis_partition: None,
                         capabilities: None,
+                        object_store_bucket: None,
+                        object_store_prefixes: None,
                     }),
                     routers: None,
                     metadata: Some(ProjectMetadata {
@@ -1519,6 +1546,55 @@ mod tests {
             framework: None,
             compliance: None,
         }
+    }
+
+    #[test]
+    fn an_object_store_on_an_existing_bucket_carries_the_bucket_and_prefixes() {
+        let inventory = |bucket: Option<&str>| ResourceInventory {
+            database: None,
+            cache: Some("bullmq".to_string()),
+            queue: None,
+            object_store: Some("s3".to_string()),
+            redis_partition: None,
+            capabilities: None,
+            object_store_bucket: bucket.map(str::to_string),
+            object_store_prefixes: bucket
+                .map(|_| vec!["applications/".to_string(), "releases/".to_string()]),
+        };
+        // A worker project is two components; each gets the declaration.
+        let mut resources = Vec::new();
+        add_resources_from_inventory(
+            "jobs-service",
+            &inventory(Some("shared")),
+            &mut resources,
+            false,
+        );
+        add_non_db_resources("jobs-worker", &inventory(Some("shared")), &mut resources);
+        let stores: Vec<&ResourceDefinition> = resources
+            .iter()
+            .filter(|resource| resource.resource_type == "objectstore")
+            .collect();
+        assert_eq!(stores.len(), 2);
+        for (store, component) in stores.iter().zip(["jobs-service", "jobs-worker"]) {
+            assert_eq!(store.name, format!("{component}-storage"));
+            assert_eq!(store.service_name.as_deref(), Some(component));
+            assert_eq!(
+                serde_json::to_value(store).unwrap()["config"],
+                serde_json::json!({
+                    "existingBucket": "shared",
+                    "prefixes": ["applications/", "releases/"]
+                })
+            );
+        }
+        // A platform bucket declares nothing extra.
+        let mut resources = Vec::new();
+        add_resources_from_inventory("api", &inventory(None), &mut resources, false);
+        let store = resources
+            .iter()
+            .find(|resource| resource.resource_type == "objectstore")
+            .unwrap();
+        assert!(store.config.is_none());
+        assert!(serde_json::to_value(store).unwrap().get("config").is_none());
     }
 
     #[test]

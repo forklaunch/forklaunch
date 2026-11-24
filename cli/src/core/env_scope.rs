@@ -365,6 +365,8 @@ mod tests {
                         object_store: None,
                         redis_partition: None,
                         capabilities: None,
+                        object_store_bucket: None,
+                        object_store_prefixes: None,
                     }),
                     routers: None,
                     metadata: None,

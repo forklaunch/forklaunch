@@ -476,3 +476,75 @@ Other key-like variables are not automatically classified as Key type unless the
 - `determine_env_var_scopes()`: Determines scope for variables found in code
 - `generate_release_manifest()`: Assembles the final manifest structure
 
+
+## Object stores on an existing bucket
+
+`forklaunch infra add <project> object-store --existing-bucket <bucket> --prefix <prefix>`
+(repeat `--prefix`) declares an object store that uses a bucket which already
+exists instead of one the platform creates.
+
+### In `.forklaunch/manifest.toml`
+
+```toml
+[projects.resources]
+object_store = "s3"
+object_store_bucket = "acme-shared-files"
+object_store_prefixes = ["tenants/", "exports/*/daily/"]
+```
+
+| Key | Type | Meaning |
+|---|---|---|
+| `object_store` | string | `"s3"`, as for any object store |
+| `object_store_bucket` | string, optional | The existing bucket's name (not an ARN or URL). Absent for a platform-created bucket |
+| `object_store_prefixes` | array of strings, optional | Key prefixes of that bucket the project may read and write. Present, with at least one entry, whenever `object_store_bucket` is |
+
+Both keys are written and removed together with `object_store`; `infra
+remove` takes all three out. Running `infra add` again with the flags on a
+project that already has the store replaces the bucket and prefixes.
+
+A prefix is a literal key prefix. `*` may appear inside it (it is granted as
+written, so `exports/*/daily/` covers every tenant's daily exports); it may
+not be empty, start with `/`, `*` or `?`, or contain whitespace or `${`. The
+whole bucket cannot be declared.
+
+### In the release manifest
+
+The store is one `objectstore` resource per deployed component, as before: a
+service `api` gets `api-storage` bound to `api`; a worker `jobs` gets
+`jobs-service-storage` and `jobs-worker-storage`, bound to `jobs-service` and
+`jobs-worker`. For an existing bucket each carries the declaration in
+`config`:
+
+```json
+{
+  "id": "jobs-worker-storage",
+  "type": "objectstore",
+  "name": "jobs-worker-storage",
+  "technology": "s3",
+  "serviceName": "jobs-worker",
+  "config": {
+    "existingBucket": "acme-shared-files",
+    "prefixes": ["tenants/", "exports/*/daily/"]
+  }
+}
+```
+
+A resource without `config.existingBucket` is a platform bucket, exactly as
+before this field existed.
+
+### What the platform does with it
+
+For a resource with `config.existingBucket` the platform is expected to:
+
+- create no bucket, KMS key or CORS rule for the resource, and never delete
+  or empty the bucket on destroy or on a managed-instance reset;
+- leave `S3_BUCKET` and `S3_REGION` as the environment has them (the app's
+  stored values keep pointing at the bucket) and set no `S3_PREFIX`: the
+  prefixes scope access, they do not relocate keys;
+- attach one policy to the task role of the component in `serviceName`:
+  `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` and
+  `s3:AbortMultipartUpload` on `arn:aws:s3:::<existingBucket>/<prefix>*` for
+  each prefix, and `s3:ListBucket` on `arn:aws:s3:::<existingBucket>` with an
+  `s3:prefix` `StringLike` condition of `<prefix>*` for each prefix;
+- grant nothing when `prefixes` is missing or empty, and fail the deploy
+  rather than fall back to the whole bucket.

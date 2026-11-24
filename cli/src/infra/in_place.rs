@@ -761,6 +761,75 @@ pub(crate) fn remove_from_registrations(
     Ok(out)
 }
 
+/// Whether `runtimeDependencies` already holds the registration this
+/// infrastructure adds (`ObjectStore`, `TtlCache`), whoever wrote it.
+pub(crate) fn registers(text: &str, infrastructure: &Infrastructure) -> bool {
+    let class = classify(text);
+    let Ok((open, close)) = config_object(text, &class, "runtimeDependencies") else {
+        return false;
+    };
+    let key = spec(infrastructure).runtime_first_key;
+    list_items(text, &class, open, close)
+        .iter()
+        .any(|item| item_key(text, item) == key)
+}
+
+/// Whether that registration is the one `infra add` writes (whitespace,
+/// quote style and trailing commas aside), so the service's own
+/// registration of the same name is told apart from it.
+pub(crate) fn registration_is_generated(text: &str, infrastructure: &Infrastructure) -> bool {
+    fn normalize(s: &str) -> String {
+        let s: String = s
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .map(|c| if c == '"' { '\'' } else { c })
+            .collect();
+        Regex::new(r",([}\])])")
+            .unwrap()
+            .replace_all(&s, "$1")
+            .into_owned()
+    }
+    let spec = spec(infrastructure);
+    let Ok(entries) = template_entries(spec.tag, spec.runtime_first_key) else {
+        return false;
+    };
+    let Some((_, template)) = entries
+        .iter()
+        .find(|(key, _)| key == spec.runtime_first_key)
+    else {
+        return false;
+    };
+    let class = classify(text);
+    let Ok((open, close)) = config_object(text, &class, "runtimeDependencies") else {
+        return false;
+    };
+    let wanted = normalize(&adapt_entry(template, text, &detect_style(text), ""));
+    list_items(text, &class, open, close)
+        .iter()
+        .find(|item| item_key(text, item) == spec.runtime_first_key)
+        .is_some_and(|item| normalize(&text[item.start..item.end]) == wanted)
+}
+
+/// The environment variables `add_to_registrations` would introduce: the
+/// ones its registration reads that `environmentConfig` does not define yet.
+pub(crate) fn new_environment_keys(
+    text: &str,
+    infrastructure: &Infrastructure,
+) -> Result<Vec<String>> {
+    let spec = spec(infrastructure);
+    let class = classify(text);
+    let (open, close) = config_object(text, &class, "environmentConfig")?;
+    let defined: Vec<String> = list_items(text, &class, open, close)
+        .iter()
+        .map(|item| item_key(text, item))
+        .collect();
+    Ok(template_entries(spec.tag, spec.env_first_key)?
+        .into_iter()
+        .map(|(key, _)| key)
+        .filter(|key| !defined.contains(key))
+        .collect())
+}
+
 /// Keys of `runtimeDependencies` that still read `name` (for a warning when
 /// the cache is removed from under `AuthCacheService` and the like).
 pub(crate) fn still_referenced(text: &str, name: &str) -> bool {
@@ -873,15 +942,57 @@ pub(crate) fn remove_dependency(text: &str, name: &str) -> Result<String> {
 
 // ----------------------------------------------------------- manifest.toml
 
+/// The keys of `[projects.resources]` that say an object store uses a bucket
+/// that already exists (see `ResourceInventory`).
+pub(crate) const OBJECT_STORE_BUCKET_KEY: &str = "object_store_bucket";
+pub(crate) const OBJECT_STORE_PREFIXES_KEY: &str = "object_store_prefixes";
+
 /// Set (or with `None`, remove) `key` in the service's `[projects.resources]`,
-/// leaving the rest of the manifest as it is.
+/// leaving the rest of the manifest as it is: every other key, known to this
+/// CLI or not, keeps its place and its bytes.
 pub(crate) fn set_manifest_resource(
     text: &str,
     service: &str,
     key: &str,
     value: Option<&str>,
 ) -> Result<String> {
-    let text = &crate::core::manifest::strip_retired_manifest_keys(text);
+    set_manifest_resource_values(text, service, &[(key, value.map(toml_edit::value))])
+}
+
+/// Declare (or with `None`, remove) the service's object store. With
+/// `existing`, the store is a bucket that already exists and the key prefixes
+/// of it the service may use; the platform then creates no bucket.
+pub(crate) fn set_manifest_object_store(
+    text: &str,
+    service: &str,
+    technology: Option<&str>,
+    existing: Option<(&str, &[String])>,
+) -> Result<String> {
+    let existing = technology.and(existing);
+    set_manifest_resource_values(
+        text,
+        service,
+        &[
+            ("object_store", technology.map(toml_edit::value)),
+            (
+                OBJECT_STORE_BUCKET_KEY,
+                existing.map(|(bucket, _)| toml_edit::value(bucket)),
+            ),
+            (
+                OBJECT_STORE_PREFIXES_KEY,
+                existing.map(|(_, prefixes)| {
+                    toml_edit::value(prefixes.iter().collect::<toml_edit::Array>())
+                }),
+            ),
+        ],
+    )
+}
+
+fn set_manifest_resource_values(
+    text: &str,
+    service: &str,
+    values: &[(&str, Option<toml_edit::Item>)],
+) -> Result<String> {
     let mut doc: toml_edit::DocumentMut = text.parse().context("parsing manifest.toml")?;
     let projects = doc
         .get_mut("projects")
@@ -892,7 +1003,7 @@ pub(crate) fn set_manifest_resource(
         .find(|t| t.get("name").and_then(|n| n.as_str()) == Some(service))
         .with_context(|| format!("no project named '{service}' in the manifest"))?;
     if !project.contains_key("resources") {
-        if value.is_none() {
+        if values.iter().all(|(_, value)| value.is_none()) {
             return Ok(text.to_string());
         }
         let mut resources = toml_edit::Table::new();
@@ -903,15 +1014,22 @@ pub(crate) fn set_manifest_resource(
         .get_mut("resources")
         .and_then(|r| r.as_table_like_mut())
         .context("resources is not a table")?;
-    match value {
-        Some(v) => {
-            resources.insert(key, toml_edit::value(v));
-        }
-        None => {
-            resources.remove(key);
+    let mut changed = false;
+    for (key, value) in values {
+        match value {
+            Some(value) => {
+                resources.insert(key, value.clone());
+                changed = true;
+            }
+            None => changed |= resources.remove(key).is_some(),
         }
     }
-    Ok(doc.to_string())
+    // Nothing to do: the file's own bytes, not a re-rendering of them.
+    Ok(if changed {
+        doc.to_string()
+    } else {
+        text.to_string()
+    })
 }
 
 // ----------------------------------------------------------- capabilities
@@ -1113,7 +1231,8 @@ pub(crate) fn quote_of(text: &str) -> char {
 }
 
 /// Add (or remove) `id` in the service's `resources.capabilities`, leaving
-/// the rest of the manifest as it is. The key goes when its list empties,
+/// the rest of the manifest as it is (keys this CLI does not know, or no
+/// longer writes, included). The key goes when its list empties,
 /// and a `[projects.resources]` table with it when nothing else is left.
 pub(crate) fn set_manifest_capability(
     text: &str,
@@ -1121,7 +1240,6 @@ pub(crate) fn set_manifest_capability(
     id: &str,
     adding: bool,
 ) -> Result<String> {
-    let text = &crate::core::manifest::strip_retired_manifest_keys(text);
     let mut doc: toml_edit::DocumentMut = text.parse().context("parsing manifest.toml")?;
     let projects = doc
         .get_mut("projects")
@@ -1405,6 +1523,40 @@ export const createDependencyContainer = (envFilePath: string) => ({
     }
 
     #[test]
+    fn a_registration_is_recognized_as_the_services_own_or_the_generated_one() {
+        assert!(!registers(REGISTRATIONS, &Infrastructure::S3));
+        assert_eq!(
+            new_environment_keys(REGISTRATIONS, &Infrastructure::S3).unwrap(),
+            [
+                "S3_REGION",
+                "S3_ACCESS_KEY_ID",
+                "S3_SECRET_ACCESS_KEY",
+                "S3_URL",
+                "S3_BUCKET",
+                "S3_PREFIX",
+                "S3_PRESIGN_MAX_UPLOAD_SECONDS",
+                "S3_PRESIGN_MAX_DOWNLOAD_SECONDS"
+            ]
+        );
+        let added = add_to_registrations(REGISTRATIONS, &Infrastructure::S3, "hv").unwrap();
+        assert!(registers(&added, &Infrastructure::S3));
+        assert!(registration_is_generated(&added, &Infrastructure::S3));
+        assert!(
+            new_environment_keys(&added, &Infrastructure::S3)
+                .unwrap()
+                .is_empty()
+        );
+        // Reformatted is still generated; a changed factory is the service's own.
+        let reformatted = added.replace("bucket: S3_BUCKET,", "bucket:   S3_BUCKET ,");
+        assert_ne!(reformatted, added);
+        assert!(registration_is_generated(&reformatted, &Infrastructure::S3));
+        let own = added.replace("bucket: S3_BUCKET,", "bucket: `${S3_BUCKET}-own`,");
+        assert_ne!(own, added);
+        assert!(registers(&own, &Infrastructure::S3));
+        assert!(!registration_is_generated(&own, &Infrastructure::S3));
+    }
+
+    #[test]
     fn cache_remove_then_add_round_trips_and_keeps_shared_imports() {
         let removed =
             remove_from_registrations(REGISTRATIONS, &Infrastructure::Redis, "hv").unwrap();
@@ -1576,12 +1728,109 @@ demo = ["vault", "iam"]
                 "cache = \"redis\"\nobject_store = \"s3\"\n"
             )
         );
-        assert!(!added.contains("snake_case_name"));
         assert!(!added.contains("Generated by ForkLaunch"));
         assert_eq!(
             set_manifest_resource(&added, "vault", "object_store", None).unwrap(),
             MANIFEST
         );
+    }
+
+    /// A manifest earlier CLIs and people wrote: a header, a key this CLI no
+    /// longer writes (`snake_case_name`), keys it has never heard of, and
+    /// comments inside a resources table.
+    const OLDER_MANIFEST: &str = r#"# Generated by ForkLaunch
+# File: manifest.toml
+
+snake_case_name = "studio_orchestrator"
+id = "f0400ba0"
+cli_version = "1.21.0"
+app_name = "demo"
+modules_path = "src/modules"
+future_application_key = { nested = true }
+
+[[projects]]
+type = "Worker"
+name = "jobs"
+description = "Jobs"
+unknown_project_key = "kept"
+
+[projects.resources]
+database = "postgresql"
+cache = "bullmq" # the queue's backend
+unknown_resource_key = ["a", "b"]
+
+[projects.metadata]
+type = "bullmq"
+hostingType = "ecs-ec2"
+"#;
+
+    #[test]
+    fn manifest_edits_keep_retired_and_unknown_keys() {
+        let added =
+            set_manifest_resource(OLDER_MANIFEST, "jobs", "object_store", Some("s3")).unwrap();
+        assert_eq!(
+            added,
+            OLDER_MANIFEST.replace(
+                "unknown_resource_key = [\"a\", \"b\"]\n",
+                "unknown_resource_key = [\"a\", \"b\"]\nobject_store = \"s3\"\n"
+            )
+        );
+        assert!(added.contains("snake_case_name = \"studio_orchestrator\"\n"));
+        assert_eq!(
+            set_manifest_resource(&added, "jobs", "object_store", None).unwrap(),
+            OLDER_MANIFEST
+        );
+        let email = set_manifest_capability(OLDER_MANIFEST, "jobs", "email", true).unwrap();
+        assert!(email.contains("snake_case_name = \"studio_orchestrator\"\n"));
+        assert_eq!(
+            set_manifest_capability(&email, "jobs", "email", false).unwrap(),
+            OLDER_MANIFEST
+        );
+        // Removing what is not there changes nothing at all.
+        assert_eq!(
+            set_manifest_resource(OLDER_MANIFEST, "jobs", "object_store", None).unwrap(),
+            OLDER_MANIFEST
+        );
+    }
+
+    #[test]
+    fn an_existing_bucket_is_recorded_with_its_prefixes_and_removed_with_the_store() {
+        let prefixes = vec!["applications/".to_string(), "releases/".to_string()];
+        let added = set_manifest_object_store(
+            OLDER_MANIFEST,
+            "jobs",
+            Some("s3"),
+            Some(("shared-bucket", &prefixes)),
+        )
+        .unwrap();
+        assert_eq!(
+            added,
+            OLDER_MANIFEST.replace(
+                "unknown_resource_key = [\"a\", \"b\"]\n",
+                "unknown_resource_key = [\"a\", \"b\"]\nobject_store = \"s3\"\nobject_store_bucket = \"shared-bucket\"\nobject_store_prefixes = [\"applications/\", \"releases/\"]\n"
+            )
+        );
+        // The CLI's own model reads the declaration back.
+        let parsed: toml::Value = toml::from_str(&added).unwrap();
+        let resources: crate::core::manifest::ResourceInventory =
+            parsed["projects"][0]["resources"]
+                .clone()
+                .try_into()
+                .unwrap();
+        assert_eq!(resources.object_store.as_deref(), Some("s3"));
+        assert_eq!(
+            resources.object_store_bucket.as_deref(),
+            Some("shared-bucket")
+        );
+        assert_eq!(resources.object_store_prefixes.as_ref(), Some(&prefixes));
+        assert_eq!(
+            set_manifest_object_store(&added, "jobs", None, None).unwrap(),
+            OLDER_MANIFEST
+        );
+        // A plain declaration writes neither key.
+        let plain = set_manifest_object_store(OLDER_MANIFEST, "jobs", Some("s3"), None).unwrap();
+        assert!(!plain.contains("object_store_bucket"));
+        assert!(!plain.contains("object_store_prefixes"));
     }
 
     #[test]

@@ -67,7 +67,7 @@ pub(crate) fn reconcile(
             });
         let adding = desired.contains(&id);
         if adding != present && (adding || replace) {
-            change(matches, root, &manifest, project, wanted, adding)?;
+            change(matches, root, &manifest, project, wanted, adding, None)?;
         }
     }
     Ok(())
@@ -163,6 +163,7 @@ pub(crate) fn change(
     project: &ProjectEntry,
     wanted: Infrastructure,
     adding: bool,
+    existing: Option<&super::local::ExistingBucket>,
 ) -> Result<()> {
     let id = wanted.to_string();
     let (resource, backend, feature, generated) = match wanted {
@@ -327,6 +328,7 @@ pub(crate) fn change(
         }
         edit.release_env_local(&env)?;
     }
+    let mut manual_compose = None;
     if let Some(compose) = &mut compose {
         anyhow::ensure!(
             !keys.is_empty(),
@@ -450,15 +452,16 @@ pub(crate) fn change(
                 "note: kept ENCRYPTION_KEY in .env, so values already encrypted under it stay readable if a cache or object store is added again"
             );
         }
-        let header: String = compose_text
-            .as_deref()
-            .unwrap_or_default()
-            .split_inclusive('\n')
-            .take_while(|line| line.starts_with('#') || line.trim().is_empty())
-            .collect();
-        let updated = format!("{header}{}", serde_yml::to_string(compose)?);
-        if compose_text.as_deref() != Some(updated.as_str()) {
-            edit.write(compose_path, updated);
+        // A hand-edited file keeps its comments, anchors and layout: the
+        // change goes in line by line, or is printed when it cannot.
+        match super::compose_edit::rewrite(compose_text.as_deref().unwrap_or_default(), compose)? {
+            super::compose_edit::ComposeRewrite::Unchanged => {}
+            super::compose_edit::ComposeRewrite::Edited(updated) => {
+                edit.write(compose_path, updated);
+            }
+            super::compose_edit::ComposeRewrite::Manual { reason, snippet } => {
+                manual_compose = Some(super::local::manual_compose_note(&reason, &snippet));
+            }
         }
     }
     let updated_cargo = if adding {
@@ -474,12 +477,20 @@ pub(crate) fn change(
     let manifest_text = edit.read(&manifest_path)?.context("Manifest is missing")?;
     edit.write(
         manifest_path,
-        in_place::set_manifest_resource(
-            &manifest_text,
-            &project.name,
-            resource,
-            adding.then_some(id.as_str()),
-        )?,
+        match wanted {
+            Infrastructure::S3 => in_place::set_manifest_object_store(
+                &manifest_text,
+                &project.name,
+                adding.then_some(id.as_str()),
+                existing.map(super::local::ExistingBucket::as_declaration),
+            )?,
+            Infrastructure::Redis => in_place::set_manifest_resource(
+                &manifest_text,
+                &project.name,
+                resource,
+                adding.then_some(id.as_str()),
+            )?,
+        },
     );
     if matches.get_flag("dryrun") {
         for (path, writes) in edit.changed_paths() {
@@ -488,6 +499,9 @@ pub(crate) fn change(
                 if writes { "write " } else { "delete" },
                 path.strip_prefix(root).unwrap_or(&path).display()
             );
+        }
+        if let Some(note) = manual_compose {
+            eprint!("{note}");
         }
         return Ok(());
     }
@@ -516,6 +530,22 @@ pub(crate) fn change(
                 .unwrap_or(&source_path)
                 .display()
         );
+    }
+    if let Some(existing) = existing {
+        let scopes = match project.r#type {
+            crate::core::manifest::ProjectType::Worker => vec![
+                format!("{}-service", project.name),
+                format!("{}-worker", project.name),
+            ],
+            _ => vec![project.name.clone()],
+        };
+        print!(
+            "{}",
+            super::local::existing_bucket_report(existing, &scopes)
+        );
+    }
+    if let Some(note) = manual_compose {
+        eprint!("{note}");
     }
     Ok(())
 }
@@ -704,7 +734,6 @@ pub(crate) fn release_deleted_service(root: &Path) -> Result<()> {
     )?)?;
     let text = std::fs::read_to_string(&compose_path)?;
     let mut compose: DockerCompose = serde_yml::from_str(&text)?;
-    let before = serde_yml::to_string(&compose)?;
     let mut edit = CapabilityEdit::new(root, &manifest.app_name, "", root, vec![], vec![]);
     for wanted in [Infrastructure::Redis, Infrastructure::S3] {
         let id = wanted.to_string();
@@ -739,13 +768,14 @@ pub(crate) fn release_deleted_service(root: &Path) -> Result<()> {
         };
         release_backend(&mut edit, &mut compose, &generated, backend)?;
     }
-    let after = serde_yml::to_string(&compose)?;
-    if after != before {
-        let header: String = text
-            .split_inclusive('\n')
-            .take_while(|line| line.starts_with('#') || line.trim().is_empty())
-            .collect();
-        std::fs::write(compose_path, format!("{header}{after}"))?;
+    match super::compose_edit::rewrite(&text, &compose)? {
+        super::compose_edit::ComposeRewrite::Unchanged => {}
+        super::compose_edit::ComposeRewrite::Edited(updated) => {
+            std::fs::write(compose_path, updated)?;
+        }
+        super::compose_edit::ComposeRewrite::Manual { reason, snippet } => {
+            eprint!("{}", super::local::manual_compose_note(&reason, &snippet));
+        }
     }
     Ok(())
 }

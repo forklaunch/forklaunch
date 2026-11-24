@@ -385,6 +385,8 @@ fn add_service_to_artifacts(
             object_store: None,
             redis_partition: None,
             capabilities: None,
+            object_store_bucket: None,
+            object_store_prefixes: None,
         }),
         Some(vec![manifest_data.service_name.clone()]),
         None,

@@ -24,9 +24,15 @@ Every `fl infra` command except `add`/`remove` fails fast with `"Application not
 `forklaunch infra add <service> object-store|cache` writes the capability into
 the service (registration, docker-compose, env, dependency, manifest resource,
 test utilities) and `infra remove` undoes it. No login or `integrate` is needed.
+An object store may also go on a worker (`infra add <worker> object-store`).
+The manifest and a hand-edited docker-compose.yaml keep their comments,
+anchors, merge keys and unknown keys: the command adds lines, or prints the
+change when it cannot place it safely.
 The platform provisions the real resource on the next deploy: for an object
 store, a private encrypted bucket, CORS for the app's own domains, and a task
-role scoped to that bucket, with no keys. `infra add <service> payments` wires
+role scoped to that bucket, with no keys. With `--existing-bucket <bucket>
+--prefix <prefix>` the store is a bucket that already exists: no bucket is
+created, and the task role is granted those key prefixes only. `infra add <service> payments` wires
 Stripe Connect through the platform instead of a Stripe key (see `/integrations`).
 See `/cli` for flags.
 
