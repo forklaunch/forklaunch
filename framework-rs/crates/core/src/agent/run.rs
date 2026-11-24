@@ -849,7 +849,7 @@ impl Agent {
             let calls: Vec<PendingToolCall> = message
                 .and_then(|m| m.get("tool_calls"))
                 .and_then(Value::as_array)
-                .map(|calls| {
+                .map_or_else(Vec::new, |calls| {
                     calls
                         .iter()
                         .enumerate()
@@ -863,8 +863,7 @@ impl Agent {
                             arguments: text_at(call, "/function/arguments"),
                         })
                         .collect()
-                })
-                .unwrap_or_default();
+                });
             if !content.is_empty() && calls.is_empty() {
                 emit(AgentEvent::Delta {
                     text: content.clone(),

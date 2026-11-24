@@ -434,7 +434,7 @@ fn service_only(document: &Value, operation: &Value) -> bool {
     let hmac_schemes: BTreeSet<&str> = document
         .pointer("/components/securitySchemes")
         .and_then(Value::as_object)
-        .map(|schemes| {
+        .map_or_else(BTreeSet::new, |schemes| {
             schemes
                 .iter()
                 .filter(|(name, scheme)| {
@@ -446,8 +446,7 @@ fn service_only(document: &Value, operation: &Value) -> bool {
                 })
                 .map(|(name, _)| name.as_str())
                 .collect()
-        })
-        .unwrap_or_default();
+        });
     operation
         .get("security")
         .and_then(Value::as_array)

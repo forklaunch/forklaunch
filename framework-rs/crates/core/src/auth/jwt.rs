@@ -304,8 +304,7 @@ mod remote {
             .get(reqwest::header::AGE)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.parse::<u64>().ok())
-            .map(Duration::from_secs)
-            .unwrap_or_default();
+            .map_or(Duration::ZERO, Duration::from_secs);
         ttl.saturating_sub(age)
     }
 }

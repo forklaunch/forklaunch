@@ -42,6 +42,8 @@ await access(path.join(root,coreSource));paths[corePackage.name]=[path.join(root
 for(const name of ['body-parser','busboy','cors','express','qs','range-parser','send','swagger-ui-express']){
  const declaration=path.join(modules,'@types',name,'index.d.ts');await access(declaration);paths[name]=[declaration];
 }
+// A `paths` wildcard skips the package's `exports` map, which is how these subpaths resolve.
+paths['@modelcontextprotocol/sdk/*']=dependencyRoots.map(directory=>path.join(directory,'@modelcontextprotocol/sdk/dist/esm/*'));
 paths['*']=dependencyRoots.map(directory=>path.join(directory,'*'));
 const sdkProfile=process.argv.includes('--sdk');
 assert.ok(process.argv.slice(2).every(argument=>argument==='--sdk'),'Only --sdk is supported');
