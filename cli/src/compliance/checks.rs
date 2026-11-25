@@ -3817,7 +3817,8 @@ mod object_store_tests {
                 "{unbounded}"
             );
         }
-        let download = "const command = new GetObjectCommand({ Bucket, Key });\ngetSignedUrl(s3, command);";
+        let download =
+            "const command = new GetObjectCommand({ Bucket, Key });\ngetSignedUrl(s3, command);";
         assert!(unbounded_presigned_uploads(download).is_empty());
     }
 
