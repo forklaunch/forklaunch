@@ -14,7 +14,7 @@
 
 ## What is ForkLaunch?
 
-ForkLaunch is a backend framework and infrastructure platform that turns application code into production-grade deployments. One-click SOC 2 compliance, full VPC isolation, zero external vendors beyond your cloud provider, on-premable from day one.
+ForkLaunch is a TypeScript backend framework and infrastructure platform that turns application code into production-grade deployments. Compliance controls are enforced at compile time and ForkLaunch drafts your SOC 2 evidence (certification still comes from your auditor), with full VPC isolation, zero external vendors beyond your cloud provider, and on-prem deployment from day one.
 
 Auth, billing, deployments, monitoring — the kind of setup that usually takes a platform team six months, before you've even written your first feature.
 
@@ -50,7 +50,7 @@ If you don't like it, you can change it. ForkLaunch is designed to stay out of y
 
 Host agents, deploy services, and go from "it works on my laptop" to closing enterprise deals — without the infrastructure headache.
 
-- **SOC 2 compliance** — one-click audit-ready configuration
+- **SOC 2 readiness** — controls enforced in code and audit evidence drafted for you; your auditor issues the report
 - **VPC isolation** — full network isolation per tenant or environment
 - **Zero vendor lock-in** — only your cloud provider, nothing else
 - **On-prem ready** — deploy anywhere from day one
