@@ -41,7 +41,7 @@ struct ReleaseManifest {
 
 ### EnvironmentVariableRequirement
 
-Describes a required environment variable with its scope and component metadata:
+Describes an environment variable with its scope, optionality and component metadata:
 
 ```rust
 struct EnvironmentVariableRequirement {
@@ -50,6 +50,7 @@ struct EnvironmentVariableRequirement {
     scope_id: Option<String>,                  // Service/worker name if scoped
     description: Option<String>,               // Usage description
     component: Option<EnvironmentVariableComponent>,  // Component inference metadata
+    optional: Option<bool>,                    // true only when every runtime sighting is optional
 }
 ```
 
@@ -98,6 +99,23 @@ This is the most complex step, involving multiple sub-processes:
 - Scans TypeScript/JavaScript files in the codebase
 - Looks for environment variable usage patterns (e.g., `process.env.VAR_NAME`)
 - Returns a map of `project_name -> Vec<EnvVarUsage>`
+
+Test sources are excluded: `test`, `tests`, `__test__`, and `__tests__`
+directories, plus colocated `*.test.ts` and `*.spec.ts` files. Test setup and
+cleanup often write or delete `process.env` values; those operations must not
+create deployment requirements or turn an optional runtime setting into a
+required one.
+
+Runtime declarations using `optional(...)` and recognized inline defaults retain
+their optionality. A required or untyped runtime sighting still makes the setting
+required. `environment validate` reports an unset optional setting as
+`[OPTIONAL]`, without a validation failure, and preserves explicit overrides.
+A fallback is tracked per read, not per name: a defaulted read cannot hide a
+separate required read of the same variable in the same source file.
+Release manifests must use schema 1.1.0 or newer to retain the `optional` field;
+schema 1.0.0 cannot communicate that distinction to the platform. Upgrading a
+local CLI does not alter an already stored release or the CLI used by a hosted
+autodeploy builder.
 
 #### 3.2: Scope Determination
 
