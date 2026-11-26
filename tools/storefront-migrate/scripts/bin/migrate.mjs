@@ -4,6 +4,11 @@
  *
  *   node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--api URL] [--server URL] [--no-catalog] [--no-verify] [--no-serve] [--measure] [--clean]
  *
+ * Secrets are never taken as flags (--secret / --hmac-secret are refused):
+ * the module's HMAC secret is read from HMAC_SECRET_KEY in the environment.
+ * With --api, filters/sort/search need that secret in the browser, which only
+ * happens when --embed-hmac-secret is also passed; see SKILL.md before using it.
+ *
  * Captures a live storefront's homepage at high visual fidelity and stands it
  * up locally. Everything runs on 127.0.0.1; no data leaves the machine and no
  * checkout/payment path is wired up.
@@ -32,32 +37,32 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { ensureDeps } from './bootstrap.mjs';
 import { checkPrereqs, refuse, resolveBun } from '../check-prereqs.mjs';
-import { existsSync as _exists } from 'node:fs';
-import { execSync } from 'node:child_process';
 
 // The catalog pipeline is TypeScript run by bun. bun is usually installed at
-// ~/.bun/bin/bun, which is NOT on a spawned process's PATH — resolve it
-// explicitly, and install it if the machine doesn't have it yet.
-// One resolver, shared with the prerequisite gate in check-prereqs.mjs, so the
-// gate can never pass on a bun the catalog step then fails to find.
-
-function ensureBun() {
-  let bun = resolveBun();
-  if (bun) return bun;
-  console.log('   · installing bun (one time)…');
-  try {
-    execSync('curl -fsSL https://bun.sh/install | bash', { stdio: 'inherit', shell: '/bin/bash' });
-  } catch (_) {}
-  return resolveBun();
-}
+// ~/.bun/bin/bun, which is NOT on a spawned process's PATH, so it is resolved
+// explicitly. One resolver, shared with the prerequisite gate in
+// check-prereqs.mjs, so the gate can never pass on a bun the catalog step then
+// fails to find. This command never installs anything: a missing bun is
+// reported with its install line and the catalog step is skipped.
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 
+// Flags that take a value. Anything else starting with `--` must be one of the
+// boolean flags below; an unknown flag is refused rather than skipped, because
+// a skipped flag's value would otherwise be read as the store URL.
+const VALUE_FLAGS = new Set(['--rounds', '--budget-min', '--port', '--stripe-pk', '--paypal-id', '--server', '--api', '--pages', '--out']);
+const SECRET_FLAGS = new Set(['--secret', '--hmac-secret']);
+
+function usageError(msg) {
+  console.error(msg);
+  console.error('usage: node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--api URL] [--embed-hmac-secret] [--server URL] [--no-catalog] [--no-verify] [--no-serve] [--measure] [--clean]');
+  process.exit(2);
+}
+
 function parseArgs(argv) {
-  const a = { serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, api: null, noVerify: false, rounds: 5, budgetMin: 30, port: '4173', stripePk: null, paypalId: null, allowRecapture: true };
+  const a = { embedHmac: false, serve: true, measure: false, out: null, url: null, clean: false, pages: 20, noPreflight: false, noCatalog: false, server: null, api: null, noVerify: false, rounds: 5, budgetMin: 30, port: '4173', stripePk: null, paypalId: null, allowRecapture: true };
   for (let i = 0; i < argv.length; i++) {
     const t = argv[i];
     if (t === '--no-serve') a.serve = false;
@@ -78,10 +83,17 @@ function parseArgs(argv) {
     else if (t === '--no-recapture') a.allowRecapture = false;
     else if (t === '--server') a.server = argv[++i];
     else if (t === '--api') a.api = argv[++i];
-    else if (t === '--secret') { console.error('--secret is not accepted: export HMAC_SECRET_KEY instead, so the secret never appears in a process listing.'); process.exit(2); }
+    else if (SECRET_FLAGS.has(t) || [...SECRET_FLAGS].some(f => t.startsWith(f + '='))) {
+      console.error(`${t.split('=')[0]} is not accepted: export HMAC_SECRET_KEY instead, so the secret never appears in a process listing or shell history.`);
+      process.exit(2);
+    }
+    else if (t === '--embed-hmac-secret') a.embedHmac = true;
     else if (t === '--pages') a.pages = parseInt(argv[++i], 10) || 20;
     else if (t === '--out') a.out = argv[++i];
-    else if (!t.startsWith('--')) a.url = t;
+    else if (t.startsWith('-')) usageError(`unknown option ${t.split('=')[0]}`);
+    else if (a.url) usageError(`unexpected argument after the store URL (${a.url}); only one store URL is accepted`);
+    else a.url = t;
+    if (VALUE_FLAGS.has(t) && (argv[i] === undefined || argv[i].startsWith('--'))) usageError(`${t} needs a value`);
   }
   return a;
 }
@@ -115,7 +127,7 @@ function runPreflight(domain) {
   });
 }
 
-function runCapture(domain, outdir, clean, pages, apiBase) {
+function runCapture(domain, outdir, clean, pages, apiBase, embedHmac) {
   return new Promise((res, rej) => {
     let out = '';
     // crawl.js walks homepage + collections + PDPs and rewrites inter-page
@@ -125,6 +137,9 @@ function runCapture(domain, outdir, clean, pages, apiBase) {
       ? [join(ROOT, 'capture.js'), domain, outdir]
       : [join(ROOT, 'crawl.js'), domain, outdir, '--pages', String(pages)];
     if (apiBase) { argv.push('--api', apiBase); }
+    // crawl.js reads the secret from HMAC_SECRET_KEY, which it inherits from
+    // this process's environment; the secret itself is never put on argv.
+    if (apiBase && embedHmac) { argv.push('--embed-hmac-secret'); }
     if (clean) argv.push('--clean');
     const p = spawn('node', argv);
     p.stdout.on('data', d => { out += d; });
@@ -141,11 +156,14 @@ const args = parseArgs(process.argv.slice(2));
 if (!args.url) {
   console.error('usage: node bin/migrate.mjs <store-url> [--out DIR] [--pages N] [--single] [--clean]\n' +
                 '                              [--port 4173] [--rounds 5] [--budget-min 30] [--no-recapture]\n' +
-                '                              [--api URL] [--server URL] [--stripe-pk pk_…] [--paypal-id …]\n' +
-                '                              (the module secret is read from HMAC_SECRET_KEY in the environment)\n' +
+                '                              [--api URL [--embed-hmac-secret]] [--server URL] [--stripe-pk pk_…] [--paypal-id …]\n' +
+                '                              (the module secret is read from HMAC_SECRET_KEY in the environment, never from a flag)\n' +
                 '                              [--no-catalog] [--no-verify] [--no-serve] [--measure]');
   process.exit(2);
 }
+
+if (args.embedHmac && !args.api) usageError('--embed-hmac-secret only applies with --api');
+if (args.embedHmac && !process.env.HMAC_SECRET_KEY) usageError('--embed-hmac-secret needs HMAC_SECRET_KEY in the environment (export the module\'s .env.local first)');
 
 const domain = domainOf(args.url);
 const outdir = args.out || join(ROOT, 'output', domain);
@@ -154,10 +172,8 @@ mkdirSync(outdir, { recursive: true });
 console.log(`\n▶ migrating ${domain}`);
 console.log(`  output: ${outdir}\n`);
 
-// self-install on first run so the receiver has no setup step
-ensureDeps();
-
-// Refuse to start without the tools that do NOT self-install. Each of them
+// Refuse to start without the tools this run needs. Nothing is installed here;
+// a missing tool is reported with the exact line that installs it. Each of them
 // fails silently: no chromium and the gates emit nothing (which reads as "no
 // failures"), no ffmpeg and check-budget's height probe returns 0 and PASSES,
 // no bun and the storefront never serves. Only what this particular run will
@@ -185,7 +201,12 @@ if (!args.noPreflight) {
 console.log(args.pages === 1
   ? '1/4  capturing homepage (headless render + assets)…'
   : `1/4  crawling storefront (up to ${args.pages} pages, headless render + assets)…`);
-const cap = await runCapture(domain, outdir, args.clean, args.pages, args.api);
+if (args.api && !args.embedHmac) {
+  console.log('   note: --api without --embed-hmac-secret wires the cart to the module, but collection');
+  console.log('   filters, sort and search call HMAC-protected GET /product and /variant and will get 403.');
+  console.log('   Serve the capture with catalog/heroserve-fl.ts for cart and checkout, which signs on the server.');
+}
+const cap = await runCapture(domain, outdir, args.clean, args.pages, args.api, args.embedHmac);
 if (!cap.ok) {
   console.error(`\n✗ capture failed: ${cap.reason}`);
   console.error('  If the store blocks automated browsers, see SKILL.md ' +
@@ -221,10 +242,10 @@ let catalogReady = false;
 if (!args.noCatalog) {
   console.log('\n2/4  migrating catalog…');
   const cat = join(ROOT, 'catalog');
-  const BUN = ensureBun();
+  const BUN = resolveBun();
   if (!BUN) {
-    console.error('   catalog step skipped: bun could not be installed. ' +
-                  'Install from https://bun.sh then re-run.');
+    console.error('   catalog step skipped: bun is not installed. ' +
+                  'Install it with `curl -fsSL https://bun.sh/install | bash`, then re-run.');
   } else {
   try {
     await run(BUN, [join(cat, 'cli.ts'), 'pull', `https://${domain}`], { cwd: cat });
@@ -244,7 +265,7 @@ if (!args.noCatalog) {
                   'storefronts and stores that disabled the feed do this. The clone still ' +
                   'captures and browses; product-data endpoints, the cart mapping and the ' +
                   'catalog import have nothing to draw from until a catalog is pulled with ' +
-                  "merchant access: bun scripts/catalog/cli.ts pull-admin <shop-url> --token <admin-token>");
+                  "merchant access: SHOPIFY_ADMIN_TOKEN=<admin-token> bun scripts/catalog/cli.ts pull-admin <shop-url>");
   }
   }
 }

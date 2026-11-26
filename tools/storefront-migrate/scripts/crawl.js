@@ -8,15 +8,17 @@
  * links to point at the local copies. The result can actually be clicked through.
  *
  *   node crawl.js <domain> <outdir> [--pages N] [--clean] [--complete] [--only /a,/b]
- *     [--api <url>] [--hmac-secret <secret>]
+ *     [--api <url>] [--embed-hmac-secret]
  *
  * --api points the commerce bridge (bridge.js) at a running ForkLaunch
  * ecommerce module instead of the in-browser local cart — this is also
  * what wires up filters/sort/search against real GET /product data.
- * --hmac-secret must match that module's HMAC_SECRET_KEY; the module's
- * product/variant list endpoints are HMAC-authenticated (access:
- * 'internal'), so filter/sort/search calls will 403 without it even
- * though --api alone is enough for the (unauthenticated) cart forwarding.
+ * The module's product/variant list endpoints are HMAC-authenticated
+ * (access: 'internal'), so filter/sort/search calls will 403 without its
+ * secret even though --api alone is enough for the (unauthenticated) cart
+ * forwarding. --embed-hmac-secret reads the secret from HMAC_SECRET_KEY in
+ * the environment and writes it into every captured page. It is never taken
+ * as a flag value (--hmac-secret is refused).
  *
  * Layout produced:
  *   site/index.html
@@ -51,21 +53,32 @@ const outdir = argv[1];
 const CLEAN = argv.includes('--clean');
 const apiIdx = argv.indexOf('--api');
 const API_BASE = apiIdx > -1 ? argv[apiIdx + 1] : null;
-const hmacIdx = argv.indexOf('--hmac-secret');
+if (argv.some(t => t === '--hmac-secret' || t.startsWith('--hmac-secret='))) {
+  console.error('--hmac-secret is not accepted: export HMAC_SECRET_KEY instead, so the secret never appears in a process listing or shell history. Add --embed-hmac-secret to write it into the captured pages.');
+  process.exit(2);
+}
+const EMBED_HMAC = argv.includes('--embed-hmac-secret');
 // The real module's GET /product and GET /variant are HMAC-authenticated
 // (access: 'internal') — see bridge.js's filtersMain docstring for the
 // exact scheme. Without a matching secret, backend-mode filter/sort/search
 // calls will 403; add-to-cart (unauthenticated forwarding, pre-existing)
 // is unaffected either way.
-const HMAC_SECRET = hmacIdx > -1 ? argv[hmacIdx + 1] : null;
+const HMAC_SECRET = EMBED_HMAC ? (process.env.HMAC_SECRET_KEY || null) : null;
 // The bridge signs filter/sort/search calls IN THE BROWSER, so the secret it
 // is given ends up in every captured page's source, readable by anyone who
 // loads the clone. That is acceptable only for a private demo against a
 // throwaway module secret, and never by accident: without the opt-in flag a
 // secret is refused, and heroserve-fl.ts (which signs server-side and never
 // hands the key to the browser) is the right way to wire cart and checkout.
-if (HMAC_SECRET && !argv.includes('--embed-hmac-secret')) {
-  console.error('--hmac-secret would be embedded in every captured page. Pass --embed-hmac-secret to accept that for a private demo, or serve the capture with catalog/heroserve-fl.ts, which keeps the secret on the server.');
+// That key is the module's ONLY HMAC key: it also authorizes /catalog-import
+// and every other internal endpoint. Rotate the module's HMAC_SECRET_KEY once
+// the demo is over.
+if (EMBED_HMAC && !API_BASE) {
+  console.error('--embed-hmac-secret only applies with --api.');
+  process.exit(2);
+}
+if (EMBED_HMAC && !HMAC_SECRET) {
+  console.error('--embed-hmac-secret needs HMAC_SECRET_KEY in the environment.');
   process.exit(2);
 }
 const pagesIdx = argv.indexOf('--pages');
@@ -1231,7 +1244,7 @@ function injectAtDocStart(html, script) {
       // Commerce bridge: answer the storefront's cart/search/filter/sort API
       // calls so add-to-cart, filtering, sorting, and search actually work.
       // Points at the ForkLaunch module when --api is given (HMAC-signed with
-      // --hmac-secret), otherwise runs a local cart in the browser and leaves
+      // HMAC_SECRET_KEY when --embed-hmac-secret is passed), otherwise runs a local cart in the browser and leaves
       // filter/sort/search controls exactly as captured.
       //
       // Uses injectBeforeBody (see its docstring) — the bridge's own source
