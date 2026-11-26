@@ -1157,9 +1157,17 @@ impl CliCommand for CreateCommand {
 
             log_ok!(stdout, "Tarball created");
 
-            // Get presigned upload URL from platform
-            let upload_response =
-                super::s3_upload::get_presigned_upload_url(&application_id, version, &auth_mode)?;
+            let tarball_bytes = fs::metadata(&tarball_path)
+                .with_context(|| format!("Failed to read size of {:?}", tarball_path))?
+                .len();
+
+            // Get presigned upload URL from platform, signed for this size
+            let upload_response = super::s3_upload::get_presigned_upload_url(
+                &application_id,
+                version,
+                tarball_bytes,
+                &auth_mode,
+            )?;
 
             log_ok!(stdout, "Got upload URL from platform");
 
@@ -1176,22 +1184,34 @@ impl CliCommand for CreateCommand {
 
         // Upload OpenAPI specs to S3 (skip for dry-run, specs stay inline)
         let openapi_s3_keys: HashMap<String, String> = if !dry_run && !openapi_specs.is_empty() {
-            let service_names: Vec<String> = openapi_specs.keys().cloned().collect();
+            // Wrap each spec as { "v1": specObject } to match the expected
+            // Record<string, OpenAPIObject> shape, and serialize it up front:
+            // each upload URL is signed for the size of these exact bytes.
+            let mut spec_bytes: HashMap<String, Vec<u8>> = HashMap::new();
+            for (service_name, spec_value) in &openapi_specs {
+                let wrapped_spec = serde_json::json!({ "v1": spec_value });
+                spec_bytes.insert(
+                    service_name.clone(),
+                    super::s3_upload::json_upload_bytes(&wrapped_spec)?,
+                );
+            }
+            let content_lengths: HashMap<String, usize> = spec_bytes
+                .iter()
+                .map(|(name, bytes)| (name.clone(), bytes.len()))
+                .collect();
 
             let upload_urls = super::s3_upload::get_openapi_upload_urls(
                 &application_id,
                 version,
-                &service_names,
+                &content_lengths,
                 &auth_mode,
             )?;
 
             let mut s3_keys = HashMap::new();
-            for (service_name, spec_value) in &openapi_specs {
-                if let Some(entry) = upload_urls.get(service_name) {
-                    // Wrap the spec as { "v1": specObject } to match the expected Record<string, OpenAPIObject> shape
-                    let wrapped_spec = serde_json::json!({ "v1": spec_value });
-                    super::s3_upload::upload_json_to_s3(&wrapped_spec, &entry.upload_url)?;
-                    s3_keys.insert(service_name.clone(), entry.s3_key.clone());
+            for (service_name, bytes) in spec_bytes {
+                if let Some(entry) = upload_urls.get(&service_name) {
+                    super::s3_upload::upload_json_to_s3(bytes, &entry.upload_url)?;
+                    s3_keys.insert(service_name, entry.s3_key.clone());
                 }
             }
 
