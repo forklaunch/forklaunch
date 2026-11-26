@@ -65,6 +65,12 @@ pub(crate) struct ResourceConfig {
     pub(crate) port: Option<u16>,
     #[serde(rename = "multiAZ", skip_serializing_if = "Option::is_none")]
     pub(crate) multi_az: Option<bool>,
+    /// Days of automated backups (database). AWS allows 1 to 35.
+    #[serde(
+        rename = "backupRetentionPeriod",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub(crate) backup_retention_period: Option<u32>,
     #[serde(rename = "nodeType", skip_serializing_if = "Option::is_none")]
     pub(crate) node_type: Option<String>,
     #[serde(rename = "brokerNodeType", skip_serializing_if = "Option::is_none")]

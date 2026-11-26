@@ -55,6 +55,12 @@ impl CliCommand for ConfigSetCommand {
                 .help("Enable Multi-AZ (database)")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("backup_retention_days")
+                .long("backup-retention-days")
+                .value_parser(clap::value_parser!(u32).range(1..=35))
+                .help("Days of automated backups to keep (database, 1-35). Changed in place, without downtime"),
+        )
         .arg(Arg::new("queue_type").long("queue-type").help("Queue type"))
         .arg(
             Arg::new("visibility_timeout")
@@ -127,6 +133,7 @@ impl CliCommand for ConfigSetCommand {
             } else {
                 None
             },
+            backup_retention_period: matches.get_one::<u32>("backup_retention_days").copied(),
             queue_type: matches.get_one::<String>("queue_type").cloned(),
             visibility_timeout: matches.get_one::<u32>("visibility_timeout").copied(),
             message_retention_seconds: matches.get_one::<u32>("message_retention_seconds").copied(),
