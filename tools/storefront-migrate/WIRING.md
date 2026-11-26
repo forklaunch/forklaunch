@@ -44,6 +44,9 @@ cd tools/storefront-migrate/scripts/catalog
 bun cli.ts import data/the-store-com/normalized.json http://localhost:<PORT>
 ```
 
+Pulled catalogs always land in `scripts/catalog/data/<shop-domain-with-dashes>/`,
+whichever directory you run `cli.ts` from.
+
 The module secret is read from `HMAC_SECRET_KEY` in the environment and is
 refused on the command line, where a process listing would show it. The
 module's `.env.local` already holds it, with the `DB_*` values the purchase
@@ -120,14 +123,16 @@ this server is next.
 
 ## 4. Register the clone as a ForkLaunch project
 
+Run this from inside the ForkLaunch app from step 1:
+
 ```bash
-forklaunch init storefront --from tools/storefront-migrate/scripts/output/the-store.com/manifest.json
+forklaunch init module storefront --from ../forklaunch/tools/storefront-migrate/scripts/output/the-store.com/manifest.json
 ```
 
-This command is coming to the CLI (not in 1.10.0; check `forklaunch init
---help` on yours). Until it lands the manifest is the handoff: it is produced
-and validated on every run, and `references/manifest-schema.md` says exactly
-what the command reads.
+`--from` takes the path to the `manifest.json` written beside `site/`; it
+refuses a URL. The command has been in the CLI since 1.9.0. Add `--dryrun` to
+see what it would add first. `references/manifest-schema.md` says exactly what
+it reads.
 
 ## 5. Payments and webhooks for real
 
@@ -147,9 +152,9 @@ locally that means a tunnel. Details and the traps are in the ecommerce skill's
 ## 6. Deploy
 
 `forklaunch deploy create` provisions the app. The clone's server (heroserve)
-is a dev server today (secret on the command line, no TLS); giving it a
-production home — secret from the environment, TLS, a real domain — is the next
-piece of work.
+is a dev server today: it reads the secret from `HMAC_SECRET_KEY` in the
+environment and refuses it as an argument, but has no TLS. Giving it a
+production home, with TLS and a real domain, is the next piece of work.
 
 ## What still will not come across
 

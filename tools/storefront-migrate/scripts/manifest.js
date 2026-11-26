@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Emit manifest.json — the one machine-readable file a scaffolding tool (the
- * planned `forklaunch init storefront --from <url>`) needs to read to find
+ * `forklaunch init module storefront --from <path-to-manifest.json>`) needs to read to find
  * out what was captured, without reaching into crawl.js's internals or the
  * catalog pipeline's data/ directory itself.
  *

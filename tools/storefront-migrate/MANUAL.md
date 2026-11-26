@@ -174,8 +174,8 @@ Phase `2/4` can print `catalog step failed`. It means the store publishes no
 readable public catalog feed: headless stores, and stores that turned the feed
 off. The run continues and the clone still browses; what is missing is the
 product data behind the cart mapping and the ForkLaunch import. With the
-merchant's admin token, `bun scripts/catalog/cli.ts pull-admin <shop-url>
---token <token>` pulls the real catalog (with inventory and SKUs, which the
+merchant's admin token exported as `SHOPIFY_ADMIN_TOKEN`,
+`bun scripts/catalog/cli.ts pull-admin <shop-url>` pulls the real catalog (with inventory and SKUs, which the
 public feed never has).
 
 ## Things that will show as different, and are fine

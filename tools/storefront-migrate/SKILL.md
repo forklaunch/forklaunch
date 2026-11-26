@@ -355,15 +355,11 @@ don't send them down this path unnecessarily.
 
 ### Registering the project
 
-`forklaunch init storefront --from <path-to-manifest.json>` registers a capture
-as a project in an existing ForkLaunch app, reading the `manifest.json` written
-beside `site/`.
-
-**It is not in CLI 1.10.0, the current release** — `forklaunch init --help`
-does not list `storefront`. Until it ships, `manifest.json` is the handoff:
-it is produced and validated on every run, and `references/manifest-schema.md`
-is what the command will read. Do not tell a user the registration step is
-available; tell them the manifest is ready for it.
+`forklaunch init module storefront [name] --from <path-to-manifest.json>`,
+run inside an existing ForkLaunch app, registers a capture as a project in that
+app, reading the `manifest.json` written beside `site/`. It has been in the CLI
+since 1.9.0. `--from` must be a file path: the CLI refuses a URL. `--dryrun`
+shows what it would add. `references/manifest-schema.md` is what it reads.
 
 ### Pointing the clone at the backend
 
@@ -374,11 +370,21 @@ node ${CLAUDE_SKILL_DIR}/scripts/bin/migrate.mjs <store-url> --clean --api http:
 ```
 
 `--api` switches the runtime bridge from its offline cart to the real module.
-A `--hmac-secret` given here is embedded in every captured page, because the
-bridge signs filter and search calls in the browser; `crawl.js` refuses it
-unless `--embed-hmac-secret` is also passed, and only a throwaway secret for a
-private demo belongs there. `heroserve-fl.ts` signs on the server and is the
-right way to wire cart and checkout.
+That wires the cart. Collection filters, sort and search call the module's
+HMAC-protected `GET /product` and `GET /variant`, and get 403 unless the
+bridge holds the module's secret. The bridge signs those calls in the browser,
+so the secret has to be written into every captured page. That only happens
+with `--embed-hmac-secret`, which reads it from `HMAC_SECRET_KEY` in the
+environment. No secret is ever accepted as a flag value: `--secret` and
+`--hmac-secret` are refused.
+
+Before using `--embed-hmac-secret`, know what it gives away. `HMAC_SECRET_KEY`
+is the module's *only* HMAC key: anyone who opens a captured page can read it
+and call `/catalog-import` and every other internal endpoint. Use it only for a
+private demo, against a module whose key you rotate (set a new
+`HMAC_SECRET_KEY` and restart the module) as soon as the demo is over.
+`heroserve-fl.ts` signs on the server and is the right way to wire cart and
+checkout.
 Without it, cart actions are handled locally in the browser and filters/search
 do nothing — they are inert by design rather than faked, because a filter that
 silently returns wrong results is worse than one that visibly does nothing.
@@ -487,14 +493,24 @@ The three commands below are the whole pipeline. Their argument shapes are easy
 to get wrong, so they're written out exactly:
 
 ```bash
+D=${CLAUDE_SKILL_DIR}/scripts/catalog/data   # where every catalog command writes
+
 # 1. pull — needs a FULL url; a bare domain fails with "fetch() URL is invalid"
 bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts pull https://thestore.com
 
 # 2. normalize — takes the path to raw.json, not a shop name
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts normalize data/<slug>/raw.json
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts normalize $D/<slug>/raw.json https://thestore.com
 
-# 3. import — POSITIONAL args, not flags: <normalized.json> <module-url> <secret>
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
+# 3. import — positional: <normalized.json> [module-url]; the secret comes from the environment
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import $D/<slug>/normalized.json http://localhost:8001
+```
+
+With merchant access, `pull-admin` replaces step 1 and pulls real inventory and
+SKUs. The Admin API token is read from `SHOPIFY_ADMIN_TOKEN` in the
+environment; `--token` is refused:
+
+```bash
+SHOPIFY_ADMIN_TOKEN=<token> bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts pull-admin https://thestore.com
 ```
 
 The module secret is read from `HMAC_SECRET_KEY` in the environment and is
@@ -506,14 +522,13 @@ purchase gate needs), so export that file rather than typing the value:
 set -a; source <app>/src/modules/ecommerce/.env.local; set +a
 ```
 
-`normalize` writes to `data/<slug>/` derived from the raw file, and falls back
-to `data/unknown-shop/` when it can't infer the shop — harmless, but check the
-path it prints rather than assuming, or the import step won't find the file.
-
-Whether `migrate.mjs` ran the pull or you did, the output lives in
+Every catalog command writes to
 `${CLAUDE_SKILL_DIR}/scripts/catalog/data/<shop-domain-with-dashes>/`
-(`raw.json`, `normalized.json`) regardless of `--out`. Look there, not in the
-capture's output directory.
+(`raw.json`, `normalized.json`), whatever directory you run it from and
+whether `migrate.mjs` ran the pull or you did; `--out` does not move it. Look
+there, not in the capture's output directory. `normalize` takes the slug from
+the shop URL you pass and falls back to `unknown-shop/` without one, so pass
+it, and check the path it prints.
 
 **Squarespace stores** have no `/products.json`; phase `2/4` prints `catalog
 step failed` and that is expected. Pull the catalog from the store's own JSON
@@ -522,7 +537,7 @@ instead, then import exactly as above:
 ```bash
 # commerce collection path is usually /shop; the preflight's nav list shows it
 node ${CLAUDE_SKILL_DIR}/scripts/catalog/pull-squarespace.mjs https://thestore.com /shop
-bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import data/<slug>/normalized.json http://localhost:8001
+bun ${CLAUDE_SKILL_DIR}/scripts/catalog/cli.ts import $D/<slug>/normalized.json http://localhost:8001
 ```
 
 The crawl discovers products by Shopify's URL shape, so on a Squarespace store
@@ -545,7 +560,8 @@ own CSS; the served clone shows them again.
 Public-catalog pulls carry no real stock counts (Shopify's public feed exposes
 only an in-stock boolean; Squarespace `unlimited` carries no number), so
 imported inventory is a placeholder. Use
-`pull-admin <shop> --token <t>` with the merchant's read-only Admin token when
+`pull-admin <shop>` with the merchant's read-only Admin token in
+`SHOPIFY_ADMIN_TOKEN` when
 the numbers need to be real.
 
 ## When a store won't capture
@@ -671,10 +687,10 @@ A budget gate that passes because it could not measure is worse than no gate,
 because it is believed. Run it standalone with
 `node scripts/check-prereqs.mjs`.
 
-**Node 18+ and Python 3.** The Playwright npm package installs itself on first
-run, but **its ~150MB Chromium build is a separate download that does not**:
-`npx playwright install chromium` inside `scripts/`. The prerequisite check
-looks for the browser executable on disk, not for the package.
+**Node 18+ and Python 3.** Neither the Playwright npm package nor its ~150MB
+Chromium build installs itself: run `npm install && npx playwright install
+chromium` inside `scripts/` once. The prerequisite check looks for the browser
+executable on disk and prints that line when it is missing.
 
 **bun — required for the product catalog, and it does NOT self-install.** The
 catalog pipeline is TypeScript executed by bun. Without it the capture still
