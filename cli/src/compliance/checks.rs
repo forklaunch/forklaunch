@@ -1126,10 +1126,23 @@ fn has_unbounded_presigned_put(code: &str) -> bool {
     })
 }
 
-/// Whether the `new PutObjectCommand(...)` at `at` sets `ContentLength`.
+/// Whether the `new PutObjectCommand({ ... })` at `at` always sets
+/// `ContentLength`: as a property of the object literal itself. One inside a
+/// nested expression, such as `...(prepared ? { ContentLength } : {})`, bounds
+/// only some of the grants.
 fn signs_length(code: &str, at: usize) -> bool {
-    let arguments = parenthesised(code, at + PUT_COMMAND.len() - 1);
-    super::tenancy::strip_comments(arguments).contains("ContentLength")
+    let arguments = super::tenancy::strip_comments(parenthesised(code, at + PUT_COMMAND.len() - 1));
+    arguments.match_indices("ContentLength").any(|(i, _)| {
+        let depth = arguments[..i]
+            .bytes()
+            .fold(0usize, |depth, byte| match byte {
+                b'(' | b'[' | b'{' => depth + 1,
+                b')' | b']' | b'}' => depth.saturating_sub(1),
+                _ => depth,
+            });
+        // `(` of the call, then `{` of the command input.
+        depth == 2
+    })
 }
 
 /// The text from an opening parenthesis to its closing one.
@@ -3820,6 +3833,45 @@ mod object_store_tests {
         let download =
             "const command = new GetObjectCommand({ Bucket, Key });\ngetSignedUrl(s3, command);";
         assert!(unbounded_presigned_uploads(download).is_empty());
+    }
+
+    #[test]
+    fn a_length_signed_on_some_grants_only_does_not_bound_the_others() {
+        // The shape of a release upload: the length is signed only for a
+        // prepared artifact, so every other grant takes a body of any size.
+        let conditional = "const command = new PutObjectCommand({\n  Bucket: bucketName,\n  Key: s3Key,\n  ContentType: 'application/gzip',\n  ...(prepared\n    ? { ChecksumSHA256: sum, ContentLength: prepared.artifact.artifactBytes, IfNoneMatch: '*' }\n    : {})\n});\nconst uploadUrl = await getSignedUrl(s3Client as Parameters<typeof getSignedUrl>[0], command, { expiresIn: 3600 });";
+        assert_eq!(
+            unbounded_presigned_uploads(conditional),
+            vec!["getSignedUrl(PutObjectCommand)"]
+        );
+        let typed = "const command: PutObjectCommand = new PutObjectCommand({ Bucket, Key, ContentType, ContentLength: approval.sourceBytes, ChecksumSHA256: Buffer.from(sum, 'hex').toString('base64') });\nconst url = await getSignedUrl(s3, command, { expiresIn: 900 });";
+        assert!(unbounded_presigned_uploads(typed).is_empty());
+        // The nearest command of that name is the one signed.
+        let reassigned = "let command = new PutObjectCommand({ Bucket, Key, ContentLength: n });\nawait getSignedUrl(s3, command);\ncommand = new PutObjectCommand({ Bucket, Key });\nawait getSignedUrl(s3, command);";
+        assert_eq!(
+            unbounded_presigned_uploads(reassigned),
+            vec!["getSignedUrl(PutObjectCommand)"]
+        );
+    }
+
+    #[test]
+    fn real_static_key_clients_still_fail() {
+        for client in [
+            // A typed env schema, destructured, handed to the client.
+            "const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = EnvSchema.parse(process.env);\nnew S3Client({ credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } });",
+            "new S3Client({ region, credentials: { accessKeyId: process.env.AWS_ACCESS_KEY_ID!, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY! } });",
+            "AWS_ACCESS_KEY_ID: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar(\"AWS_ACCESS_KEY_ID\") },\nAWS_SECRET_ACCESS_KEY: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar(\"AWS_SECRET_ACCESS_KEY\") },",
+            "const accessKeyId = env.AWS_ACCESS_KEY_ID?.trim();\nconst secretAccessKey = env.AWS_SECRET_ACCESS_KEY?.trim();",
+        ] {
+            assert_eq!(
+                static_storage_credentials(client),
+                vec!["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                "{client}"
+            );
+        }
+        // Handing keys to a child process is not reading them from this one.
+        let child_env = "spawn(cmd, { env: { AWS_ACCESS_KEY_ID: creds.accessKeyId, AWS_SECRET_ACCESS_KEY: creds.secretAccessKey } });";
+        assert!(static_storage_credentials(child_env).is_empty());
     }
 
     #[test]
