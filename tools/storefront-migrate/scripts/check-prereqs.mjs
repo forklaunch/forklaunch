@@ -50,7 +50,7 @@ import { existsSync } from 'node:fs';
 export const PREREQS = {
   playwright: {
     why: 'every gate is a Playwright script; without a browser they produce no output at all',
-    fix: 'cd ' + new URL('.', import.meta.url).pathname + ' && npx playwright install chromium',
+    fix: 'cd ' + new URL('.', import.meta.url).pathname + ' && npm install && npx playwright install chromium',
     async probe() {
       let chromium;
       try { ({ chromium } = await import('playwright')); }
