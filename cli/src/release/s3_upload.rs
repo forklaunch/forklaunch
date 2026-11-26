@@ -96,9 +96,37 @@ pub(crate) fn create_app_tarball(
     Ok(())
 }
 
+fn upload_url_request_body(application_id: &str, version: &str, content_length: u64) -> Value {
+    serde_json::json!({
+        "applicationId": application_id,
+        "version": version,
+        "contentLength": content_length
+    })
+}
+
+fn openapi_upload_request_body(
+    application_id: &str,
+    version: &str,
+    content_lengths: &HashMap<String, usize>,
+) -> Value {
+    let mut service_names: Vec<&String> = content_lengths.keys().collect();
+    service_names.sort();
+    serde_json::json!({
+        "applicationId": application_id,
+        "version": version,
+        "serviceNames": service_names,
+        "contentLengths": content_lengths
+    })
+}
+
+/// Ask the platform for a presigned PUT for the code archive. `content_length`
+/// is the archive's size in bytes: the platform checks it against its limit
+/// and signs it into the URL, so storage accepts exactly that many bytes.
+/// A platform that predates sized grants ignores the field.
 pub(crate) fn get_presigned_upload_url(
     application_id: &str,
     version: &str,
+    content_length: u64,
     auth_mode: &AuthMode,
 ) -> Result<UploadUrlResponse> {
     use crate::core::http_client;
@@ -118,10 +146,7 @@ pub(crate) fn get_presigned_upload_url(
         )
     };
 
-    let request_body = serde_json::json!({
-        "applicationId": application_id,
-        "version": version
-    });
+    let request_body = upload_url_request_body(application_id, version, content_length);
 
     let response =
         http_client::post_with_auth_and_sign_path(auth_mode, &url, sign_path, request_body)
@@ -189,11 +214,12 @@ pub(crate) struct OpenApiUploadUrlEntry {
     pub s3_key: String,
 }
 
-/// Get batch presigned URLs for uploading OpenAPI specs to S3
+/// Get batch presigned URLs for uploading OpenAPI specs to S3.
+/// `content_lengths` is each service's document size in bytes, signed into its URL.
 pub(crate) fn get_openapi_upload_urls(
     application_id: &str,
     version: &str,
-    service_names: &[String],
+    content_lengths: &HashMap<String, usize>,
     auth_mode: &AuthMode,
 ) -> Result<HashMap<String, OpenApiUploadUrlEntry>> {
     use crate::core::http_client;
@@ -216,11 +242,7 @@ pub(crate) fn get_openapi_upload_urls(
         )
     };
 
-    let request_body = serde_json::json!({
-        "applicationId": application_id,
-        "version": version,
-        "serviceNames": service_names
-    });
+    let request_body = openapi_upload_request_body(application_id, version, content_lengths);
 
     let response =
         http_client::post_with_auth_and_sign_path(auth_mode, &url, sign_path, request_body)
@@ -251,18 +273,21 @@ pub(crate) fn get_openapi_upload_urls(
         .with_context(|| "Failed to parse OpenAPI upload URLs from response")
 }
 
-/// Upload a JSON value to S3 using a presigned URL
-pub(crate) fn upload_json_to_s3(json_value: &Value, presigned_url: &str) -> Result<()> {
-    let client = Client::new();
+/// Serialize a JSON value for upload. The size of these exact bytes is what
+/// the upload URL is signed for.
+pub(crate) fn json_upload_bytes(json_value: &Value) -> Result<Vec<u8>> {
+    serde_json::to_vec(json_value).with_context(|| "Failed to serialize JSON for S3 upload")
+}
 
-    let json_bytes =
-        serde_json::to_vec(json_value).with_context(|| "Failed to serialize JSON for S3 upload")?;
+/// Upload serialized JSON to S3 using a presigned URL
+pub(crate) fn upload_json_to_s3(json_bytes: Vec<u8>, presigned_url: &str) -> Result<()> {
+    let client = Client::new();
 
     let response = client
         .put(presigned_url)
-        .body(json_bytes.clone())
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::CONTENT_LENGTH, json_bytes.len())
+        .body(json_bytes)
         .send()
         .with_context(|| "Failed to upload JSON to S3")?;
 
@@ -289,7 +314,31 @@ mod tests {
     use tar::Archive;
     use tempfile::TempDir;
 
-    use super::create_app_tarball;
+    use super::{
+        create_app_tarball, json_upload_bytes, openapi_upload_request_body, upload_url_request_body,
+    };
+
+    #[test]
+    fn upload_url_request_states_the_archive_size() {
+        let body = upload_url_request_body("app", "1.2.3", 4096);
+        assert_eq!(body["applicationId"], "app");
+        assert_eq!(body["version"], "1.2.3");
+        assert_eq!(body["contentLength"], 4096);
+    }
+
+    #[test]
+    fn openapi_upload_request_states_each_document_size() {
+        let spec = serde_json::json!({ "v1": { "openapi": "3.1.0" } });
+        let bytes = json_upload_bytes(&spec).unwrap();
+        let lengths = std::collections::HashMap::from([
+            ("worker".to_string(), 7usize),
+            ("api".to_string(), bytes.len()),
+        ]);
+        let body = openapi_upload_request_body("app", "1.2.3", &lengths);
+        assert_eq!(body["serviceNames"], serde_json::json!(["api", "worker"]));
+        assert_eq!(body["contentLengths"]["api"], bytes.len());
+        assert_eq!(body["contentLengths"]["worker"], 7);
+    }
 
     #[test]
     fn create_app_tarball_includes_generated_rust_and_typescript_sdks() {
