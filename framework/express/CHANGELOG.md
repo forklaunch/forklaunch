@@ -1,5 +1,167 @@
 # @forklaunch/express
 
+## 2.2.0
+
+### Minor Changes
+
+- 5fd1341: `forklaunchExpress` is now a constant typed by the exported `ForklaunchExpressFactory` interface, and the deprecation for calls without a `cors` option sits on that interface's call signature. A no-deprecated lint rule now reports only those calls. Before, it also reported every import, re-export and `typeof forklaunchExpress`, so an application's `core/registrations.ts` re-export failed lint. Calling the factory is unchanged.
+
+## 2.1.0
+
+### Minor Changes
+
+- 8dc54d6: The `cors` application option accepts `'environment'`, which states that the application takes its allowed origins from `CORS_ORIGINS` (the same behaviour as leaving the option out). Creating an application with no `cors` option is now marked `@deprecated`, so a linter with a no-deprecated rule (`typescript/no-deprecated` in oxlint, `@typescript-eslint/no-deprecated`) points at every application that has not said how it answers cross-origin browser requests since the 4.0 default changed. To clear it, pass `cors: 'environment'` or `cors: { origin: [...] }`. Nothing changes at runtime.
+
+### Patch Changes
+
+- Updated dependencies [8dc54d6]
+  - @forklaunch/core@4.1.0
+
+## 2.0.0
+
+### Major Changes
+
+- d612dd6: BREAKING: cross-origin browser access is now denied unless the application names its origins. An application created without a `cors` option used to answer every origin with `Access-Control-Allow-Origin: *`; it now allows only the origins in the comma separated `CORS_ORIGINS` environment variable, and when that is unset it allows no origin when `NODE_ENV=production` and only `localhost` / `127.0.0.1` / `[::1]` otherwise (one startup warning explains this). Who is affected: any service with a browser frontend on a different origin that passes no `cors` option and has no `CORS_ORIGINS` set. Fix: set `CORS_ORIGINS=https://your-ui` (several: `CORS_ORIGINS=https://app.example.com,https://admin.example.com`), or pass `cors: { origin: ['https://your-ui'] }` in the application options. Server-to-server, curl and same-origin callers are unaffected. An explicit `cors` option is still used exactly as given, which means an object without `origin`, including an empty `cors: {}`, still allows every origin; a startup warning now says so. `Access-Control-Allow-Credentials: true` is never sent together with a wildcard origin (browsers already rejected that pair): name the origins to use credentials.
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+
+## 1.3.0
+
+### Minor Changes
+
+- f047dec: Serve MCP at `/mcp` (or `mcp.path`) on the application port, the way Rust services do, instead of a second listener on `MCP_PORT` / `PORT + 2000`. A separate listener is still used when `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` is set; set `MCP_LISTENER=separate` to keep MCP clients that point at `PORT + 2000` working. Sessions are stateless by default so any worker or task can answer; `mcp.sessions: 'stateful'` keeps in-memory sessions (single worker only) that close after `sessionIdleTimeoutMs` (default 15 minutes) idle. A failed `authenticate` returns 401 with `WWW-Authenticate: Bearer`, and hyper-express now applies `authenticate`. Tools forward the caller's `Authorization`, `x-correlation-id` and trace headers to the routes they call; a header the tool supplies wins.
+
+### Patch Changes
+
+- 856ed17: Depend on multer 2.5.0, so apps no longer need a pnpm override to get it
+- Updated dependencies [f047dec]
+- Updated dependencies [eb7c292]
+  - @forklaunch/core@3.5.0
+
+## 1.2.53
+
+### Patch Changes
+
+- ea72223: The Bun cluster shim's last-resort 500 response no longer stringifies non-Error throws in development; it shows an Error's message in development and `Internal Server Error` otherwise.
+
+## 1.2.52
+
+### Patch Changes
+
+- d2319b3: The final error handler sends its plain-text diagnostic with Express's own `send`, so it is no longer validated against the failing route's contract (which could throw again and return Express's HTML stack trace). `res.setHeader` with an array value now sets repeated header values instead of joining them with newlines.
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [d2319b3]
+- Updated dependencies [cf365df]
+- Updated dependencies [f868861]
+- Updated dependencies [d2319b3]
+  - @forklaunch/core@3.3.0
+  - @forklaunch/validator@1.3.0
+
+## 1.2.51
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
+## 1.2.50
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies [e36cfd2]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/core@3.1.0
+  - @forklaunch/common@1.2.31
+  - @forklaunch/validator@1.2.32
+
+## 1.2.49
+
+### Patch Changes
+
+- Preserve HTTP client-error statuses from request parsing. Invalid JSON, oversized bodies, and unsupported encodings now return their intended 4xx responses instead of HTTP 500, without exposing request bodies or internal error details.
+
+## 1.2.48
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/core@3.0.1
+  - @forklaunch/validator@1.2.31
+
+## 1.2.47
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
+## 1.2.46
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/core@2.1.1
+  - @forklaunch/validator@1.2.29
+
+## 1.2.44
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
 ## 1.2.43
 
 ### Patch Changes

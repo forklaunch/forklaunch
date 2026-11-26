@@ -220,7 +220,9 @@ describe('schema equality', () => {
             currency: CurrencyEnum.USD,
             paymentMethods: [PaymentMethodEnum.CARD, PaymentMethodEnum.AFFIRM],
             status: DummyEnum.A,
-            stripeFields: {} as Stripe.PaymentLinkCreateParams
+            stripeFields: {
+              line_items: [{ price: 'price_test', quantity: 1 }]
+            } as Stripe.PaymentLinkCreateParams
           }
         )
       )

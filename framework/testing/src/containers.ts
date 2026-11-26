@@ -1,4 +1,25 @@
-import { GenericContainer, StartedTestContainer } from 'testcontainers';
+import { createServer } from 'node:net';
+import { GenericContainer, StartedTestContainer, Wait } from 'testcontainers';
+
+/**
+ * How long a container may take to start and report ready. Creating a
+ * container on a busy Docker daemon can take tens of seconds on its own.
+ */
+const STARTUP_TIMEOUT_MS = 240_000;
+
+/** A TCP port that is free on the host right now. */
+async function freeHostPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.unref();
+    server.once('error', reject);
+    server.listen(0, () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 export type DatabaseType =
   | 'postgres'
@@ -47,7 +68,7 @@ export interface RedisConfig {
 }
 
 export interface KafkaConfig {
-  /** Kafka cluster ID */
+  /** Kafka cluster ID: a base64-encoded UUID, as KRaft requires */
   clusterId?: string;
   /** Number of partitions */
   numPartitions?: number;
@@ -150,6 +171,14 @@ export class TestContainerManager {
         POSTGRES_DB: database
       })
       .withCommand(command)
+      // The image's entrypoint runs a temporary server for initdb, stops it
+      // and starts the real one; the port is briefly open in between. The
+      // second "ready" line is the real server. (A log wait also avoids the
+      // default port check's `docker exec`, which hangs under Bun.)
+      .withWaitStrategy(
+        Wait.forLogMessage(/database system is ready to accept connections/, 2)
+      )
+      .withStartupTimeout(STARTUP_TIMEOUT_MS)
       .start();
 
     this.containers.push(container);
@@ -253,6 +282,11 @@ export class TestContainerManager {
     const container = await new GenericContainer('redis:latest')
       .withExposedPorts(6379)
       .withCommand(command)
+      // A log wait, not the default port wait: testcontainers checks the
+      // internal port with `docker exec`, whose stream never settles under the
+      // Bun runtime, so the hook hung until it timed out.
+      .withWaitStrategy(Wait.forLogMessage(/Ready to accept connections/))
+      .withStartupTimeout(STARTUP_TIMEOUT_MS)
       .start();
 
     this.containers.push(container);
@@ -266,26 +300,32 @@ export class TestContainerManager {
     config: KafkaConfig = {}
   ): Promise<StartedTestContainer> {
     const {
-      clusterId = 'test-cluster',
+      clusterId = 'MkU3OEVBNTcwNTJENDM2Qk',
       numPartitions = 1,
       replicationFactor = 1,
       env = {}
     } = config;
 
+    // Kafka hands clients the advertised listener address, so the host
+    // listener must be advertised on the port the host actually reaches: bind
+    // it to a free host port chosen up front rather than a random mapping.
+    // Containers stay unnamed, so concurrent test files never collide (a
+    // fixed name makes Docker answer 409 Conflict).
+    const hostPort = await freeHostPort();
     const container = await new GenericContainer('confluentinc/cp-kafka:latest')
-      .withExposedPorts(9092, 9093)
+      .withExposedPorts({ container: 9092, host: hostPort }, 9093)
       .withEnvironment({
         KAFKA_BROKER_ID: '1',
         KAFKA_LISTENER_SECURITY_PROTOCOL_MAP:
-          'PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT',
-        KAFKA_ADVERTISED_LISTENERS:
-          'PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092',
+          'PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT',
+        KAFKA_ADVERTISED_LISTENERS: `PLAINTEXT://localhost:29092,PLAINTEXT_HOST://localhost:${hostPort}`,
         KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: replicationFactor.toString(),
         KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: '1',
         KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: '1',
         KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: '0',
         KAFKA_NUM_PARTITIONS: numPartitions.toString(),
         KAFKA_CLUSTER_ID: clusterId,
+        CLUSTER_ID: clusterId,
         KAFKA_PROCESS_ROLES: 'broker,controller',
         KAFKA_NODE_ID: '1',
         KAFKA_CONTROLLER_QUORUM_VOTERS: '1@localhost:9093',
@@ -296,10 +336,9 @@ export class TestContainerManager {
         KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs',
         ...env
       })
+      .withWaitStrategy(Wait.forLogMessage(/Kafka Server started/))
+      .withStartupTimeout(STARTUP_TIMEOUT_MS)
       .start();
-
-    // Wait for Kafka to be ready
-    await new Promise((resolve) => setTimeout(resolve, 5000));
 
     this.containers.push(container);
     return container;

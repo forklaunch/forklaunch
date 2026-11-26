@@ -18,6 +18,7 @@ const userService = ci.resolve(tokens.UserService);
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     surfacePermissions: async (payload: { sub?: string }) => {
       if (!payload.sub) {
@@ -64,7 +65,8 @@ app.use(complianceRouter);
 app.registerSdks(iamSdkClient);
 
 //! starts the server
-app.listen(port, host, () => {
+// hyper-express returns a Promise from listen; nothing awaits startup here.
+void app.listen(port, host, () => {
   openTelemetryCollector.info(
     `🎉 IAM Server is running at http://${host}:${port} 🎉.
     // An API reference can be accessed at http://${host}:${port}/api/${version}${docsPath}`

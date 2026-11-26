@@ -1,0 +1,17 @@
+[package]
+name = "{{{name}}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "{{{description}}}"
+
+[dependencies]
+serde_json = {}
+axum = {}
+forklaunch-axum = { path = "../../.forklaunch/framework-rs/crates/axum", features = ["mcp"] }
+tokio = { features = ["macros", "rt-multi-thread", "net", "signal"] }
+forklaunch-core = {path = "../../.forklaunch/framework-rs/crates/core", features = ["openapi", "auth", "otlp", "remote-jwks"] }
+forklaunch-cac-interface = { path = "../../.forklaunch/blueprint-rs/crates/interfaces/cac-interface" }
+forklaunch-cac-base = { path = "../../.forklaunch/blueprint-rs/crates/implementations/cac/cac-base", features = ["http"] }
+jsonwebtoken = {}

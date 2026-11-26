@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/bunrun",
-  "version": "1.2.24",
+  "version": "1.2.27",
   "description": "Bun-native TypeScript workspace script runner with topological ordering",
   "keywords": [
     "bun",
@@ -17,7 +17,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Rohin Bhargava",
@@ -30,9 +30,7 @@
   ],
   "scripts": {
     "build": "tsc --noEmit && tsup",
-    "check": "depcheck",
     "clean": "rm -rf dist pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -41,8 +39,8 @@
     "test": "vitest --passWithNoTests"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
-    "tsup": "^8.5.1",
+    "@types/node": "^26.6.6",
+    "tsup": "^9.0.0",
     "typescript": "^7.0.2"
   },
   "engines": {

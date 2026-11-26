@@ -1,8 +1,8 @@
 use anyhow::Result;
 use oxc_allocator::{Allocator, CloneIn, Vec};
 use oxc_ast::ast::{
-    BindingPatternKind, Declaration, Expression, ObjectPropertyKind, Program, PropertyKey,
-    Statement, TSSignature, TSType,
+    BindingPattern, Declaration, Expression, ObjectPropertyKind, Program, PropertyKey, Statement,
+    TSSignature, TSType,
 };
 use oxc_codegen::{Codegen, CodegenOptions};
 
@@ -17,12 +17,12 @@ pub(crate) fn delete_from_sdk_client_input<'a>(
 ) -> Result<String> {
     for stmt in sdk_program_ast.body.iter_mut() {
         let export = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => continue,
         };
 
         let ts_declaration = match &mut export.declaration {
-            Some(Declaration::TSTypeAliasDeclaration(ts_decl)) => ts_decl,
+            Declaration::TSTypeAliasDeclaration(ts_decl) => ts_decl,
             _ => continue,
         };
 
@@ -36,12 +36,12 @@ pub(crate) fn delete_from_sdk_client_input<'a>(
             _ => continue,
         };
 
-        let mut new_members = Vec::new_in(allocator);
+        let mut new_members = Vec::new_in(&allocator);
         for member in &type_literal.members {
             let should_skip = match member {
                 TSSignature::TSPropertySignature(prop) => match &prop.key {
                     PropertyKey::StaticIdentifier(id) => id.name.as_str() == router_name_camel_case,
-                    PropertyKey::StringLiteral(lit) => lit.value.as_str() == router_name_camel_case,
+                    PropertyKey::StringLiteral(lit) => lit.value == router_name_camel_case,
                     _ => false,
                 },
                 _ => false,
@@ -57,15 +57,15 @@ pub(crate) fn delete_from_sdk_client_input<'a>(
     for stmt in sdk_program_ast.body.iter_mut() {
         let var_decl = match stmt {
             Statement::VariableDeclaration(var_decl) => var_decl,
-            Statement::ExportNamedDeclaration(export_decl) => match &mut export_decl.declaration {
-                Some(Declaration::VariableDeclaration(var_decl)) => var_decl,
+            Statement::ExportDeclaration(export_decl) => match &mut export_decl.declaration {
+                Declaration::VariableDeclaration(var_decl) => var_decl,
                 _ => continue,
             },
             _ => continue,
         };
 
         for declarator in &mut var_decl.declarations {
-            let is_sdk_client_var = matches!(&declarator.id.kind, BindingPatternKind::BindingIdentifier(id) if id.name.ends_with("SdkClient"));
+            let is_sdk_client_var = matches!(&declarator.id, BindingPattern::BindingIdentifier(id) if id.name.ends_with("SdkClient"));
             if !is_sdk_client_var {
                 continue;
             }
@@ -99,7 +99,7 @@ pub(crate) fn delete_from_sdk_client_input<'a>(
                 None => continue,
             };
 
-            let mut new_properties = Vec::new_in(allocator);
+            let mut new_properties = Vec::new_in(&allocator);
             object_expr.properties.iter().for_each(|prop| {
                 let prop = match prop {
                     ObjectPropertyKind::ObjectProperty(prop) => prop,

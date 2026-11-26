@@ -18,7 +18,8 @@
 //! job to poll rather than an answer. So this is a milestone action, not
 //! something to run after every edit. `--offline` keeps the old behaviour for
 //! the tight loop: deterministic checks only, no network, no auth, no cost, and
-//! only the two rails static analysis can actually decide.
+//! only the checklist items static analysis can actually decide (labelled with
+//! the platform's criterion ids and labels, so they match the website).
 
 use std::path::Path;
 use std::time::{Duration, Instant};
@@ -47,6 +48,16 @@ use crate::{
 /// a hang.
 const POLL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const POLL_INTERVAL: Duration = Duration::from_secs(3);
+/// Consecutive status requests that may fail with a dropped connection, a
+/// timeout or a gateway error before the CLI gives up on a job that is still
+/// running on the server.
+const MAX_TRANSIENT_POLL_FAILURES: u32 = 10;
+
+/// Gateway errors from the proxy in front of the analysis API: the request
+/// never reached a handler, so asking again is safe.
+fn is_transient_status(status: u16) -> bool {
+    matches!(status, 502..=504)
+}
 
 #[derive(Debug)]
 pub(crate) struct ScoreCommand;
@@ -67,14 +78,15 @@ impl CliCommand for ScoreCommand {
             Arg::new("base_path")
                 .short('p')
                 .long("path")
-                .help("Application root path (defaults to the current directory's manifest)"),
+                .help("Application root path (defaults to the current directory). A folder with no ForkLaunch manifest is scored as an app that is not on ForkLaunch."),
         )
         .arg(
             Arg::new("offline")
                 .long("offline")
                 .help(
                     "Score from deterministic checks only — no upload, no auth, no cost. Covers \
-                     compliance and security; the other three rails need an agent and come back \
+                     the compliance, security and governance checklist items those checks \
+                     decide; scalability and observability need an agent and come back \
                      unassessed.",
                 )
                 .action(clap::ArgAction::SetTrue),
@@ -98,6 +110,54 @@ impl CliCommand for ScoreCommand {
                 .action(clap::ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("prompt")
+                .long("prompt")
+                .help(
+                    "Print only the remediation prompt (the default output shows it after the summary): the \
+                     same prompt the website's \"Generate prompt\" builds (every open finding \
+                     with its evidence and fix, then the outstanding checklist items). \
+                     --prompt-scope chooses what it covers. With --offline, a prompt built \
+                     from the deterministic checks.",
+                )
+                .action(clap::ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("prompt_scope")
+                .long("prompt-scope")
+                .value_name("SCOPE")
+                .help(
+                    "What the remediation prompt covers: not-met (open findings and failed \
+                     requirements), undecided (requirements the reviewers could not decide: the \
+                     agent first checks whether each is already met, makes it demonstrable if so \
+                     and implements it if not), or both (the default). Ignored with --offline.",
+                )
+                .value_parser(["not-met", "undecided", "both"])
+                .default_value("both"),
+        )
+        .arg(
+            Arg::new("share")
+                .long("share")
+                .value_name("SCOPE")
+                .help(
+                    "What the share link shows: scores (the default: scores, counts and \
+                     requirement titles, no findings or code) or full (the report as you see it \
+                     signed in: overview, findings, data flows; expires sooner). Ignored with \
+                     --no-share and --offline.",
+                )
+                .value_parser(["scores", "full"])
+                .default_value("scores"),
+        )
+        .arg(
+            Arg::new("job")
+                .long("job")
+                .value_name("JOB_ID")
+                .help(
+                    "Pick up an analysis that is already running or finished, by the job id a \
+                     timed-out run printed, instead of uploading again.",
+                )
+                .conflicts_with("offline"),
+        )
+        .arg(
             Arg::new("min_score")
                 .long("min-score")
                 .help("Exit non-zero if the overall score is below this (0-100). For CI gating.")
@@ -106,34 +166,90 @@ impl CliCommand for ScoreCommand {
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
-        let (app_root, manifest) = require_manifest(matches)?;
+        let workspace = Workspace::locate(matches)?;
+        // What the share link shows; None when no link is wanted.
+        let share_scope = if matches.get_flag("no_share") {
+            None
+        } else {
+            matches.get_one::<String>("share").map(String::as_str)
+        };
+        let app_root = workspace.root.clone();
         let json_out = matches.get_flag("json");
         let pretty = matches.get_flag("pretty");
 
-        let (card_json, share_url) = if matches.get_flag("offline") {
-            (offline_card(&app_root, &manifest.app_name, &manifest.modules_path)?, None)
+        let prompt_out = matches.get_flag("prompt");
+        let offline = matches.get_flag("offline");
+        let (card_json, share_url, remote_prompt) = if offline {
+            (
+                offline_card(&app_root, &workspace.app_name, &workspace.modules_path)?,
+                None,
+                None,
+            )
+        } else if let Some(job_id) = matches.get_one::<String>("job") {
+            collect_job(
+                &AuthMode::detect(),
+                job_id,
+                share_scope,
+                json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
+            )?
         } else {
             score_via_api(
                 &app_root,
-                &manifest.app_name,
-                !matches.get_flag("no_share"),
-                json_out,
+                &workspace.app_name,
+                workspace.platform_application_id.as_deref(),
+                share_scope,
+                json_out || prompt_out,
+                matches
+                    .get_one::<String>("prompt_scope")
+                    .map(String::as_str)
+                    .unwrap_or("both"),
             )?
         };
+        // The platform builds the prompt (the website's own builder); offline, or
+        // from a platform that predates it, build one from the card.
+        let prompt = remote_prompt.unwrap_or_else(|| offline_prompt(&card_json, offline));
 
         if json_out {
+            let mut out = card_json.clone();
+            if let Some(object) = out.as_object_mut() {
+                object.insert(
+                    "remediationPrompt".to_string(),
+                    Value::String(prompt.clone()),
+                );
+                if let Some(url) = &share_url {
+                    object.insert("shareUrl".to_string(), Value::String(url.clone()));
+                }
+            }
             let serialized = if pretty {
-                serde_json::to_string_pretty(&card_json)?
+                serde_json::to_string_pretty(&out)?
             } else {
-                serde_json::to_string(&card_json)?
+                serde_json::to_string(&out)?
             };
             println!("{}", serialized);
+        } else if prompt_out {
+            println!("{prompt}");
         } else {
             print_summary(&card_json);
             if let Some(url) = &share_url {
                 println!("  {}", bold(&format!("Report card: {url}")));
                 println!();
             }
+            // The findings are the point of scoring: a person reads the summary
+            // above, an agent works from the prompt below (every finding with its
+            // evidence and fix, and the rescoring loop). `--prompt` prints it alone.
+            println!("  {}", bold("Remediation prompt"));
+            println!(
+                "  {}",
+                dim(
+                    "(`forklaunch score --prompt` prints only this; `--json` carries it as remediationPrompt)"
+                )
+            );
+            println!();
+            println!("{prompt}");
         }
 
         if let Some(min) = matches.get_one::<u32>("min_score") {
@@ -154,10 +270,86 @@ impl CliCommand for ScoreCommand {
     }
 }
 
+/// The folder being scored. A ForkLaunch app is described by its manifest; any
+/// other folder is scored as it stands, named after its directory, so an app
+/// that is not on ForkLaunch yet can still be graded.
+struct Workspace {
+    root: std::path::PathBuf,
+    app_name: String,
+    /// Relative to `root`; empty when there is no manifest (each top-level
+    /// directory is then read as a project).
+    modules_path: String,
+    platform_application_id: Option<String>,
+}
+
+impl Workspace {
+    fn locate(matches: &ArgMatches) -> Result<Self> {
+        let cwd = std::env::current_dir().context("could not read the current directory")?;
+        let start = match matches.get_one::<String>("base_path") {
+            Some(path) if cwd.join(path).is_dir() => cwd.join(path),
+            Some(path) => anyhow::bail!("{path} is not a directory"),
+            None => cwd,
+        };
+        if crate::core::base_path::find_nearest_manifest_from(&start).is_some() {
+            let (root, manifest) = require_manifest(matches)?;
+            return Ok(Self {
+                root,
+                app_name: manifest.app_name,
+                modules_path: manifest.modules_path,
+                platform_application_id: manifest.platform_application_id,
+            });
+        }
+        let root = start.canonicalize().unwrap_or(start);
+        let app_name = unmanifested_app_name(&root);
+        eprintln!(
+            "  {}",
+            dim(&format!(
+                "No .forklaunch/manifest.toml here: scoring {} as an app that is not on ForkLaunch.",
+                root.display()
+            ))
+        );
+        Ok(Self {
+            root,
+            app_name,
+            modules_path: String::new(),
+            platform_application_id: None,
+        })
+    }
+}
+
+/// An app name from a directory name: lowercase letters, digits and dashes.
+fn unmanifested_app_name(root: &Path) -> String {
+    let raw = root
+        .file_name()
+        .map(|name| name.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let mut name = String::new();
+    for c in raw.chars() {
+        if c.is_ascii_alphanumeric() {
+            name.push(c);
+        } else if !name.ends_with('-') {
+            name.push('-');
+        }
+    }
+    let name = name.trim_matches('-').to_string();
+    if name.is_empty() {
+        "app".to_string()
+    } else {
+        name
+    }
+}
+
 /// Deterministic-only card, built locally. No network, no auth, no cost.
 fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<Value> {
     let modules_root = app_root.join(modules_path);
-    let findings = run_local_checks(&modules_root)?;
+    let mut findings = run_local_checks(&modules_root)?;
+    // Cached advisory lookups only: the offline card makes no network calls, so an
+    // uncached lockfile shows up as not checked rather than clean.
+    findings.extend(crate::compliance::deps::scan(
+        app_root,
+        app_name,
+        crate::compliance::deps::Lookup::CacheOnly,
+    ));
     let module_count = std::fs::read_dir(&modules_root)
         .map(|entries| {
             entries
@@ -167,8 +359,9 @@ fn offline_card(app_root: &Path, app_name: &str, modules_path: &str) -> Result<V
         })
         .unwrap_or(0);
 
+    let evidence = crate::compliance::checks::local_evidence(&modules_root);
     let card: ReportCard =
-        build_local_report_card(app_name, module_count, &findings, iso8601_now());
+        build_local_report_card(app_name, module_count, &findings, &evidence, iso8601_now());
     Ok(json!(card))
 }
 
@@ -184,9 +377,15 @@ fn studio_url(path: &str) -> String {
 fn score_via_api(
     app_root: &Path,
     app_name: &str,
-    want_share: bool,
+    // The platform application this project is bound to: its deployed instance
+    // counts decide the card's hosting criteria (read server-side as the caller).
+    application_id: Option<&str>,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
     quiet: bool,
-) -> Result<(Value, Option<String>)> {
+    // What the platform's remediation prompt covers: not-met, undecided or both.
+    prompt_scope: &str,
+) -> Result<(Value, Option<String>, Option<String>)> {
     let auth = AuthMode::detect();
 
     if !quiet {
@@ -209,7 +408,10 @@ fn score_via_api(
     }
 
     let zip_base64 = base64::engine::general_purpose::STANDARD.encode(&archive);
-    let body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    let mut body = json!({ "appId": app_name, "zipBase64": zip_base64 });
+    if let Some(id) = application_id {
+        body["applicationId"] = Value::String(id.to_string());
+    }
 
     if !quiet {
         println!("  {} uploading for analysis…", dim("→"));
@@ -229,37 +431,230 @@ fn score_via_api(
         .context("analysis API returned no job id")?
         .to_string();
 
-    let job = poll_job(&auth, &job_id, quiet)?;
+    collect_job(&auth, &job_id, share_scope, quiet, prompt_scope)
+}
+
+/// Wait for an analysis job and return its card, share link and prompt. Also
+/// the whole of `--job`: a run that outlived the wait is picked up by its id
+/// instead of being uploaded and paid for again.
+fn collect_job(
+    auth: &AuthMode,
+    job_id: &str,
+    // The share link's scope (scores or full); None mints no link.
+    share_scope: Option<&str>,
+    quiet: bool,
+    prompt_scope: &str,
+) -> Result<(Value, Option<String>, Option<String>)> {
+    let job = poll_job(auth, job_id, prompt_scope, quiet)?;
     let card = job
         .get("reportCard")
         .cloned()
         .context("the analysis finished without producing a report card")?;
+    let prompt = job
+        .get("remediationPrompt")
+        .and_then(Value::as_str)
+        .map(str::to_string);
 
-    let share_url = if want_share {
-        mint_share(&auth, &job_id).unwrap_or(None)
+    let share_url = if let Some(scope) = share_scope {
+        mint_share(auth, job_id, scope).unwrap_or(None)
     } else {
         None
     };
 
-    Ok((card, share_url))
+    Ok((card, share_url, prompt))
+}
+
+/// A remediation prompt built from a card, for `--offline` (or a platform that
+/// does not return one). Lists every finding with its evidence and fix and
+/// every outstanding checklist item, then the loop an agent runs.
+fn offline_prompt(card: &Value, offline: bool) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let overall = card.get("overall").and_then(Value::as_u64).unwrap_or(0);
+    let _ = writeln!(
+        out,
+        "Harden this repository against its ForkLaunch report card{}.",
+        if offline {
+            " (offline: deterministic wiring checks only)"
+        } else {
+            ""
+        }
+    );
+    let _ = writeln!(
+        out,
+        "Baseline: {overall}/100. {}",
+        card.get("headline").and_then(Value::as_str).unwrap_or("")
+    );
+    if let Some(caveat) = card.get("caveat").and_then(Value::as_str) {
+        let _ = writeln!(out, "Caveat: {caveat}");
+    }
+    let _ = writeln!(
+        out,
+        "\nLOOP\n\
+         1. Fix the findings below in severity order. Inspect the code before accepting a finding, \
+         fix every place a shared cause appears, and add a test for each fix.\n\
+         2. After each batch run `forklaunch score --offline --json` (fast, free, deterministic) and \
+         confirm the finding is gone. A score that does not move means the fix did not take effect.\n\
+         3. When the offline checks are clean, run `forklaunch score --prompt --no-share` for the full \
+         assessment (every category, judged criteria) and continue from the prompt it prints. The \
+         offline score covers only the deterministic checks; do not stop at it.\n\
+         4. Never weaken a control, suppress a finding or remove functionality to raise the score."
+    );
+
+    let severity_rank = |s: &str| match s {
+        "critical" => 0,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        _ => 4,
+    };
+    let mut findings: Vec<(String, &Value)> = Vec::new();
+    let mut outstanding: Vec<(String, &Value)> = Vec::new();
+    if let Some(dimensions) = card.get("dimensions").and_then(Value::as_object) {
+        for (rail, dim) in dimensions {
+            for f in dim
+                .get("findings")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                findings.push((rail.clone(), f));
+            }
+            for item in dim
+                .get("items")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+            {
+                if matches!(
+                    item.get("status").and_then(Value::as_str),
+                    Some("unmet" | "pending" | "unassessed")
+                ) {
+                    outstanding.push((rail.clone(), item));
+                }
+            }
+        }
+    }
+    findings.sort_by_key(|(_, f)| {
+        severity_rank(f.get("severity").and_then(Value::as_str).unwrap_or(""))
+    });
+
+    let _ = writeln!(out, "\nFINDINGS");
+    if findings.is_empty() {
+        let _ = writeln!(out, "- None from these checks.");
+    }
+    let text = |v: &Value, key: &str| v.get(key).and_then(Value::as_str).unwrap_or("").to_string();
+    // Identical findings (same rail, title, evidence) collapse into one line
+    // with a count, so repeated per-field hits do not bury the rest.
+    let mut grouped: Vec<(&String, &Value, usize)> = Vec::new();
+    for (rail, f) in &findings {
+        match grouped.iter_mut().find(|(r, g, _)| {
+            *r == rail
+                && text(g, "title") == text(f, "title")
+                && text(g, "detail") == text(f, "detail")
+        }) {
+            Some(entry) => entry.2 += 1,
+            None => grouped.push((rail, f, 1)),
+        }
+    }
+    for (rail, f, count) in &grouped {
+        let times = if *count > 1 {
+            format!(" (x{count})")
+        } else {
+            String::new()
+        };
+        let _ = writeln!(
+            out,
+            "- [{rail}; {}] {}{times}",
+            text(f, "severity"),
+            text(f, "title")
+        );
+        let detail = text(f, "detail");
+        if !detail.is_empty() {
+            let _ = writeln!(out, "  Evidence: {detail}");
+        }
+        let fix = text(f, "fix");
+        let _ = writeln!(
+            out,
+            "  Remediation: {}",
+            if fix.is_empty() {
+                "Inspect the cited code, find the root cause and repair it with a regression test."
+            } else {
+                &fix
+            }
+        );
+    }
+
+    let _ = writeln!(out, "\nOUTSTANDING CHECKLIST ITEMS");
+    if outstanding.is_empty() {
+        let _ = writeln!(out, "- None.");
+    }
+    for (rail, item) in &outstanding {
+        let _ = writeln!(
+            out,
+            "- [{rail}] {}: {}",
+            text(item, "label"),
+            text(item, "status")
+        );
+        let detail = text(item, "detail");
+        if !detail.is_empty() {
+            let _ = writeln!(out, "  Evidence: {detail}");
+        }
+    }
+    out
 }
 
 /// Poll until the job reaches a terminal state.
-fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
+/// The job status path, asking for the prompt in a scope. The default scope sends no
+/// parameter, so a platform that predates scopes is asked exactly what it was before.
+fn job_path(job_id: &str, prompt_scope: &str) -> String {
+    if prompt_scope == "not-met" {
+        format!("/job/{job_id}")
+    } else {
+        format!("/job/{job_id}?promptScope={prompt_scope}")
+    }
+}
+
+fn poll_job(auth: &AuthMode, job_id: &str, prompt_scope: &str, quiet: bool) -> Result<Value> {
     let started = Instant::now();
     let mut last_status = String::new();
+    let mut transient_failures = 0u32;
 
     loop {
         if started.elapsed() > POLL_TIMEOUT {
             anyhow::bail!(
-                "analysis did not finish within {} minutes. It may still complete — check the \
-                 dashboard, or poll job {job_id} directly.",
+                "analysis did not finish within {} minutes. It is still running on the server: pick \
+                 it up with `forklaunch score --job {job_id}`.",
                 POLL_TIMEOUT.as_secs() / 60
             );
         }
 
-        let response = get_with_auth(auth, &studio_url(&format!("/job/{job_id}")))
-            .context("lost contact with the analysis API")?;
+        // The job keeps running on the server whatever happens to one status
+        // request, so a dropped connection, a timeout or a proxy 502/503/504
+        // (the service is busy while it scores, or restarting) is retried
+        // rather than abandoning the run.
+        let response = match get_with_auth(auth, &studio_url(&job_path(job_id, prompt_scope))) {
+            Ok(response) if is_transient_status(response.status().as_u16()) => {
+                transient_failures += 1;
+                if transient_failures > MAX_TRANSIENT_POLL_FAILURES {
+                    let status = response.status().as_u16();
+                    let text = response.text().unwrap_or_default();
+                    return Err(api_error(status, &text));
+                }
+                std::thread::sleep(POLL_INTERVAL);
+                continue;
+            }
+            Ok(response) => response,
+            Err(error) => {
+                transient_failures += 1;
+                if transient_failures > MAX_TRANSIENT_POLL_FAILURES {
+                    return Err(error.context("lost contact with the analysis API"));
+                }
+                std::thread::sleep(POLL_INTERVAL);
+                continue;
+            }
+        };
+        transient_failures = 0;
         let http_status = response.status();
         if !http_status.is_success() {
             let text = response.text().unwrap_or_default();
@@ -292,8 +687,8 @@ fn poll_job(auth: &AuthMode, job_id: &str, quiet: bool) -> Result<Value> {
 
 /// Mint a revocable share link. Best-effort: a scored card the caller can see
 /// is worth more than an error because the link step failed.
-fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
-    let response = post_with_auth(auth, &studio_url("/share"), json!({ "jobId": job_id }))?;
+fn mint_share(auth: &AuthMode, job_id: &str, scope: &str) -> Result<Option<String>> {
+    let response = post_with_auth(auth, &studio_url("/share"), share_request(job_id, scope))?;
     if !response.status().is_success() {
         return Ok(None);
     }
@@ -302,6 +697,13 @@ fn mint_share(auth: &AuthMode, job_id: &str) -> Result<Option<String>> {
         .get("sharePath")
         .and_then(Value::as_str)
         .map(|path| format!("{}{}", get_platform_ui_url(), path)))
+}
+
+/// The share request. `scores` is the redacted card (scores, counts and
+/// requirement titles); `full` is the card its owner sees, findings and data
+/// flows included, which the platform expires sooner.
+fn share_request(job_id: &str, scope: &str) -> Value {
+    json!({ "jobId": job_id, "scope": scope })
 }
 
 /// Turn the API's status codes into something a person can act on. The tiering
@@ -333,11 +735,21 @@ fn print_summary(card: &Value) {
 /// Built as a string rather than printed directly so the rendering rules below
 /// — which are the whole point of this command's default output — can be
 /// asserted rather than eyeballed.
+/// A 0-100 score as the card stores it: a whole number or a decimal (a
+/// category averages its items, e.g. 83.3). Rounded for display; `None` when
+/// absent or not a number.
+fn score_of(value: Option<&Value>) -> Option<u64> {
+    value
+        .and_then(Value::as_f64)
+        .filter(|score| score.is_finite())
+        .map(|score| score.clamp(0.0, 100.0).round() as u64)
+}
+
 fn render_summary(card: &Value) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
 
-    let overall = card.get("overall").and_then(Value::as_u64).unwrap_or(0);
+    let overall = score_of(card.get("overall")).unwrap_or(0);
     let _ = writeln!(out);
     let _ = writeln!(out, "  {}  {}/100", bold("Enterprise Readiness"), overall);
     if let Some(headline) = card.get("headline").and_then(Value::as_str) {
@@ -358,12 +770,21 @@ fn render_summary(card: &Value) -> String {
                 }
             };
 
-            if rail.get("pending").and_then(Value::as_bool).unwrap_or(false) {
-                let _ = writeln!(out, "  {:<16} {}", label, dim("not assessed"));
-                continue;
-            }
-
-            let score = rail.get("score").and_then(Value::as_u64).unwrap_or(0);
+            // `pending` marks a category with items still undecided. It can
+            // still carry a score from the items that were decided (93.8);
+            // a pending category whose score is missing or the 0 placeholder
+            // was not assessed at all.
+            let pending = rail
+                .get("pending")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let score = match score_of(rail.get("score")) {
+                Some(score) if !(pending && score == 0) => score,
+                _ => {
+                    let _ = writeln!(out, "  {:<16} {}", label, dim("not assessed"));
+                    continue;
+                }
+            };
             let items = rail.get("items").and_then(Value::as_array);
 
             // A rail can score 100 and still have unmet items: only findings
@@ -371,12 +792,17 @@ fn render_summary(card: &Value) -> String {
             // therefore reads as "nothing left to do" on an app that has work
             // left — and it is the number a non-technical reader takes away.
             // So the outstanding count travels with the score, always.
+            // `pending` counts too: an item a check flagged for review is not
+            // done, whatever the score says.
             let outstanding = items
                 .map(|items| {
                     items
                         .iter()
                         .filter(|item| {
-                            item.get("status").and_then(Value::as_str) == Some("unmet")
+                            matches!(
+                                item.get("status").and_then(Value::as_str),
+                                Some("unmet" | "pending" | "unassessed")
+                            )
                         })
                         .count()
                 })
@@ -399,9 +825,29 @@ fn render_summary(card: &Value) -> String {
 
             if let Some(items) = items {
                 for item in items.iter().take(8) {
-                    let met = item.get("status").and_then(Value::as_str) == Some("met");
+                    let marker = match item.get("status").and_then(Value::as_str) {
+                        Some("met") => "+",
+                        Some("pending") => "?",
+                        _ => "-",
+                    };
                     let text = item.get("label").and_then(Value::as_str).unwrap_or("");
-                    let _ = writeln!(out, "      {} {}", if met { "+" } else { "-" }, text);
+                    // Nothing to read is not a pass: say so on the line, since
+                    // "-" alone reads as a failed check.
+                    // An item can also be unassessed because what there is to
+                    // check is in a Rust service the checks cannot decide yet;
+                    // its detail says so, and "nothing to check" would not be true.
+                    let about_rust = item
+                        .get("detail")
+                        .and_then(Value::as_str)
+                        .is_some_and(|detail| detail.contains("Rust "));
+                    let note = match item.get("status").and_then(Value::as_str) {
+                        Some("unassessed") if about_rust => {
+                            dim("  (not decided for Rust services yet: scores 0)")
+                        }
+                        Some("unassessed") => dim("  (nothing to check: scores 0)"),
+                        _ => String::new(),
+                    };
+                    let _ = writeln!(out, "      {} {}{}", marker, text, note);
                 }
             }
             if let Some(findings) = rail.get("findings").and_then(Value::as_array)
@@ -452,6 +898,30 @@ fn render_summary(card: &Value) -> String {
         let _ = writeln!(out);
     }
 
+    // The card comes back as soon as it is scored; the source review (data
+    // flows, packages, known vulnerabilities) may still be running. Say so:
+    // their absence from a finished-looking report otherwise reads as "none".
+    let review_note = match card
+        .pointer("/deferredSourceReview/status")
+        .and_then(Value::as_str)
+    {
+        Some("pending") => Some(
+            "Source review still running: data flows, packages and known \
+             vulnerabilities are added to this report card on the dashboard when it \
+             finishes. The scores and findings above are final.",
+        ),
+        Some("failed") => Some(
+            "The source review did not finish, so this report has no data flows or \
+             known vulnerabilities. Scores and findings are not affected. Run the \
+             score again to review the source.",
+        ),
+        _ => None,
+    };
+    if let Some(note) = review_note {
+        let _ = writeln!(out, "  {}", dim(note));
+        let _ = writeln!(out);
+    }
+
     out
 }
 
@@ -466,6 +936,33 @@ fn dim(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn summary_shows_decimal_scores_and_scores_of_incomplete_categories() {
+        let card = serde_json::json!({
+            "overall": 93,
+            "dimensions": {
+                "governance": { "score": 83.3, "pending": false, "items": [] },
+                "compliance": { "score": 93.8, "pending": true, "items": [] },
+                "security": { "pending": true, "items": [] }
+            }
+        });
+        let text = render_summary(&card);
+        assert!(text.contains("83/100"), "{text}");
+        assert!(text.contains("94/100"), "{text}");
+        assert!(!text.contains(" 0/100"), "{text}");
+        assert!(text.contains("not assessed"), "{text}");
+    }
+
+    #[test]
+    fn gateway_errors_are_transient_and_handler_errors_are_not() {
+        for status in [502, 503, 504] {
+            assert!(is_transient_status(status), "{status}");
+        }
+        for status in [400, 401, 402, 403, 404, 500] {
+            assert!(!is_transient_status(status), "{status}");
+        }
+    }
 
     #[test]
     fn auth_failures_explain_the_tier_rather_than_the_status_code() {
@@ -497,6 +994,32 @@ mod tests {
     }
 
     #[test]
+    fn the_prompt_scope_rides_on_the_job_poll_only_when_asked() {
+        assert_eq!(job_path("j1", "not-met"), "/job/j1");
+        assert_eq!(job_path("j1", "undecided"), "/job/j1?promptScope=undecided");
+        assert_eq!(job_path("j1", "both"), "/job/j1?promptScope=both");
+    }
+
+    #[test]
+    fn a_card_scored_before_its_source_review_says_the_review_is_still_running() {
+        let card = |status: &str| {
+            json!({
+                "overall": 72,
+                "deferredSourceReview": { "reviewKey": "k", "status": status }
+            })
+        };
+        let pending = render_summary(&card("pending"));
+        assert!(pending.contains("Source review still running"));
+        assert!(pending.contains("scores and findings above are final"));
+        assert!(render_summary(&card("failed")).contains("source review did not finish"));
+        // Finished, or a card that never deferred: nothing to add.
+        for quiet in [card("complete"), json!({ "overall": 72 })] {
+            let out = render_summary(&quiet);
+            assert!(!out.contains("ource review"), "{out}");
+        }
+    }
+
+    #[test]
     fn summary_renders_a_card_without_panicking_on_missing_fields() {
         // The API's response is untyped (`unknownSchema`), so the renderer has
         // to tolerate a card that omits anything.
@@ -518,8 +1041,8 @@ mod tests {
                 "compliance": {
                     "score": 100,
                     "items": [
-                        { "status": "met", "label": "Field encryptor is registered" },
-                        { "status": "unmet", "label": "Sensitive fields are classified" }
+                        { "status": "met", "label": "Sensitive fields are encrypted at rest" },
+                        { "status": "pending", "label": "Sensitive data is identified and handled according to its sensitivity" }
                     ],
                     "findings": []
                 }
@@ -527,6 +1050,10 @@ mod tests {
         }));
         assert!(rendered.contains("100/100"), "{rendered}");
         assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("? Sensitive data is identified"),
+            "a review item must not render as met or failed: {rendered}"
+        );
     }
 
     #[test]
@@ -536,7 +1063,7 @@ mod tests {
             "dimensions": {
                 "security": {
                     "score": 100,
-                    "items": [{ "status": "met", "label": "Tenant isolation filter is installed" }],
+                    "items": [{ "status": "met", "label": "One customer cannot see or change another customer\u{2019}s data" }],
                     "findings": []
                 }
             }
@@ -583,6 +1110,60 @@ mod tests {
 
     /// A rail the CLI cannot judge must stay "not assessed" — never 0/100, and
     /// never carry an outstanding count it did not compute.
+    /// The link's scope is sent as chosen: the platform treats anything but
+    /// exactly "full" as the redacted card.
+    #[test]
+    fn the_share_request_carries_its_scope() {
+        assert_eq!(share_request("j1", "full")["scope"], "full");
+        assert_eq!(share_request("j1", "scores")["scope"], "scores");
+        assert_eq!(share_request("j1", "full")["jobId"], "j1");
+    }
+
+    /// A folder with no manifest is named after its directory.
+    #[test]
+    fn an_unmanifested_folder_is_named_after_its_directory() {
+        assert_eq!(
+            unmanifested_app_name(Path::new("/tmp/Loan Desk_v2")),
+            "loan-desk-v2"
+        );
+        assert_eq!(unmanifested_app_name(Path::new("/")), "app");
+    }
+
+    /// An item the checks had nothing to read for is outstanding and says why
+    /// on its own line: a bare "-" would read as a failed check.
+    #[test]
+    fn an_unassessed_item_is_outstanding_and_explained() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "security": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Every endpoint requires sign-in" }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(rendered.contains("1 item outstanding"), "{rendered}");
+        assert!(
+            rendered.contains("nothing to check: scores 0"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_item_undecided_for_a_rust_service_does_not_claim_nothing_to_check() {
+        let card = json!({
+            "overall": 0,
+            "dimensions": { "governance": { "score": 0, "items": [
+                { "status": "unassessed", "label": "Users can request data export and erasure",
+                  "detail": "Classified entities are declared in Rust services, and the offline erasure check only looks for the TypeScript ComplianceDataService." }
+            ]}}
+        });
+        let rendered = render_summary(&card);
+        assert!(
+            rendered.contains("not decided for Rust services yet: scores 0"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("nothing to check"), "{rendered}");
+    }
+
     #[test]
     fn a_pending_rail_is_not_given_a_score() {
         let rendered = render_summary(&json!({
@@ -597,6 +1178,59 @@ mod tests {
             .find(|line| line.contains("Governance"))
             .expect("governance rail should render");
         assert!(!governance_line.contains("/100"), "{governance_line}");
-        assert!(!governance_line.contains("outstanding"), "{governance_line}");
+        assert!(
+            !governance_line.contains("outstanding"),
+            "{governance_line}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod prompt_tests {
+    use super::offline_prompt;
+    use serde_json::json;
+
+    fn card() -> serde_json::Value {
+        json!({
+            "overall": 72,
+            "headline": "demo",
+            "dimensions": {
+                "security": {
+                    "findings": [
+                        {"severity": "high", "title": "Tenant filter", "detail": "worker.ts lacks setupTenantFilter", "fix": "Call setupTenantFilter."},
+                        {"severity": "critical", "title": "Direct AI provider", "detail": "src/ai.ts imports openai", "fix": "Use createModelGatewayClient."}
+                    ],
+                    "items": [{"label": "Encryption at rest", "status": "unmet", "detail": "no key"}]
+                },
+                "compliance": {
+                    "findings": [
+                        {"severity": "info", "title": "Classify fields", "detail": "same"},
+                        {"severity": "info", "title": "Classify fields", "detail": "same"}
+                    ],
+                    "items": [{"label": "Audit log", "status": "met"}]
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn prompt_carries_loop_evidence_and_fixes_in_severity_order() {
+        let p = offline_prompt(&card(), true);
+        assert!(p.contains("Baseline: 72/100"));
+        assert!(p.contains("forklaunch score --offline --json"));
+        assert!(p.contains("forklaunch score --prompt --no-share"));
+        assert!(p.contains("Remediation: Use createModelGatewayClient."));
+        assert!(p.contains("Evidence: worker.ts lacks setupTenantFilter"));
+        assert!(p.find("Direct AI provider").unwrap() < p.find("Tenant filter").unwrap());
+        assert!(p.contains("Encryption at rest: unmet"));
+        assert!(!p.contains("Audit log"));
+    }
+
+    #[test]
+    fn identical_findings_collapse_with_a_count() {
+        let p = offline_prompt(&card(), true);
+        assert_eq!(p.matches("Classify fields").count(), 1);
+        assert!(p.contains("Classify fields (x2)"));
+        assert!(p.contains("Remediation: Inspect the cited code"));
     }
 }

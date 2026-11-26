@@ -18,9 +18,46 @@
 use std::path::Path;
 
 fn main() {
+    if let Ok(projects) = std::fs::read_dir("src/templates/project") {
+        for project in projects.flatten() {
+            let name = project.file_name();
+            let owner = match name.to_str() {
+                Some("billing-stripe") => "billing-base",
+                Some("messaging-twilio") => "messaging-base",
+                Some(name) => name,
+                None => continue,
+            };
+            let source = Path::new("../blueprint").join(owner).join(".gitignore");
+            let embedded = project.path().join(".gitignore");
+            if source.is_file() && embedded.exists() {
+                verify_embedded_source(&source, &embedded);
+            }
+        }
+    }
     emit_rerun_for_tree(Path::new("src/templates"));
     // The blueprint is where the symlinked template directories actually live.
     emit_rerun_for_tree(Path::new("../blueprint"));
+}
+
+fn verify_embedded_source(source: &Path, embedded: &Path) {
+    let matches = if source
+        .file_name()
+        .is_some_and(|name| name == ".gitignore" || name == ".gitattributes")
+    {
+        // Git refuses symlink ignore/attribute files; use exact source copies.
+        !embedded.is_symlink()
+            && std::fs::read(source)
+                .ok()
+                .zip(std::fs::read(embedded).ok())
+                .is_some_and(|(source, embedded)| source == embedded)
+    } else {
+        embedded.canonicalize().ok() == source.canonicalize().ok()
+    };
+    assert!(
+        matches,
+        "Rust template inventory is stale at {}. Run `python3 scripts/sync_rust_embedded_sources.py` from the repository root before rebuilding the CLI.",
+        embedded.display()
+    );
 }
 
 fn emit_rerun_for_tree(dir: &Path) {

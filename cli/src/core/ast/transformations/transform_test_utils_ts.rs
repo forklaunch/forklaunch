@@ -3,8 +3,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, BindingPatternKind, Declaration, Expression, Program, PropertyKey, SourceType,
-    Statement,
+    Argument, BindingPattern, Declaration, Expression, Program, PropertyKey, SourceType, Statement,
 };
 use oxc_codegen::{Codegen, CodegenOptions};
 
@@ -286,20 +285,16 @@ fn add_router_entity_to_setup_test_data<'a>(
     let mut creation_program = parse_ast_program(allocator, entity_creation, SourceType::ts());
 
     for stmt in test_utils_program.body.iter_mut() {
-        if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(Declaration::VariableDeclaration(var_decl)) =
-                &mut export_decl.declaration
-            {
+        if let Statement::ExportDeclaration(export_decl) = stmt {
+            if let Declaration::VariableDeclaration(var_decl) = &mut export_decl.declaration {
                 for declarator in var_decl.declarations.iter_mut() {
-                    if let BindingPatternKind::BindingIdentifier(id) =
-                        &declarator.id.kind
-                    {
+                    if let BindingPattern::BindingIdentifier(id) = &declarator.id {
                         if id.name == "setupTestData" {
-                            if let Some(Expression::ArrowFunctionExpression(
-                                arrow_fn,
-                            )) = &mut declarator.init
+                            if let Some(Expression::ArrowFunctionExpression(arrow_fn)) =
+                                &mut declarator.init
+                                && let Some(function_body) = arrow_fn.body.as_function_body_mut()
                             {
-                                let body = &mut arrow_fn.body.statements;
+                                let body = &mut function_body.statements;
                                 let insert_pos = if body.is_empty() {
                                     0
                                 } else {
@@ -360,20 +355,16 @@ fn remove_router_entity_from_setup_test_data<'a>(
     router_name_pascal: &str,
 ) -> Result<()> {
     for stmt in test_utils_program.body.iter_mut() {
-        if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(Declaration::VariableDeclaration(var_decl)) =
-                &mut export_decl.declaration
-            {
+        if let Statement::ExportDeclaration(export_decl) = stmt {
+            if let Declaration::VariableDeclaration(var_decl) = &mut export_decl.declaration {
                 for declarator in var_decl.declarations.iter_mut() {
-                    if let BindingPatternKind::BindingIdentifier(id) =
-                        &declarator.id.kind
-                    {
+                    if let BindingPattern::BindingIdentifier(id) = &declarator.id {
                         if id.name == "setupTestData" {
-                            if let Some(Expression::ArrowFunctionExpression(
-                                arrow_fn,
-                            )) = &mut declarator.init
+                            if let Some(Expression::ArrowFunctionExpression(arrow_fn)) =
+                                &mut declarator.init
+                                && let Some(function_body) = arrow_fn.body.as_function_body_mut()
                             {
-                                let body = &mut arrow_fn.body.statements;
+                                let body = &mut function_body.statements;
 
                                 body.retain(|stmt| {
                                     !matches_router_entity_statement(
@@ -401,12 +392,10 @@ fn matches_router_entity_statement(
     match stmt {
         Statement::VariableDeclaration(var_decl) => {
             for declarator in &var_decl.declarations {
-                if let BindingPatternKind::ObjectPattern(obj_pattern) =
-                    &declarator.id.kind
-                {
+                if let BindingPattern::ObjectPattern(obj_pattern) = &declarator.id {
                     for prop in &obj_pattern.properties {
                         if let PropertyKey::StaticIdentifier(key) = &prop.key {
-                            if key.name == format!("{}Record", router_name_pascal) {
+                            if key.name == format!("{}Record", router_name_pascal).as_str() {
                                 return true;
                             }
                         }
@@ -416,13 +405,11 @@ fn matches_router_entity_statement(
         }
         Statement::ExpressionStatement(expr_stmt) => {
             if let Expression::CallExpression(call_expr) = &expr_stmt.expression {
-                if let Expression::StaticMemberExpression(member_expr) =
-                    &call_expr.callee
-                {
+                if let Expression::StaticMemberExpression(member_expr) = &call_expr.callee {
                     if member_expr.property.name == "create" {
                         if let Some(first_arg) = call_expr.arguments.first() {
                             if let Argument::Identifier(id) = &first_arg {
-                                if id.name == format!("{}Record", router_name_pascal) {
+                                if id.name == format!("{}Record", router_name_pascal).as_str() {
                                     return true;
                                 }
                             }
@@ -444,15 +431,11 @@ fn remove_router_mock_data_export<'a>(
     let mock_data_name = format!("mock{}Data", router_name_pascal);
 
     test_utils_program.body.retain(|stmt| {
-        if let Statement::ExportNamedDeclaration(export_decl) = stmt {
-            if let Some(Declaration::VariableDeclaration(var_decl)) =
-                &export_decl.declaration
-            {
+        if let Statement::ExportDeclaration(export_decl) = stmt {
+            if let Declaration::VariableDeclaration(var_decl) = &export_decl.declaration {
                 for declarator in &var_decl.declarations {
-                    if let BindingPatternKind::BindingIdentifier(id) =
-                        &declarator.id.kind
-                    {
-                        if id.name == mock_data_name {
+                    if let BindingPattern::BindingIdentifier(id) = &declarator.id {
+                        if id.name == mock_data_name.as_str() {
                             return false;
                         }
                     }

@@ -138,6 +138,10 @@ mod tests {
 
     #[test]
     fn status_has_no_required_args() {
-        assert!(cloud_account_cmd().try_get_matches_from(["cloud-account"]).is_ok());
+        assert!(
+            cloud_account_cmd()
+                .try_get_matches_from(["cloud-account"])
+                .is_ok()
+        );
     }
 }

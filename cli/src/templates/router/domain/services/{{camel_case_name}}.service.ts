@@ -72,7 +72,7 @@ export class Base{{pascal_case_name}}Service implements {{pascal_case_name}}Serv
     await this.workerProducer.enqueueJob(entity);{{/is_worker}}
 
     // Map from entity to response (inline Entity → DTO conversion)
-    {{^is_worker}}return entity;{{/is_worker}}{{#is_worker}}const { id, createdAt, updatedAt, ...response } = entity;
+    {{^is_worker}}return entity;{{/is_worker}}{{#is_worker}}const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...response } = entity;
     return response as {{pascal_case_name}}Response;{{/is_worker}}{{/with_mappers}}
   };
 }

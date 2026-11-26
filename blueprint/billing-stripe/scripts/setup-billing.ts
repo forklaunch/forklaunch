@@ -98,4 +98,4 @@ async function main() {
 }
 
 // Run setup
-main();
+void main();

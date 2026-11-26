@@ -4,10 +4,13 @@ use std::path::PathBuf;
 use toml;
 
 mod check_blueprint_deps;
+mod check_cargo_deps;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
     let fix_mode = args.iter().any(|arg| arg == "--fix" || arg == "-f");
+    // The Rust crates are on crates.io at the workspace version, so the CLI must use it.
+    let rust_released = args.iter().any(|arg| arg == "--rust-released");
 
     if fix_mode {
         println!("Running in fix mode - will update package.json files with correct versions");
@@ -49,18 +52,24 @@ fn main() {
     );
     implementation_refs.push(vec![PathBuf::from("../../../../framework/internal")]);
     let project_refs: Vec<&str> = projects.iter().map(|s| s.as_str()).collect();
-    match check_blueprint_deps::verify_package_versions(
+    let package_versions = check_blueprint_deps::verify_package_versions(
         &project_refs,
         &implementation_refs.concat(),
         fix_mode,
-    ) {
-        Ok(_) => {
-            if fix_mode {
-                println!("All package versions have been updated successfully");
-            } else {
-                println!("All package versions are correct");
+    );
+    let crate_versions = check_cargo_deps::verify_crate_versions(fix_mode, rust_released);
+    let mut failed = false;
+    for (kind, result) in [("package", package_versions), ("crate", crate_versions)] {
+        match result {
+            Ok(_) if fix_mode => println!("All {kind} versions have been updated successfully"),
+            Ok(_) => println!("All {kind} versions are correct"),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                failed = true;
             }
         }
-        Err(e) => println!("Error: {}", e),
+    }
+    if failed {
+        std::process::exit(1);
     }
 }

@@ -3,6 +3,7 @@ import { MapToSdk } from '@forklaunch/core/http';
 import {
   adjustStock,
   checkStock,
+  createInventory,
   createProduct,
   createVariant,
   deleteProduct,
@@ -37,6 +38,7 @@ export type EcommerceSdk = {
     listVariants: typeof listVariants;
   };
   inventory: {
+    createInventory: typeof createInventory;
     getInventory: typeof getInventory;
     adjustStock: typeof adjustStock;
     checkStock: typeof checkStock;
@@ -64,6 +66,7 @@ export const ecommerceSdkClient = {
     listVariants
   },
   inventory: {
+    createInventory,
     getInventory,
     adjustStock,
     checkStock

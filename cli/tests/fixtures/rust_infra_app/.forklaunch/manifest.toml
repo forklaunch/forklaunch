@@ -1,0 +1,96 @@
+app_description = "Demo"
+app_name = "demo"
+applicationLanguage = "mixed"
+author = "ForkLaunch"
+cargoWorkspace = "Cargo.toml"
+cli_version = "0.0.0"
+formatter = "prettier"
+http_framework = "express"
+id = "8855d064-0189-424a-840e-eada6244d6a3"
+language = "mixed"
+license = "MIT"
+linter = "oxlint"
+modules_path = "src"
+runtime = "node"
+sdkTargets = [
+    "typescript",
+    "rust",
+]
+test_framework = "vitest"
+validator = "zod"
+
+[framework]
+blueprint_version = "0.2.2"
+version = "0.2.2"
+
+[project_peer_topology]
+demo = [
+    "core",
+    "monitoring",
+    "client-sdk",
+]
+
+[[projects]]
+description = "Core library for demo, containing shared foundational infrastrucuture and utilities"
+name = "core"
+type = "Library"
+
+[[projects]]
+description = "Monitoring library for demo, defining metrics, logs, and trace building blocks"
+name = "monitoring"
+type = "Library"
+
+[[projects]]
+description = "Client SDK for demo, containing shared foundational infrastrucuture and utilities"
+name = "client-sdk"
+type = "Library"
+
+[[projects]]
+description = "Notes"
+name = "notes"
+routers = []
+type = "Service"
+
+[projects.metadata]
+asyncapiPath = "src/notes/sdk/typescript/asyncapi.json"
+contractArtifactPath = "src/notes/sdk/typescript/contract.json"
+crateName = "notes"
+cratePath = "src/notes"
+language = "rust"
+openapiPath = "src/notes/sdk/typescript/openapi.json"
+persistence = "postgresql"
+sdkLayout = "project-local-v1"
+sdkTargets = [
+    "typescript",
+    "rust",
+]
+
+[projects.resources]
+database = "postgresql"
+
+[[projects]]
+description = "Jobs"
+name = "jobs"
+routers = []
+type = "Worker"
+variant = "worker-postgres"
+
+[projects.metadata]
+asyncapiPath = "src/jobs/sdk/typescript/asyncapi.json"
+contractArtifactPath = "src/jobs/sdk/typescript/contract.json"
+contractExport = true
+crateName = "jobs"
+cratePath = "src/jobs"
+language = "rust"
+openapiPath = "src/jobs/sdk/typescript/openapi.json"
+sdkLayout = "project-local-v1"
+sdkTargets = [
+    "typescript",
+    "rust",
+]
+workerRuntime = "apalis"
+workerService = true
+workerType = "database"
+
+[projects.resources]
+database = "postgresql"

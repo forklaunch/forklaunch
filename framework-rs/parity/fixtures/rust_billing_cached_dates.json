@@ -1,0 +1,152 @@
+[
+  {
+    "name": "epoch-zero",
+    "input": 0,
+    "profile": "accepted",
+    "epochMillis": 0
+  },
+  {
+    "name": "positive-fraction",
+    "input": 1.9,
+    "profile": "accepted",
+    "epochMillis": 1
+  },
+  {
+    "name": "negative-fraction",
+    "input": -1.9,
+    "profile": "accepted",
+    "epochMillis": -1
+  },
+  {
+    "name": "utc",
+    "input": "2026-01-02T03:04:05.678Z",
+    "profile": "accepted",
+    "epochMillis": 1767323045678
+  },
+  {
+    "name": "offset",
+    "input": "2026-01-02T03:04:05.678+05:30",
+    "profile": "accepted",
+    "epochMillis": 1767303245678
+  },
+  {
+    "name": "submillis",
+    "input": "2026-01-02T03:04:05.678999Z",
+    "profile": "accepted",
+    "epochMillis": 1767323045678
+  },
+  {
+    "name": "date-only",
+    "input": "2026-01-02",
+    "profile": "accepted",
+    "epochMillis": 1767312000000
+  },
+  {
+    "name": "year-only",
+    "input": "2026",
+    "profile": "accepted",
+    "epochMillis": 1767225600000
+  },
+  {
+    "name": "month-only",
+    "input": "2026-01",
+    "profile": "accepted",
+    "epochMillis": 1767225600000
+  },
+  {
+    "name": "overflow-day",
+    "input": "2026-02-31",
+    "profile": "accepted",
+    "epochMillis": 1772496000000
+  },
+  {
+    "name": "extended-year",
+    "input": "+010000-01-01T00:00:00.000Z",
+    "profile": "accepted",
+    "epochMillis": 253402300800000
+  },
+  {
+    "name": "negative-year",
+    "input": "-000001-01-01T00:00:00.000Z",
+    "profile": "accepted",
+    "epochMillis": -62198755200000
+  },
+  {
+    "name": "chrono-late",
+    "input": "+262142-01-01T00:00:00.000Z",
+    "profile": "accepted",
+    "epochMillis": 8210235340800000
+  },
+  {
+    "name": "chrono-early",
+    "input": "-262143-01-01T00:00:00.000Z",
+    "profile": "accepted",
+    "epochMillis": -8334601228800000
+  },
+  {
+    "name": "locale",
+    "input": "January 1, 2026",
+    "profile": "unsupported"
+  },
+  {
+    "name": "offsetless",
+    "input": "2026-01-01T00:00:00",
+    "profile": "unsupported"
+  },
+  {
+    "name": "js-max",
+    "input": 8640000000000000,
+    "profile": "unsupported"
+  },
+  {
+    "name": "js-min",
+    "input": -8640000000000000,
+    "profile": "unsupported"
+  },
+  {
+    "name": "invalid-timeclip",
+    "input": 8640000000000001,
+    "profile": "invalid"
+  },
+  {
+    "name": "null",
+    "input": null,
+    "profile": "invalid"
+  },
+  {
+    "name": "false",
+    "input": false,
+    "profile": "invalid"
+  },
+  {
+    "name": "true",
+    "input": true,
+    "profile": "invalid"
+  },
+  {
+    "name": "object",
+    "input": {},
+    "profile": "invalid"
+  },
+  {
+    "name": "array",
+    "input": [],
+    "profile": "invalid"
+  },
+  {
+    "name": "bad-string",
+    "input": "not-a-date",
+    "profile": "invalid",
+    "native": "unsupported"
+  },
+  {
+    "name": "invalid-iso",
+    "input": "2026-01-01T25:00:00Z",
+    "profile": "invalid"
+  },
+  {
+    "name": "leap-second",
+    "input": "2016-12-31T23:59:60Z",
+    "profile": "invalid"
+  }
+]

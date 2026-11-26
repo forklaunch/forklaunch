@@ -16,7 +16,7 @@ describe('BillingPortal Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -27,7 +27,7 @@ describe('BillingPortal Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /billing-portal - createBillingPortalSession', () => {
     it('should create a billing portal session successfully', async () => {

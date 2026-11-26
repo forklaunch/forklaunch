@@ -22,6 +22,89 @@ describe('asyncApiGeneratorV3 tests', () => {
     code: string
   };
 
+  it.each([
+    'room/~feed',
+    'publish/~',
+    'hello 水 🦀',
+    'percent%2F',
+    'space name',
+    "quote!'()*",
+    '__proto__',
+    'constructor',
+    'toString',
+    'line\nbreak'
+  ])('resolves escaped channel/message references for %j', (name) => {
+    const result = generateAsyncApi<typeof mockSchemaValidator>({
+      clientMessages: {
+        request: { shape: testMessageSchema, channel: name, operation: name }
+      },
+      serverMessages: {}
+    });
+    const operation = Object.values(result.operations!)[0] as OperationObject;
+    const resolve = (reference: string) =>
+      decodeURIComponent(reference.slice(2))
+        .split('/')
+        .reduce<unknown>(
+          (value, key) =>
+            (value as Record<string, unknown>)[
+              key.replace(/~1/g, '/').replace(/~0/g, '~')
+            ],
+          result
+        );
+    expect(Object.hasOwn(result.channels!, name)).toBe(true);
+    expect(resolve((operation.channel as { $ref: string }).$ref)).toBe(
+      result.channels![name]
+    );
+    const message = operation.messages![0];
+    expect('$ref' in message).toBe(true);
+    expect(resolve((message as { $ref: string }).$ref)).toEqual({
+      name,
+      payload: testMessageSchema
+    });
+    expect(Object.hasOwn(Object.prototype, 'messages')).toBe(false);
+  });
+
+  it.each(['#fragment', 'path?query', ''])(
+    'rejects invalid channel addresses %j',
+    (channel) => {
+      expect(() =>
+        generateAsyncApi<typeof mockSchemaValidator>({
+          clientMessages: {
+            request: { shape: testMessageSchema, channels: [channel] }
+          },
+          serverMessages: {}
+        })
+      ).toThrow('channel addresses');
+    }
+  );
+
+  it('escapes fragment characters in message references', () => {
+    const result = generateAsyncApi<typeof mockSchemaValidator>({
+      clientMessages: {
+        request: { shape: testMessageSchema, operation: '#fragment' }
+      },
+      serverMessages: {}
+    });
+    const operation = Object.values(result.operations!)[0] as OperationObject;
+    expect((operation.messages![0] as { $ref: string }).$ref).toBe(
+      '#/channels/request/messages/%23fragment'
+    );
+  });
+
+  it('bounds recursive plain schema traversal', () => {
+    let shape: unknown = {};
+    for (let index = 0; index < 66; index++)
+      shape = { properties: { next: shape } };
+    expect(() =>
+      generateAsyncApi<typeof mockSchemaValidator>({
+        clientMessages: {
+          request: { shape: shape as typeof testMessageSchema }
+        },
+        serverMessages: {}
+      })
+    ).toThrow('schema nesting exceeds');
+  });
+
   it('should generate basic AsyncAPI document with client and server messages', () => {
     const eventSchemas: EventSchema<typeof mockSchemaValidator> = {
       clientMessages: {

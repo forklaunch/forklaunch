@@ -118,6 +118,9 @@ pub(crate) fn scope_target_from<'a>(
     match kind {
         ProjectType::Library => None,
         _ if scope.ends_with("-worker") => Some(ScopeTarget::Worker(id)),
+        // A worker project named bare (no component suffix) means its
+        // consumer, which is what `config unset` always took it to mean.
+        ProjectType::Worker if scope == base => Some(ScopeTarget::Worker(id)),
         _ => Some(ScopeTarget::Service(id)),
     }
 }

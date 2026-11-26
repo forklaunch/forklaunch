@@ -1,7 +1,15 @@
-import { safeParse, safeStringify } from '@forklaunch/common';
+import { safeParse, toPlainString } from '@forklaunch/common';
 import { p, Type, type PropertyBuilders } from '@mikro-orm/core';
 import { COMPLIANCE_KEY, type ComplianceLevel } from './complianceTypes';
-import { EncryptedType, resolveTypeInstance } from './encryptedType';
+import {
+  COMPLIANT_RUNTIME_TYPE,
+  CompliantIndexType,
+  CompliantType,
+  defaultAnonStrategy,
+  type CompliantFieldSpec,
+  type ComplianceOptions
+} from './compliantField';
+import { resolveTypeInstance } from './encryptedType';
 
 // ---------------------------------------------------------------------------
 // Runtime Proxy implementation
@@ -28,7 +36,8 @@ function wrapUnclassified(builder: unknown): unknown {
   return new Proxy(builder as object, {
     get(target: Record<string | symbol, unknown>, prop) {
       if (prop === 'compliance') {
-        return (level: ComplianceLevel) => wrapClassified(target, level);
+        return (level: ComplianceLevel, options?: ComplianceOptions) =>
+          wrapClassified(target, level, options);
       }
       if (prop === '~options') return Reflect.get(target, prop, target);
       if (prop === COMPLIANCE_KEY) return undefined;
@@ -88,12 +97,16 @@ function resolveEncryptedTypeArgs(options: Record<string, unknown>): {
 /**
  * Wraps a builder that has been classified via `.compliance()`.
  * Stores the compliance level under `~compliance` for `defineComplianceEntity`.
- * For encrypted levels (pii/phi/pci), applies EncryptedType to the builder
- * so MikroORM handles encryption at the data conversion layer.
+ * For encrypted levels (pii/phi/pci), the property becomes a compliant field:
+ * its column type seals values in the `v4` envelope and loads them as
+ * `CompliantField`s, reachable only through `.anon` and `.deanon`.
  * Chaining after `.compliance()` propagates the level through subsequent builders.
  */
-function wrapClassified(builder: object, level: ComplianceLevel): unknown {
-  // Apply EncryptedType for encrypted compliance levels
+function wrapClassified(
+  builder: object,
+  level: ComplianceLevel,
+  complianceOptions?: ComplianceOptions
+): unknown {
   if (ENCRYPTED_LEVELS.has(level)) {
     const options = (builder as Record<string | symbol, unknown>)[
       '~options'
@@ -114,10 +127,31 @@ function wrapClassified(builder: object, level: ComplianceLevel): unknown {
         delete options.enum;
       }
 
-      options.type = new EncryptedType(elementRuntimeType, isArray, enumValues);
-      // Force column type to text since encrypted output is always a string
+      const spec: CompliantFieldSpec = {
+        level: level as CompliantFieldSpec['level'],
+        anon:
+          complianceOptions?.anon ??
+          defaultAnonStrategy(elementRuntimeType, isArray, !!enumValues),
+        queryable: complianceOptions?.queryable === true,
+        normalize: complianceOptions?.normalize ?? 'exact',
+        elementRuntimeType,
+        isArray,
+        enumValues,
+        path: '' // set by defineComplianceEntity once the property name is known
+      };
+      options.type = spec.queryable
+        ? new CompliantIndexType(spec)
+        : new CompliantType(spec);
+      // Stored values are always text: the envelope, or the blind index.
       options.columnType = 'text';
-      options.runtimeType = isArray ? 'object' : elementRuntimeType;
+      // In memory the property holds a CompliantField, never a string. A
+      // scalar runtimeType here makes MikroORM's em.assign validate the plain
+      // value being assigned against it (a number, boolean, Date or object
+      // is rejected as "not a string") before the setter can wrap it.
+      options.runtimeType = COMPLIANT_RUNTIME_TYPE;
+      // The property is a getter/setter pair installed by
+      // defineComplianceEntity (it wraps plain values on assignment).
+      options.accessor = true;
     }
   }
 
@@ -191,12 +225,16 @@ function extractEnumValues(items: unknown): unknown[] {
 }
 
 /**
- * MikroORM custom Type that stores mixed-type enum values as text
- * using safeStringify/safeParse for round-trip fidelity.
+ * MikroORM custom Type that stores mixed-type enum values as text: a number
+ * as its digits, a string as-is, read back with safeParse.
  */
 class EnumTextType extends Type<unknown, string> {
   override convertToDatabaseValue(value: unknown): string {
-    return safeStringify(value);
+    // Strings are stored unquoted, as they always have been. safeStringify
+    // now quotes them, and rows already written hold the bare value; query
+    // parameters go through this same conversion, so quoting here would stop
+    // `where` clauses from matching existing rows.
+    return toPlainString(value);
   }
 
   override convertToJSValue(value: unknown): unknown {
@@ -217,7 +255,7 @@ class EnumTextType extends Type<unknown, string> {
  *
  * - All items are strings → 'text'
  * - All items are numbers → 'integer'
- * - Mixed types → EnumTextType (safeStringify/safeParse round-trip)
+ * - Mixed types → EnumTextType (text, read back with safeParse)
  * - No items → 'text'
  */
 function inferEnumType(items: unknown): string | EnumTextType {

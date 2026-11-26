@@ -1,0 +1,5 @@
+[package]
+name = "fieldnotes-contracts"
+
+[lib]
+path = "../sdk.rs"

@@ -10,14 +10,14 @@ fi
 mkdir -p output/dryrun
 cd output/dryrun
 
-RUST_BACKTRACE=1 $FL init application dryrun-test-node-application -p dryrun-test-node-application -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0' -n
+RUST_BACKTRACE=1 $FL init application dryrun-test-node-application -p dryrun-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0' -n
 
 if [ "$(ls -A)" ]; then
      echo "Error: Directory not empty" >&2
      exit 1
 fi
 
-RUST_BACKTRACE=1 $FL init application dryrun-test-node-application -p dryrun-test-node-application -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application dryrun-test-node-application -p dryrun-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test service" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 cd dryrun-test-node-application
 

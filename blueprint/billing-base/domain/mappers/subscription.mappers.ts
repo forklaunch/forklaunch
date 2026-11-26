@@ -39,7 +39,7 @@ export const UpdateSubscriptionMapper = requestMapper({
   }
 });
 
-export const SubscriptionMapper = responseMapper({
+const SubscriptionEntityMapper = responseMapper({
   schemaValidator,
   schema: SubscriptionSchemas.SubscriptionSchema(
     PartyEnum,
@@ -57,3 +57,8 @@ export const SubscriptionMapper = responseMapper({
     }
   }
 });
+
+export const SubscriptionMapper = {
+  ...SubscriptionEntityMapper,
+  partyTypes: { user: PartyEnum.USER, organization: PartyEnum.ORGANIZATION }
+};

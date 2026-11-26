@@ -36,11 +36,11 @@ describe('PaymentOrderLookupService (checkout payment idempotency)', () => {
   // testcontainers can take well over a minute to pull and start.
   beforeAll(async () => {
     setup = await setupTestDatabase();
-  }, 180000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   async function makeService() {
     const { PaymentOrderLookupService } = await import(

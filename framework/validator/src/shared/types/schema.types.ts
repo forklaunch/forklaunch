@@ -128,6 +128,10 @@ export interface SchemaValidator<
    */
   nullish: unknown;
 
+  /** Optional schema markers for validators that distinguish an absent body. */
+  undefined?: unknown;
+  void?: unknown;
+
   /**
    * Validator for any type.
    */
@@ -282,6 +286,22 @@ export interface SchemaValidator<
    * @returns {SchemaObject} - The OpenAPI schema object.
    */
   openapi: OpenAPIFunction;
+
+  /** Optional explicit JSON Schema 2020-12 input-schema export capability. */
+  openapi2020?: (
+    schema: unknown,
+    options?: { pureInput?: boolean; zodChecks?: boolean; zodRegex?: boolean; zodDiagnostics?: boolean; diagnosticDefaults?: ReadonlyMap<unknown, unknown> }
+  ) => SchemaObject & {
+    $schema: 'https://json-schema.org/draft/2020-12/schema';
+  };
+
+  /** Optional root-input projection without evaluating root user callbacks.
+   * General/nested schema export semantics remain adapter-defined.
+   */
+  openapiRequestBody?: (schema: unknown) => {
+    required: boolean;
+    schema: SchemaObject;
+  };
 }
 
 /**

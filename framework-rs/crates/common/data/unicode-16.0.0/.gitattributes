@@ -1,0 +1,2 @@
+# Preserve the exact hash-pinned upstream data, including comment whitespace.
+emoji-data.txt -whitespace

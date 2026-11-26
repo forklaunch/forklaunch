@@ -1,9 +1,5 @@
-import {
-  handlers,
-  PLATFORM_SYSTEM_ROLES,
-  schemaValidator,
-  string
-} from '@{{app_name}}/core';
+import { handlers, bindRuntimeAuth, schemaValidator } from '@{{app_name}}/core';
+import { complianceContract } from '../contracts/compliance.contract';
 import { ci, tokens } from '../../bootstrapper';
 
 const complianceDataService = ci.resolve(tokens.ComplianceDataService);
@@ -11,28 +7,8 @@ const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 
 export const eraseUserData = handlers.delete(
   schemaValidator,
-  '/erase/:userId',
-  {
-    name: 'EraseUserData',
-    access: 'protected',
-    summary: 'Erases all PII/PHI/PCI data for a user (GDPR Art. 17)',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedRoles: PLATFORM_SYSTEM_ROLES
-    },
-    params: {
-      userId: string
-    },
-    responses: {
-      200: {
-        entitiesAffected: schemaValidator.array(string),
-        recordsDeleted: schemaValidator.number
-      },
-      404: string
-    }
-  },
+  complianceContract.delete.path,
+  bindRuntimeAuth(complianceContract.delete.details, { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL }),
   async (req, res) => {
     const { userId } = req.params;
     const result = await complianceDataService.erase(userId);
@@ -48,28 +24,8 @@ export const eraseUserData = handlers.delete(
 
 export const exportUserData = handlers.get(
   schemaValidator,
-  '/export/:userId',
-  {
-    name: 'ExportUserData',
-    access: 'protected',
-    summary: 'Exports all PII/PHI/PCI data for a user (GDPR Art. 20)',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedRoles: PLATFORM_SYSTEM_ROLES
-    },
-    params: {
-      userId: string
-    },
-    responses: {
-      200: {
-        userId: string,
-        entities: schemaValidator.record(string, schemaValidator.unknown)
-      },
-      404: string
-    }
-  },
+  complianceContract.get.path,
+  bindRuntimeAuth(complianceContract.get.details, { jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL }),
   async (req, res) => {
     const { userId } = req.params;
     const result = await complianceDataService.export(userId);

@@ -1,0 +1,8 @@
+@@ -516,6 +516,7 @@
+ ```bash
+ forklaunch infra add <service> object-store   # or: s3
+ forklaunch infra add <service> cache          # or: redis
++forklaunch infra add <service> whatsapp       # WhatsApp through the platform (see /integrations)
+ forklaunch infra remove <service> object-store
+ forklaunch infra add <service> object-store --dryrun
+ forklaunch score --offline                    # afterwards: the wiring checks should pass

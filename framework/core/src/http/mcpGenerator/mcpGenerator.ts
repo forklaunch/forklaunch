@@ -1,4 +1,9 @@
-import { isNever, isRecord, safeStringify } from '@forklaunch/common';
+import {
+  isNever,
+  isRecord,
+  safeStringify,
+  toPlainString
+} from '@forklaunch/common';
 import { string, ZodSchemaValidator, ZodType } from '@forklaunch/validator/zod';
 import { FastMCP } from 'fastmcp';
 import http from 'http';
@@ -7,6 +12,7 @@ import {
   discriminateResponseBodies
 } from '../router/discriminateBody';
 import { unpackRouters } from '../router/unpackRouters';
+import { getMcpTransportHeaders } from './mcpHttpHandler';
 import {
   Body,
   HeadersObject,
@@ -75,6 +81,48 @@ function generateInputSchema(
       : {})
   });
 }
+/**
+ * Builds the headers for a tool's call to its route. Like the Rust runtime,
+ * the MCP request's `Authorization` is forwarded so routes apply their own
+ * auth to the caller, a tool-supplied header of the same name wins over it,
+ * and correlation and trace context always come from the MCP request.
+ */
+function buildRouteHeaders(
+  toolHeaders: Record<string, unknown> | undefined,
+  contentType: string | undefined
+) {
+  const transportHeaders = getMcpTransportHeaders();
+  const routeHeaders = new Headers();
+
+  const authorization = transportHeaders?.get('authorization');
+  if (authorization) {
+    routeHeaders.set('authorization', authorization);
+  }
+  for (const [name, value] of Object.entries(toolHeaders ?? {})) {
+    if (value != null) {
+      routeHeaders.set(name, String(value));
+    }
+  }
+  const correlationId = transportHeaders?.get('x-correlation-id');
+  if (correlationId) {
+    routeHeaders.set('x-correlation-id', correlationId);
+  }
+  const traceparent = transportHeaders?.get('traceparent');
+  if (traceparent) {
+    routeHeaders.set('traceparent', traceparent);
+    routeHeaders.delete('tracestate');
+    const tracestate = transportHeaders?.get('tracestate');
+    if (tracestate) {
+      routeHeaders.set('tracestate', tracestate);
+    }
+  }
+  if (contentType !== undefined) {
+    routeHeaders.set('content-type', contentType);
+  }
+
+  return routeHeaders;
+}
+
 /**
  * Generates a ModelContextProtocol server from given routers.
  *
@@ -176,7 +224,7 @@ export function generateMcpServer<
             const { contentType, body, params, query, headers } = args as {
               contentType?: string;
               params?: Record<string, string | number | boolean>;
-              body?: Record<string, unknown> | string;
+              body?: unknown;
               query?: Record<string, string | number | boolean>;
               headers?: Record<string, unknown>;
             };
@@ -195,10 +243,12 @@ export function generateMcpServer<
             let bodySchema;
             let responsesSchemas;
             if (route.contractDetails.versions) {
-              const version = route.contractDetails.versions[index];
+              const version = Object.values(route.contractDetails.versions)[
+                index
+              ];
+              responsesSchemas = version.responses;
               if (version.body && schemaValidator.parse(inputSchema, args).ok) {
                 bodySchema = version.body;
-                responsesSchemas = version.responses;
               }
             } else {
               bodySchema = route.contractDetails.body;
@@ -213,7 +263,10 @@ export function generateMcpServer<
             if (discriminatedBody) {
               switch (discriminatedBody.parserType) {
                 case 'json': {
-                  parsedBody = safeStringify(body);
+                  // Tool arguments contain schema values, including JSON strings.
+                  // Raw signed bytes use the explicit text/file body contracts.
+                  parsedBody =
+                    body === undefined ? undefined : JSON.stringify(body);
                   break;
                 }
                 case 'text': {
@@ -221,7 +274,8 @@ export function generateMcpServer<
                   break;
                 }
                 case 'file': {
-                  parsedBody = Buffer.from(safeStringify(body));
+                  // a string body is the file's contents, not JSON
+                  parsedBody = Buffer.from(toPlainString(body));
                   break;
                 }
                 case 'multipart': {
@@ -257,7 +311,7 @@ export function generateMcpServer<
                     parsedBody = new URLSearchParams(
                       Object.entries(body).map(([key, value]) => [
                         key,
-                        safeStringify(value)
+                        toPlainString(value)
                       ])
                     );
                   } else {
@@ -277,23 +331,20 @@ export function generateMcpServer<
               const queryString = new URLSearchParams(
                 Object.entries(query).map(([key, value]) => [
                   key,
-                  safeStringify(value)
+                  toPlainString(value)
                 ])
               ).toString();
               url += queryString ? `?${queryString}` : '';
             }
 
-            const response = await fetch(encodeURI(url), {
+            const response = await fetch(url, {
               method: route.method.toUpperCase(),
-              headers: {
-                ...headers,
-                ...(discriminatedBody?.contentType != 'multipart/form-data'
-                  ? {
-                      'Content-Type':
-                        contentType ?? discriminatedBody?.contentType
-                    }
-                  : {})
-              },
+              headers: buildRouteHeaders(
+                headers,
+                discriminatedBody?.contentType != 'multipart/form-data'
+                  ? (contentType ?? discriminatedBody?.contentType)
+                  : undefined
+              ),
               body: parsedBody as BodyInit | null | undefined
             });
 

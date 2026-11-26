@@ -1,3 +1,4 @@
+import type { PortableOperation } from '../core/portableOperation';
 /**
  * @typedef {Object} RequestType
  * @property {Record<string, string | number | boolean>} [params] - URL parameters.
@@ -7,6 +8,14 @@
  */
 
 import { OpenAPIObject } from 'openapi3-ts/oas31';
+import type { ForkLaunchSdkConfig } from '../portableRuntime';
+
+/** Fetch applies to discovery and API calls; other options configure portable contracts. */
+export type UniversalSdkTransportOptions = Pick<
+  ForkLaunchSdkConfig,
+  'fetch' | 'maxSseEventBytes' | 'maxMultipartResponseBytes' | 'headers' |
+  'beforeRequest' | 'allowPlaintextDevelopment' | 'serviceBaseUrls' | 'hmac'
+>;
 
 /**
  * @typedef {Object} ResponseType
@@ -75,16 +84,9 @@ export type RegistryOptions =
 export type SdkPathMap = Record<
   string,
   {
-    method:
-      | 'get'
-      | 'post'
-      | 'put'
-      | 'patch'
-      | 'delete'
-      | 'options'
-      | 'head'
-      | 'trace';
+    method: string;
     path: string;
     version: string;
+    portableOperation?: PortableOperation;
   }
 >;

@@ -38,17 +38,35 @@ const IV_BYTES = 12;
 const KEY_BYTES = 32;
 const HKDF_HASH = 'sha256' as const;
 const HKDF_SALT = Buffer.alloc(0); // empty salt - key material is already high-entropy
+const BLIND_INDEX_INFO = 'forklaunch:blind-index\0';
 const KEY_ID_HEX_CHARS = 12;
 const DERIVED_KEY_CACHE_LIMIT = 4096;
 
 /**
- * Ciphertext envelopes the encryptor reads. Only `v3` names its key.
+ * Ciphertext envelopes the encryptor reads. `v3` and `v4` name their key.
  *
- *   v1:{iv}:{tag}:{data}            random IV (legacy)
- *   v2:{iv}:{tag}:{data}            deterministic IV
- *   v3:{keyId}:{iv}:{tag}:{data}    deterministic IV, stamped with the key fingerprint
+ *   v1:{iv}:{tag}:{data}                   random IV (legacy)
+ *   v2:{iv}:{tag}:{data}                   deterministic IV
+ *   v3:{keyId}:{iv}:{tag}:{data}           deterministic IV, stamped with the key fingerprint
+ *   v4:{keyId}:{anon}:{iv}:{tag}:{data}    random IV, stamped, carrying the field's
+ *                                          de-identified value (base64url) in clear;
+ *                                          written by compliant fields via {@link FieldEncryptor.seal}
  */
-export const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:'] as const;
+export const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:', 'v4:'] as const;
+
+/** Prefix of blind-index values: `bi1:{keyId}:{hmac}`. */
+export const BLIND_INDEX_PREFIX = 'bi1:';
+
+/**
+ * The de-identified value carried by a `v4` envelope, or null for any other
+ * envelope. Reading it never decrypts.
+ */
+export function sealedAnon(ciphertext: string): string | null {
+  if (!ciphertext.startsWith('v4:')) return null;
+  const parts = ciphertext.split(':');
+  if (parts.length !== 6) return null;
+  return Buffer.from(parts[2], 'base64url').toString('utf8');
+}
 
 /** True when the string carries one of the encryptor's envelopes. */
 export function isEncryptedCiphertext(value: unknown): value is string {
@@ -116,9 +134,12 @@ export function encryptionKeyId(masterKey: string): string {
  * values, which name no key.
  */
 export function stampedKeyId(ciphertext: string): string | null {
-  if (!ciphertext.startsWith('v3:')) return null;
   const parts = ciphertext.split(':');
-  return parts.length === 5 ? parts[1] : null;
+  if (ciphertext.startsWith('v3:')) return parts.length === 5 ? parts[1] : null;
+  if (ciphertext.startsWith('v4:')) return parts.length === 6 ? parts[1] : null;
+  if (ciphertext.startsWith(BLIND_INDEX_PREFIX))
+    return parts.length === 3 ? parts[1] : null;
+  return null;
 }
 
 /** SQL LIKE pattern matching every value stamped with `keyId`. */
@@ -146,7 +167,9 @@ export interface OpenedCiphertext {
   /** True when the current key opened it. */
   current: boolean;
   /** Envelope the value was stored in. */
-  version: 'v1' | 'v2' | 'v3';
+  version: 'v1' | 'v2' | 'v3' | 'v4';
+  /** The de-identified value a `v4` envelope carries; undefined otherwise. */
+  anon?: string;
   /**
    * True when a rewrite would change the stored bytes: the value is under
    * a previous key, or it is unstamped while the encryptor writes `v3`.
@@ -344,7 +367,11 @@ export class FieldEncryptor {
     let candidates: readonly KeyMaterial[];
     let body: string[];
 
-    if (version === 'v3' && parts.length === 5) {
+    let anon: string | undefined;
+    if (
+      (version === 'v3' && parts.length === 5) ||
+      (version === 'v4' && parts.length === 6)
+    ) {
       const key = this.byId.get(parts[1]);
       if (!key) {
         throw new DecryptionError(
@@ -357,7 +384,12 @@ export class FieldEncryptor {
         );
       }
       candidates = [key];
-      body = parts.slice(2);
+      if (version === 'v4') {
+        anon = Buffer.from(parts[2], 'base64url').toString('utf8');
+        body = parts.slice(3);
+      } else {
+        body = parts.slice(2);
+      }
     } else if ((version === 'v1' || version === 'v2') && parts.length === 4) {
       candidates = this.ring;
       body = parts.slice(1);
@@ -389,8 +421,12 @@ export class FieldEncryptor {
           plaintext: decrypted.toString('utf8'),
           keyId: key.id,
           current,
-          version: version as 'v1' | 'v2' | 'v3',
-          stale: !current || (this.format === 'v3' && version !== 'v3')
+          version: version as 'v1' | 'v2' | 'v3' | 'v4',
+          anon,
+          stale:
+            version === 'v4'
+              ? !current
+              : !current || (this.format === 'v3' && version !== 'v3')
         };
       } catch {
         // wrong key (or wrong tenant) for this value; try the next candidate
@@ -421,6 +457,76 @@ export class FieldEncryptor {
     if (ciphertext === null || ciphertext === undefined) return null;
     const opened = this.open(ciphertext, tenantId);
     if (!opened.stale) return ciphertext;
+    if (opened.version === 'v4') {
+      return this.seal(opened.plaintext, tenantId, opened.anon ?? '');
+    }
     return this.encrypt(opened.plaintext, tenantId);
+  }
+
+  /**
+   * Encrypt for a compliant field: a fresh random IV every time (equal
+   * plaintexts produce unrelated ciphertexts), stamped with the current key,
+   * and carrying `anon` — the field's de-identified value — in clear so it
+   * can be read without decrypting.
+   *
+   * Equality lookups do not use the ciphertext; they use {@link blindIndex}.
+   *
+   * @returns `v4:{keyId}:{anon}:{iv}:{tag}:{data}`
+   */
+  seal(plaintext: string, tenantId: string, anon: string): string {
+    const key = this.deriveKey(tenantId);
+    const iv = crypto.randomBytes(IV_BYTES);
+    const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+    const encrypted = Buffer.concat([
+      cipher.update(plaintext, 'utf8'),
+      cipher.final()
+    ]);
+    return [
+      'v4',
+      this.ring[0].id,
+      Buffer.from(anon, 'utf8').toString('base64url'),
+      iv.toString('base64'),
+      cipher.getAuthTag().toString('base64'),
+      encrypted.toString('base64')
+    ].join(':');
+  }
+
+  /**
+   * Keyed HMAC of a plaintext for equality lookups, under a key derived
+   * from the current master key and the tenant (separate from the
+   * encryption key). Deterministic per tenant and key, one-way, and never
+   * decryptable.
+   *
+   * After a master key rotation, rows still indexed under the previous key
+   * do not match until `reencryptEncryptedColumns` re-indexes them; see
+   * {@link blindIndexes} for a lookup that spans the ring.
+   *
+   * @returns `bi1:{keyId}:{hmac base64url}`
+   */
+  blindIndex(plaintext: string, tenantId: string): string {
+    return this.blindIndexFor(this.ring[0], plaintext, tenantId);
+  }
+
+  /** {@link blindIndex} under every key in the ring, current first. */
+  blindIndexes(plaintext: string, tenantId: string): string[] {
+    return this.ring.map((k) => this.blindIndexFor(k, plaintext, tenantId));
+  }
+
+  /** True when a blind index was computed under a previous key. */
+  isStaleBlindIndex(index: string): boolean {
+    return stampedKeyId(index) !== this.ring[0].id;
+  }
+
+  private blindIndexFor(
+    key: KeyMaterial,
+    plaintext: string,
+    tenantId: string
+  ): string {
+    const indexKey = this.deriveKeyFor(key, BLIND_INDEX_INFO + tenantId);
+    const mac = crypto
+      .createHmac('sha256', indexKey)
+      .update(plaintext, 'utf8')
+      .digest('base64url');
+    return `${BLIND_INDEX_PREFIX}${key.id}:${mac}`;
   }
 }

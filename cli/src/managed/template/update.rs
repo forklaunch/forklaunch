@@ -5,12 +5,13 @@ use clap::{Arg, ArgAction, ArgMatches, Command};
 use serde_json::{Map, Value, json};
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 
+use super::feature_settings;
 use crate::{
     CliCommand,
     core::command::command,
     managed::{
         client::{Missing, patch_json, print_dryrun, require_managed_mode, resolve_managed_auth},
-        types::{AppTemplate, TEMPLATE_STATUSES},
+        types::{AppTemplate, CLUSTER_TYPES, TEMPLATE_STATUSES, parse_app_claim_hook},
     },
 };
 
@@ -26,6 +27,27 @@ pub(super) struct TemplateUpdate<'a> {
     pub(super) description: Option<&'a String>,
     pub(super) status: Option<&'a str>,
     pub(super) stripe_product: Option<&'a String>,
+    pub(super) cluster_type: Option<&'a str>,
+    pub(super) base_domain: Option<&'a String>,
+    /// `Some(None)` clears the frontend domain (`--clear-frontend-domain`).
+    pub(super) frontend_domain: Option<Option<&'a String>>,
+    /// `Some(None)` returns to the platform default (`--clear-default-instance-size`).
+    pub(super) default_instance_size: Option<Option<&'a String>>,
+    /// Whether the platform may rotate this product's generated secrets in place
+    /// (`--supports-key-rotation` / `--no-supports-key-rotation`).
+    pub(super) supports_key_rotation: Option<bool>,
+    /// Whether launches of this template's instances skip the managed first-deploy
+    /// approval gate (`--auto-approve-launches true|false`). Admin only on the server.
+    pub(super) auto_approve_launches: Option<bool>,
+    /// The repository the platform builds versions from (https URL).
+    pub(super) source_repo: Option<&'a String>,
+    /// `<component>:<path>` — where this product mints its own claim link.
+    pub(super) app_claim_hook: Option<&'a String>,
+    /// The model gateway setting, replaced as a whole (see `model_gateway_body`).
+    pub(super) model_gateway: Option<Value>,
+    /// The SMS / WhatsApp / voice / email / payments settings the flags produced,
+    /// each replaced as a whole (see `feature_settings::bodies`).
+    pub(super) feature_settings: Vec<(&'static str, Value)>,
     pub(super) dryrun: bool,
     pub(super) json: bool,
 }
@@ -41,9 +63,9 @@ impl UpdateCommand {
 
 impl CliCommand for UpdateCommand {
     fn command(&self) -> Command {
-        command(
+        let base = command(
             "update",
-            "Change a template's name, description, status, or Stripe product",
+            "Change a template's name, description, status, Stripe product, placement, or domains",
         )
         .long_about(
             "Change a template's name, description, status, or Stripe product.\n\n\
@@ -58,7 +80,54 @@ impl CliCommand for UpdateCommand {
              \x20 retired    no longer launchable for new instances\n\n\
              --stripe-product records a Stripe product id against the template. Note that\n\
              nothing in billing reads that id today, so setting it does not by itself cause\n\
-             anyone to be charged — it is stored for later use.",
+             anyone to be charged — it is stored for later use.\n\n\
+             Placement and addressing (the same fields the dashboard edits):\n\
+             \x20 --cluster-type           where NEW instances run: org-shared (default),\n\
+             \x20                          platform-shared, or dedicated. Existing instances\n\
+             \x20                          do not move; a component's manifest hostingType wins.\n\
+             \x20 --base-domain            the zone instances are hosted under (their API hosts).\n\
+             \x20 --frontend-domain        the domain the product UI is served from; each\n\
+             \x20                          instance's UI becomes <hostPrefix>.<frontend domain>\n\
+             \x20                          and the claim page shows customers that link.\n\
+             \x20 --default-instance-size  the compute tier new instances launch with\n\
+             \x20                          (pico, nano, micro, small, ...).\n\
+             \x20 --supports-key-rotation  declare that every service re-encrypts its data on\n\
+             \x20                          boot from LEGACY_<KEY>S, so `instance rotate-keys`\n\
+             \x20                          is allowed; --no-supports-key-rotation withdraws it.\n\
+             \x20 --auto-approve-launches  true: launches of this template's instances no longer\n\
+             \x20                          wait for an admin to approve their first deploy, so a\n\
+             \x20                          signup backend can hand instances out unattended. It\n\
+             \x20                          skips ONLY that managed-launch gate: an environment\n\
+             \x20                          that requires deployment approval still parks the\n\
+             \x20                          deploy. Admin only; who set it is recorded. false\n\
+             \x20                          restores the gate.\n\
+             \x20 --source-repo            the repository versions are built from. Re-point it\n\
+             \x20                          when the code moves (e.g. to the customer's account);\n\
+             \x20                          the org's GitHub App installation must read it.\n\n\
+             --app-claim-hook tells the platform where this product mints its OWN sign-up\n\
+             link, as <component>:<path> — for example `iam:/internal/claim/mint`. With it\n\
+             set, the moment a customer claims an instance the platform calls that endpoint\n\
+             over the service mesh and holds what comes back, so the customer gets a second\n\
+             link that creates their first account INSIDE the app. The component must be a\n\
+             service the built app contains and the path one it serves; a version whose\n\
+             build does not match is refused at publish time rather than discovered by the\n\
+             first customer who claims.\n\n\
+             To stop asking the product for a link, use `template clear-app-claim-hook`. It\n\
+             is a separate command rather than an empty --app-claim-hook because \"set it to\n\
+             nothing\" and \"do not change it\" are the same empty string on a command line.\n\n\
+             Platform-held features, for every instance of the product (read on each call,\n\
+             so a change applies at once). Each feature's setting is REPLACED AS A WHOLE:\n\
+             pass every field you want it to keep. One instance can differ (`managed\n\
+             instance model-gateway | sms-gateway | whatsapp | voice | email-gateway |\n\
+             payments-gateway`); `managed template gateway-settings` shows what is set.\n\
+             \x20 --gateway-*    model gateway: models, monthly tokens, requests/minute\n\
+             \x20 --sms-*        pool, monthly segments, texts/minute, promotional, off\n\
+             \x20 --whatsapp-*   linked phone number id, sends/minute, off\n\
+             \x20 --voice-*      flow catalog (name=contact-flow-id), concurrent calls, minutes\n\
+             \x20 --email-*      recipients/day, messages/minute\n\
+             \x20 --payments-*   application fee (percent and/or amount), Stripe calls/minute\n\
+             --clear-sms, --unlink-whatsapp, --disable-voice, --clear-email and\n\
+             --clear-payments return a feature to the platform defaults.",
         )
         .arg(
             Arg::new("slug")
@@ -88,23 +157,151 @@ impl CliCommand for UpdateCommand {
                 .help("Stripe product id to record against the template (not yet read by billing)"),
         )
         .arg(
-            Arg::new("dryrun")
-                .long("dryrun")
-                .help("Print the request that would be sent without sending it")
+            Arg::new("cluster_type")
+                .long("cluster-type")
+                .value_parser(CLUSTER_TYPES.to_vec())
+                .help("Where NEW instances run: org-shared | platform-shared | dedicated"),
+        )
+        .arg(
+            Arg::new("base_domain")
+                .long("base-domain")
+                .help("The zone instances are hosted under, e.g. buildbespoke.app"),
+        )
+        .arg(
+            Arg::new("frontend_domain")
+                .long("frontend-domain")
+                .conflicts_with("clear_frontend_domain")
+                .help("Domain the product UI is served from; instance UIs become <hostPrefix>.<domain>"),
+        )
+        .arg(
+            Arg::new("clear_frontend_domain")
+                .long("clear-frontend-domain")
+                .help("Remove the frontend domain (instances stop advertising a UI link)")
                 .action(ArgAction::SetTrue),
         )
         .arg(
-            Arg::new("json")
-                .long("json")
-                .help("Output raw JSON instead of formatted terminal output")
+            Arg::new("default_instance_size")
+                .long("default-instance-size")
+                .conflicts_with("clear_default_instance_size")
+                .help("Compute tier new instances launch with (pico, nano, micro, small, ...)"),
+        )
+        .arg(
+            Arg::new("clear_default_instance_size")
+                .long("clear-default-instance-size")
+                .help("Return new instances to the platform's default tier")
                 .action(ArgAction::SetTrue),
         )
+        .arg(
+            Arg::new("supports_key_rotation")
+                .long("supports-key-rotation")
+                .conflicts_with("no_supports_key_rotation")
+                .help("Allow `instance rotate-keys`: every service re-encrypts on boot from LEGACY_<KEY>S")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("no_supports_key_rotation")
+                .long("no-supports-key-rotation")
+                .help("Refuse `instance rotate-keys` for this product")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
+            Arg::new("auto_approve_launches")
+                .long("auto-approve-launches")
+                .value_name("true|false")
+                .value_parser(clap::value_parser!(bool))
+                .help("true: launches skip the managed first-deploy approval gate (admin only); false restores it"),
+        )
+        .arg(
+            Arg::new("source_repo")
+                .long("source-repo")
+                .help("https URL of the repository versions are built from, e.g. https://github.com/org/repo"),
+        )
+        .arg(
+            Arg::new("app_claim_hook")
+                .long("app-claim-hook")
+                .value_name("COMPONENT:PATH")
+                .help("Where this product mints its own sign-up link, e.g. iam:/internal/claim/mint"),
+        )
+        .arg(
+            Arg::new("gateway_models")
+                .long("gateway-models")
+                .help("Model gateway: comma-separated catalog aliases instances may call (e.g. terra,luna)"),
+        )
+        .arg(
+            Arg::new("gateway_monthly_tokens")
+                .long("gateway-monthly-tokens")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: monthly token budget per instance"),
+        )
+        .arg(
+            Arg::new("gateway_rpm")
+                .long("gateway-rpm")
+                .value_parser(clap::value_parser!(u64).range(1..))
+                .help("Model gateway: requests per minute per instance"),
+        )
+        .arg(
+            Arg::new("disable_model_gateway")
+                .long("disable-model-gateway")
+                .help("Turn the model gateway off for this product")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["gateway_models", "gateway_monthly_tokens", "gateway_rpm"]),
+        );
+        feature_settings::add_args(base)
+            .arg(
+                Arg::new("dryrun")
+                    .long("dryrun")
+                    .help("Print the request that would be sent without sending it")
+                    .action(ArgAction::SetTrue),
+            )
+            .arg(
+                Arg::new("json")
+                    .long("json")
+                    .help("Output raw JSON instead of formatted terminal output")
+                    .action(ArgAction::SetTrue),
+            )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
         let slug = matches
             .get_one::<String>("slug")
             .context("--slug is required")?;
+
+        if let Some(repo) = matches.get_one::<String>("source_repo") {
+            if !repo.starts_with("https://") || repo.trim_end_matches('/').matches('/').count() != 4
+            {
+                bail!(
+                    "--source-repo '{}' must be an https repository URL such as https://github.com/org/repo",
+                    repo
+                );
+            }
+        }
+
+        let supports_key_rotation = if matches.get_flag("supports_key_rotation") {
+            Some(true)
+        } else if matches.get_flag("no_supports_key_rotation") {
+            Some(false)
+        } else {
+            None
+        };
+        let frontend_domain = if matches.get_flag("clear_frontend_domain") {
+            Some(None)
+        } else {
+            matches.get_one::<String>("frontend_domain").map(Some)
+        };
+        let default_instance_size = if matches.get_flag("clear_default_instance_size") {
+            Some(None)
+        } else {
+            matches.get_one::<String>("default_instance_size").map(Some)
+        };
+
+        let model_gateway = model_gateway_body(
+            matches.get_one::<String>("gateway_models"),
+            matches.get_one::<u64>("gateway_monthly_tokens").copied(),
+            matches.get_one::<u64>("gateway_rpm").copied(),
+            matches.get_flag("disable_model_gateway"),
+        )?;
+
+        let feature_settings = feature_settings::bodies(matches)?;
 
         update_template(
             slug,
@@ -113,11 +310,66 @@ impl CliCommand for UpdateCommand {
                 description: matches.get_one::<String>("description"),
                 status: matches.get_one::<String>("status").map(String::as_str),
                 stripe_product: matches.get_one::<String>("stripe_product"),
+                cluster_type: matches
+                    .get_one::<String>("cluster_type")
+                    .map(String::as_str),
+                base_domain: matches.get_one::<String>("base_domain"),
+                frontend_domain,
+                default_instance_size,
+                supports_key_rotation,
+                auto_approve_launches: matches.get_one::<bool>("auto_approve_launches").copied(),
+                source_repo: matches.get_one::<String>("source_repo"),
+                app_claim_hook: matches.get_one::<String>("app_claim_hook"),
+                model_gateway,
+                feature_settings,
                 dryrun: matches.get_flag("dryrun"),
                 json: matches.get_flag("json"),
             },
         )
     }
+}
+
+/// The `modelGateway` value for a template update, or None when no gateway
+/// flag was passed.
+///
+/// The control plane replaces the setting as a whole, so a budget or rate
+/// without the model list is refused: sending it alone would silently drop the
+/// models and turn the gateway off.
+pub(super) fn model_gateway_body(
+    models: Option<&String>,
+    monthly_tokens: Option<u64>,
+    rpm: Option<u64>,
+    disable: bool,
+) -> Result<Option<Value>> {
+    if disable {
+        return Ok(Some(json!({ "models": [] })));
+    }
+    let Some(models) = models else {
+        if monthly_tokens.is_some() || rpm.is_some() {
+            bail!(
+                "--gateway-monthly-tokens / --gateway-rpm replace the whole gateway setting, \
+                 so they need --gateway-models too (the models the product may call)"
+            );
+        }
+        return Ok(None);
+    };
+    let aliases: Vec<&str> = models
+        .split(',')
+        .map(str::trim)
+        .filter(|alias| !alias.is_empty())
+        .collect();
+    if aliases.is_empty() {
+        bail!("--gateway-models is empty — to turn the gateway off, use --disable-model-gateway");
+    }
+    let mut setting = Map::new();
+    setting.insert("models".to_string(), json!(aliases));
+    if let Some(tokens) = monthly_tokens {
+        setting.insert("monthlyTokenBudget".to_string(), json!(tokens));
+    }
+    if let Some(rpm) = rpm {
+        setting.insert("requestsPerMinute".to_string(), json!(rpm));
+    }
+    Ok(Some(Value::Object(setting)))
 }
 
 /// Issues the PATCH. Shared by `template update` and `template publish-template`.
@@ -137,6 +389,49 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     if let Some(stripe_product) = update.stripe_product {
         body.insert("stripeProductId".to_string(), json!(stripe_product));
     }
+    if let Some(cluster_type) = update.cluster_type {
+        body.insert("clusterType".to_string(), json!(cluster_type));
+    }
+    if let Some(base_domain) = update.base_domain {
+        body.insert("baseDomain".to_string(), json!(base_domain));
+    }
+    // `null` is a real value here: it tells the control plane to clear the field.
+    if let Some(frontend_domain) = update.frontend_domain {
+        body.insert("frontendDomain".to_string(), json!(frontend_domain));
+    }
+    if let Some(default_instance_size) = update.default_instance_size {
+        body.insert(
+            "defaultInstanceSize".to_string(),
+            json!(default_instance_size),
+        );
+    }
+    if let Some(supports_key_rotation) = update.supports_key_rotation {
+        body.insert(
+            "supportsKeyRotation".to_string(),
+            json!(supports_key_rotation),
+        );
+    }
+    if let Some(auto_approve_launches) = update.auto_approve_launches {
+        body.insert(
+            "autoApproveLaunches".to_string(),
+            json!(auto_approve_launches),
+        );
+    }
+    if let Some(source_repo) = update.source_repo {
+        body.insert("sourceRepo".to_string(), json!(source_repo));
+    }
+    if let Some(raw) = update.app_claim_hook {
+        // Parsed before anything is sent, so a malformed pair is a local error naming the
+        // form rather than a 400 whose body has to be read back through two services.
+        let hook = parse_app_claim_hook(raw).map_err(|message| anyhow::anyhow!(message))?;
+        body.insert("appClaimHook".to_string(), json!(hook));
+    }
+    if let Some(model_gateway) = update.model_gateway.clone() {
+        body.insert("modelGateway".to_string(), model_gateway);
+    }
+    for (key, value) in &update.feature_settings {
+        body.insert((*key).to_string(), value.clone());
+    }
 
     // An empty PATCH is accepted by the control plane and changes nothing, so it would
     // report success while having done nothing at all. Refuse instead — someone who
@@ -144,8 +439,12 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
     // something had happened.
     if body.is_empty() {
         bail!(
-            "nothing to update — pass at least one of --name, --description, --status, or \
-             --stripe-product (to publish a template, `forklaunch managed template \
+            "nothing to update — pass at least one of --name, --description, --status, \
+             --stripe-product, --cluster-type, --base-domain, --frontend-domain, \
+             --default-instance-size, --supports-key-rotation, --auto-approve-launches, \
+             --source-repo, --app-claim-hook, or the \
+             --gateway-* / --sms-* / --whatsapp-* / --voice-* / --email-* / --payments-* \
+             flags (to publish a template, `forklaunch managed template \
              publish-template --slug {}` is the shorthand)",
             slug
         );
@@ -190,6 +489,48 @@ pub(super) fn update_template(slug: &str, update: TemplateUpdate<'_>) -> Result<
         new_status
     );
 
+    if let Some(Some(domain)) = update.frontend_domain {
+        log_info!(
+            stdout,
+            "Each instance's UI is now https://<hostPrefix>.{} — point that wildcard at your frontend deployment (see the vercel-frontend skill).",
+            domain
+        );
+    }
+
+    // Echoed back from the server's own response rather than from what was asked for.
+    // Confirming the round trip is the whole reason the control plane was changed to
+    // return this field.
+    if update.app_claim_hook.is_some() {
+        match template.app_claim_hook.as_ref() {
+            Some(hook) => log_ok!(
+                stdout,
+                "App claim hook: {}{} — on claim, the platform will ask that endpoint for the customer's sign-up link.",
+                hook.component,
+                hook.path
+            ),
+            // A 200 that does not echo the field means an older control plane, not a
+            // failed write; say which, so nobody re-runs the PATCH chasing a ghost.
+            None => log_warn!(
+                stdout,
+                "This control plane did not echo the app claim hook back, so it could not be confirmed here. Read it with `template list --json`."
+            ),
+        }
+    }
+
+    match update.auto_approve_launches {
+        Some(true) => log_warn!(
+            stdout,
+            "Launches of '{}' no longer wait for approval. An environment that requires deployment approval still parks them.",
+            slug
+        ),
+        Some(false) => log_info!(
+            stdout,
+            "Every launch of '{}' waits for an admin to approve its first deploy again.",
+            slug
+        ),
+        None => {}
+    }
+
     if new_status == "published" {
         log_info!(
             stdout,
@@ -219,6 +560,31 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("nothing to update"), "{}", message);
         assert!(message.contains("publish-template"), "{}", message);
+        // Every settable field belongs in the list, or someone is told a flag they just
+        // used does not exist.
+        assert!(message.contains("--app-claim-hook"), "{}", message);
+    }
+
+    #[test]
+    fn a_malformed_app_claim_hook_fails_before_any_request_is_made() {
+        // `dryrun` would short-circuit the network anyway; what this pins is that the
+        // parse happens FIRST, so the error names the form rather than arriving as a 400
+        // relayed through two services.
+        let raw = "iam".to_string();
+        let error = update_template(
+            "clinic",
+            TemplateUpdate {
+                app_claim_hook: Some(&raw),
+                dryrun: true,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("<component>:<path>"),
+            "{}",
+            error
+        );
     }
 
     #[test]
@@ -234,6 +600,96 @@ mod tests {
         assert!(update.name.is_none());
         assert!(update.description.is_none());
         assert!(update.stripe_product.is_none());
+        assert!(update.frontend_domain.is_none());
+    }
+
+    #[test]
+    fn clearing_the_frontend_domain_sends_an_explicit_null() {
+        // `--clear-frontend-domain` is Some(None): the field must be PRESENT as null so
+        // the control plane clears it — omitting it would leave the domain untouched.
+        let update = TemplateUpdate {
+            frontend_domain: Some(None),
+            ..Default::default()
+        };
+        assert_eq!(json!(update.frontend_domain.unwrap()), Value::Null);
+    }
+
+    #[test]
+    fn gateway_flags_build_the_whole_setting() {
+        let models = "terra, luna,".to_string();
+        assert_eq!(
+            model_gateway_body(Some(&models), Some(500_000), Some(30), false).unwrap(),
+            Some(json!({
+                "models": ["terra", "luna"],
+                "monthlyTokenBudget": 500_000,
+                "requestsPerMinute": 30
+            }))
+        );
+        assert_eq!(
+            model_gateway_body(None, None, None, true).unwrap(),
+            Some(json!({ "models": [] }))
+        );
+        assert_eq!(model_gateway_body(None, None, None, false).unwrap(), None);
+    }
+
+    #[test]
+    fn a_gateway_budget_without_models_is_refused_rather_than_turning_it_off() {
+        let error = model_gateway_body(None, Some(10), None, false).unwrap_err();
+        assert!(error.to_string().contains("--gateway-models"), "{}", error);
+        let empty = " , ".to_string();
+        let error = model_gateway_body(Some(&empty), None, None, false).unwrap_err();
+        assert!(
+            error.to_string().contains("--disable-model-gateway"),
+            "{}",
+            error
+        );
+    }
+
+    #[test]
+    fn auto_approve_launches_is_sent_as_a_boolean_and_counts_as_a_change() {
+        // Dry run reaches the body without a server: the flag alone is a real update
+        // (not refused as empty), and false is sent rather than dropped.
+        for value in [true, false] {
+            let update = TemplateUpdate {
+                auto_approve_launches: Some(value),
+                dryrun: true,
+                ..Default::default()
+            };
+            update_template("clinic", update).unwrap();
+        }
+        let command = UpdateCommand::new().command().version("0.0.0-test");
+        let matches = command
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "true",
+            ])
+            .unwrap();
+        assert_eq!(
+            matches.get_one::<bool>("auto_approve_launches").copied(),
+            Some(true)
+        );
+        let refused = UpdateCommand::new()
+            .command()
+            .version("0.0.0-test")
+            .try_get_matches_from([
+                "update",
+                "--slug",
+                "clinic",
+                "--auto-approve-launches",
+                "maybe",
+            ]);
+        assert!(refused.is_err());
+    }
+
+    #[test]
+    fn the_cli_cluster_type_list_matches_what_the_control_plane_validates() {
+        assert_eq!(
+            CLUSTER_TYPES,
+            &["org-shared", "platform-shared", "dedicated"]
+        );
     }
 
     #[test]

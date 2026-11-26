@@ -1,10 +1,5 @@
-import {
-  array,
-  boolean,
-  handlers,
-  schemaValidator,
-  string
-} from '@forklaunch/blueprint-core';
+import { discoveryContract } from '../contracts/discovery.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 import { BetterAuth } from '../../auth';
 import { ci, tokens } from '../../bootstrapper';
 
@@ -16,27 +11,8 @@ const betterAuth = ci.resolve(tokens.BetterAuth) as BetterAuth;
  */
 export const getAuthMethods = handlers.get(
   schemaValidator,
-  '/auth-methods',
-  {
-    name: 'GetAuthMethods',
-    access: 'public',
-    summary: 'Get configured authentication methods',
-    responses: {
-      200: {
-        email: boolean,
-        username: boolean,
-        magicLink: boolean,
-        emailOtp: boolean,
-        phoneNumber: boolean,
-        passkey: boolean,
-        anonymous: boolean,
-        sso: boolean,
-        genericOAuth: boolean,
-        twoFactor: boolean,
-        socialProviders: array(string)
-      }
-    }
-  },
+  discoveryContract.getAuthMethods.path,
+  discoveryContract.getAuthMethods.details,
   async (_req, res) => {
     const opts = betterAuth.options;
     const pluginIds = new Set(

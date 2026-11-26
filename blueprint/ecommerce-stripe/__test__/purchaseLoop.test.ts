@@ -33,11 +33,11 @@ function expectOk<T extends { code: number; response: unknown }>(
 describe('Purchase Loop E2E Test with PostgreSQL Container', () => {
   beforeAll(async () => {
     await setupTestDatabase();
-  }, 60000);
+  });
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   it('completes the full purchase loop and rejects an illegal transition', async () => {
     const { importCatalogRoute } = await import(

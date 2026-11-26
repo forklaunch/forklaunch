@@ -6,6 +6,7 @@ export class KafkaWorkerProducer<
   Options extends KafkaWorkerOptions
 > {
   private producer;
+  private connection?: Promise<void>;
   private readonly queueName: string;
   private readonly options: Options;
 
@@ -17,10 +18,22 @@ export class KafkaWorkerProducer<
       brokers: this.options.brokers
     });
     this.producer = kafka.producer();
-    this.producer.connect();
+    // Connect eagerly, but make every send wait for it: a send issued while
+    // the connection is still being established fails with "The producer is
+    // disconnected". A failed attempt is retried by the next send.
+    this.connect().catch(() => undefined);
+  }
+
+  private connect(): Promise<void> {
+    this.connection ??= this.producer.connect().catch((error: unknown) => {
+      this.connection = undefined;
+      throw error;
+    });
+    return this.connection;
   }
 
   async enqueueJob(event: EventEntity): Promise<void> {
+    await this.connect();
     await this.producer.send({
       topic: this.queueName,
       messages: [{ value: JSON.stringify([event]) }]
@@ -28,6 +41,7 @@ export class KafkaWorkerProducer<
   }
 
   async enqueueBatchJobs(events: EventEntity[]): Promise<void> {
+    await this.connect();
     await this.producer.send({
       topic: this.queueName,
       messages: events.map((event) => ({ value: JSON.stringify(event) }))

@@ -1,0 +1,65 @@
+name: Save Rust build cache
+description: >-
+  Prints sccache statistics and, when this job compiled enough that the
+  restored store was missing it, uploads the store as this run's
+  `sccache-<family>` artifact for ./.github/actions/rust-build-cache to
+  restore in later runs. Run it last, with
+  `if: always()`: a failing job still compiled everything before the failure.
+inputs:
+  min-misses:
+    description: >-
+      Save only when at least this many compilations missed the restored
+      store. Keeps unchanged reruns from writing another copy of the same
+      store.
+    default: '100'
+  max-hit-rate:
+    description: >-
+      Save only when the hit rate (percent) was below this. Some misses recur
+      on every run (scratch crates the tests compile in fresh temporary
+      directories), so a miss count alone would rewrite a warm store each
+      time; a falling hit rate is what says the store has gone stale.
+    default: '85'
+runs:
+  using: composite
+  steps:
+    - name: Compiler cache statistics
+      id: stats
+      shell: bash
+      env:
+        MIN_MISSES: ${{ inputs.min-misses }}
+        MAX_HIT_RATE: ${{ inputs.max-hit-rate }}
+      run: |
+        "$SCCACHE_PATH" --show-stats
+        read -r hits misses < <("$SCCACHE_PATH" --show-stats --stats-format=json | python3 -c 'import json,sys; s=json.load(sys.stdin)["stats"]; print(sum(s["cache_hits"]["counts"].values()), sum(s["cache_misses"]["counts"].values()))')
+        rate=$(( (hits + misses) > 0 ? 100 * hits / (hits + misses) : 100 ))
+        if [ "$misses" -ge "$MIN_MISSES" ] && [ "$rate" -lt "$MAX_HIT_RATE" ]; then
+          echo "save=true" >> "$GITHUB_OUTPUT"
+          echo "$hits hits, $misses misses ($rate%): saving the $FORKLAUNCH_SCCACHE_FAMILY compiler cache"
+        else
+          echo "save=false" >> "$GITHUB_OUTPUT"
+          echo "$hits hits, $misses misses ($rate%): the restored $FORKLAUNCH_SCCACHE_FAMILY compiler cache is current enough"
+        fi
+    # Stop the server first so the store's index is flushed to disk.
+    - name: Stop sccache
+      if: steps.stats.outputs.save == 'true'
+      shell: bash
+      run: '"$SCCACHE_PATH" --stop-server || true'
+    - name: Pack compiler cache
+      if: steps.stats.outputs.save == 'true'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/sccache-store"
+        tar -cf "$RUNNER_TEMP/sccache-store/store.tar" -C "$SCCACHE_DIR" .
+        ls -la "$RUNNER_TEMP/sccache-store"
+    # Entries are zstd-compressed already. A rerun of the same run replaces
+    # its earlier upload.
+    - name: Save compiler cache
+      if: steps.stats.outputs.save == 'true'
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      with:
+        name: sccache-${{ env.FORKLAUNCH_SCCACHE_FAMILY }}
+        path: ${{ runner.temp }}/sccache-store/store.tar
+        retention-days: 7
+        compression-level: 0
+        overwrite: true
+        if-no-files-found: error

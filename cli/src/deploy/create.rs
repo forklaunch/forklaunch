@@ -1,6 +1,8 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    io::Write,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Result, bail};
 use clap::{Arg, ArgMatches, Command};
@@ -11,7 +13,9 @@ use termcolor::{Color, ColorChoice, StandardStream, WriteColor};
 
 use crate::{
     CliCommand,
-    constants::{ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url},
+    constants::{
+        ERROR_FAILED_TO_SEND_REQUEST, get_platform_management_api_url, get_platform_ui_url,
+    },
     core::{
         command::command,
         env::extract_env_value,
@@ -20,7 +24,10 @@ use crate::{
         http_client,
         validate::{require_active_account, require_integration, require_manifest, resolve_auth},
     },
-    deploy::utils::stream_deployment_status,
+    deploy::{
+        target::{confirm_target, resolve_target},
+        utils::{DEFAULT_WAIT, stream_deployment_status_for},
+    },
     managed::detect::{ManagedDetection, detect_managed_template},
 };
 
@@ -40,6 +47,13 @@ struct CreateDeploymentRequest {
     #[serde(rename = "clusterType")]
     #[serde(skip_serializing_if = "Option::is_none")]
     cluster_type: Option<String>,
+    /// How services that have no setting yet should run: `scale-to-zero`,
+    /// `always-on` or `auto`. Omitted when nothing was chosen, which the
+    /// control plane reads as `auto` (scale to zero wherever a service can run
+    /// that way), so an older control plane that does not know the field is
+    /// unaffected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compute: Option<String>,
     /// Deploy a managed-mode application down the single-app pipeline anyway.
     /// The control plane refuses this by default; `--force` is the deliberate
     /// override. Omitted entirely when not set, so an older control plane that
@@ -49,9 +63,80 @@ struct CreateDeploymentRequest {
     force_single_app_deploy: Option<bool>,
 }
 
+/// What `--compute` accepts. `auto` is what the control plane assumes when
+/// nothing is sent.
+const COMPUTE_CHOICES: [&str; 3] = ["auto", "scale-to-zero", "always-on"];
+
+/// What the first-deploy prompt offers, default first. It offers `auto`
+/// rather than a strict `scale-to-zero`: a service that cannot sleep (it
+/// serves WebSockets, say) then runs always on instead of failing the
+/// person's first deploy.
+const COMPUTE_PROMPT: [(&str, &str); 2] = [
+    (
+        "Scale to zero where possible: sleeps when idle, wakes in about a second, costs least",
+        "auto",
+    ),
+    ("Always on: never makes a request wait", "always-on"),
+];
+
 #[derive(Debug, Deserialize)]
 struct CreateDeploymentResponse {
     id: String,
+    /// First deploy only: variables the deploy went ahead without that a
+    /// container may still need at start-up.
+    #[serde(default)]
+    remediation: Option<DeployRemediation>,
+}
+
+/// What it takes to get a deploy's containers booting, as the platform lists
+/// it: every variable still without a value, the command that sets each one,
+/// and the redeploy to run afterwards. Never carries a value.
+#[derive(Debug, Deserialize)]
+struct DeployRemediation {
+    #[serde(rename = "unsetVariables", default)]
+    unset_variables: Vec<UnsetVariable>,
+    #[serde(rename = "redeployCommand")]
+    redeploy_command: String,
+    #[serde(rename = "agentPrompt", default)]
+    agent_prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UnsetVariable {
+    key: String,
+    scope: String,
+    #[serde(default)]
+    component: Option<String>,
+    #[serde(rename = "setOnOtherComponent", default)]
+    set_on_other_component: Option<String>,
+    #[serde(rename = "setCommand")]
+    set_command: String,
+}
+
+/// Print the platform's list of unset variables, one command per line, so an
+/// agent (or a person) can set each one and redeploy without guessing scope.
+fn print_remediation<W: Write>(stdout: &mut W, remediation: &DeployRemediation) -> Result<()> {
+    for var in &remediation.unset_variables {
+        let owner = match &var.component {
+            Some(component) => format!("{} '{}'", var.scope, component),
+            None => var.scope.clone(),
+        };
+        let elsewhere = var
+            .set_on_other_component
+            .as_ref()
+            .map(|o| format!(" (a value exists on {})", o))
+            .unwrap_or_default();
+        writeln!(stdout, "  {} [{}]{}", var.key, owner, elsewhere)?;
+        writeln!(stdout, "    {}", var.set_command)?;
+    }
+    writeln!(stdout, "  Then redeploy:")?;
+    writeln!(stdout, "    {}", remediation.redeploy_command)?;
+    if let Some(prompt) = &remediation.agent_prompt {
+        writeln!(stdout)?;
+        writeln!(stdout, "  Prompt for a coding agent:")?;
+        writeln!(stdout, "    {}", prompt)?;
+    }
+    Ok(())
 }
 
 /// What a placement means for isolation, as the control plane computes it.
@@ -140,6 +225,8 @@ struct ClusterSelectionRequired {
 struct DeploymentBlockedError {
     message: String,
     details: Vec<DeploymentErrorDetail>,
+    #[serde(default)]
+    remediation: Option<DeployRemediation>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -160,7 +247,9 @@ struct MissingKey {
     #[serde(rename = "defaultValue")]
     default_value: Option<String>,
     /// When true, the key already has a valid production value (included for review only).
-    #[serde(default)]
+    /// The platform names this `hasValue`; reading only `resolved` counted every
+    /// already-set key as missing.
+    #[serde(default, alias = "hasValue")]
     resolved: bool,
 }
 
@@ -275,7 +364,6 @@ struct EnvironmentVariableCreation {
     is_unset: Option<bool>,
 }
 
-
 /// Get a default value for a missing key from defaultValue or passthrough
 fn get_default_value(key: &MissingKey) -> Option<&str> {
     key.default_value
@@ -312,8 +400,8 @@ fn write_missing_vars_template(
     app_var_keys: &HashSet<String>,
     existing_config: &HashMap<String, String>,
 ) -> Result<PathBuf> {
-    let temp_path = std::env::temp_dir()
-        .join(format!("forklaunch-env-{}-{}.env", environment, region));
+    let temp_path =
+        std::env::temp_dir().join(format!("forklaunch-env-{}-{}.env", environment, region));
 
     let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
 
@@ -353,18 +441,27 @@ fn write_missing_vars_template(
             }
         }
 
-        let needs_config: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| !k.resolved && !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
+        let needs_config: Vec<&&MissingKey> = ordered
+            .iter()
+            .filter(|k| {
+                !k.resolved
+                    && !existing_config.contains_key(&k.name)
+                    && get_default_value(k).is_none()
+            })
             .collect();
-        let rejected: Vec<&&MissingKey> = ordered.iter()
+        let rejected: Vec<&&MissingKey> = ordered
+            .iter()
             .filter(|k| !k.resolved && existing_config.contains_key(&k.name))
             .collect();
-        let has_default: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| !k.resolved && !existing_config.contains_key(&k.name) && get_default_value(k).is_some())
+        let has_default: Vec<&&MissingKey> = ordered
+            .iter()
+            .filter(|k| {
+                !k.resolved
+                    && !existing_config.contains_key(&k.name)
+                    && get_default_value(k).is_some()
+            })
             .collect();
-        let already_set: Vec<&&MissingKey> = ordered.iter()
-            .filter(|k| k.resolved)
-            .collect();
+        let already_set: Vec<&&MissingKey> = ordered.iter().filter(|k| k.resolved).collect();
 
         let mut status_parts = Vec::new();
         if !needs_config.is_empty() {
@@ -394,16 +491,23 @@ fn write_missing_vars_template(
         for key in &ordered {
             if key.resolved {
                 // Already has a valid production value — show for review
-                let val = existing_config.get(&key.name)
+                let val = existing_config
+                    .get(&key.name)
                     .or(key.default_value.as_ref())
                     .cloned()
                     .unwrap_or_default();
                 content.push_str(&format!("{}={}\n", key.name, val));
             } else if let Some(existing_val) = existing_config.get(&key.name) {
                 // Has a value but backend rejected it (e.g., development-only URL)
-                content.push_str(&format!("{}={} # ⚠ REJECTED — replace with production value\n", key.name, existing_val));
+                content.push_str(&format!(
+                    "{}={} # ⚠ REJECTED — replace with production value\n",
+                    key.name, existing_val
+                ));
             } else if let Some(default_val) = get_default_value(key) {
-                content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
+                content.push_str(&format!(
+                    "{}={} # default — edit if needed\n",
+                    key.name, default_val
+                ));
             } else {
                 let hint = hint_for_key(key);
                 content.push_str(&format!("{}= # ⚠ NEEDS CONFIGURATION{}\n", key.name, hint));
@@ -418,23 +522,25 @@ fn write_missing_vars_template(
             continue;
         }
 
-        let component_keys: Vec<&MissingKey> = detail.missing_keys.iter()
+        let component_keys: Vec<&MissingKey> = detail
+            .missing_keys
+            .iter()
             .filter(|k| !app_var_keys.contains(&k.name))
             .collect();
 
         // Include vars that actually need user action (not resolved)
-        let actionable: Vec<&&MissingKey> = component_keys.iter()
-            .filter(|k| !k.resolved)
-            .collect();
+        let actionable: Vec<&&MissingKey> = component_keys.iter().filter(|k| !k.resolved).collect();
 
         if actionable.is_empty() {
             continue;
         }
 
-        let rejected_count = actionable.iter()
+        let rejected_count = actionable
+            .iter()
             .filter(|k| existing_config.contains_key(&k.name))
             .count();
-        let needs_config_count = actionable.iter()
+        let needs_config_count = actionable
+            .iter()
             .filter(|k| !existing_config.contains_key(&k.name) && get_default_value(k).is_none())
             .count();
         let has_default_count = actionable.len() - needs_config_count - rejected_count;
@@ -459,16 +565,21 @@ fn write_missing_vars_template(
              # ══════════════════════════════════════════════════════\n\
              # [{}] {} — {}\n\
              # ══════════════════════════════════════════════════════\n",
-            detail.component_type, detail.id, detail.name,
-            type_label, detail.name, comp_status
+            detail.component_type, detail.id, detail.name, type_label, detail.name, comp_status
         ));
 
         for key in actionable {
             if let Some(existing_val) = existing_config.get(&key.name) {
                 // Has a value but backend rejected it (e.g., development-only URL)
-                content.push_str(&format!("{}={} # ⚠ REJECTED — replace with production value\n", key.name, existing_val));
+                content.push_str(&format!(
+                    "{}={} # ⚠ REJECTED — replace with production value\n",
+                    key.name, existing_val
+                ));
             } else if let Some(default_val) = get_default_value(key) {
-                content.push_str(&format!("{}={} # default — edit if needed\n", key.name, default_val));
+                content.push_str(&format!(
+                    "{}={} # default — edit if needed\n",
+                    key.name, default_val
+                ));
             } else {
                 let hint = hint_for_key(key);
                 content.push_str(&format!("{}= # ⚠ NEEDS CONFIGURATION{}\n", key.name, hint));
@@ -486,9 +597,7 @@ fn write_missing_vars_template(
 /// Parses the env template file and returns:
 /// - a map of key → value for all non-empty entries
 /// - a list of keys marked as unset (empty value or value set to "NONE")
-fn parse_env_template(
-    path: &Path,
-) -> Result<(HashMap<String, String>, Vec<String>)> {
+fn parse_env_template(path: &Path) -> Result<(HashMap<String, String>, Vec<String>)> {
     let content = std::fs::read_to_string(path)
         .with_context(|| format!("Failed to read env template from {}", path.display()))?;
 
@@ -554,7 +663,6 @@ fn collect_app_var_keys(blocked_error: &DeploymentBlockedError) -> HashSet<Strin
 
     app_var_keys
 }
-
 
 /// Best-effort check for whether this application has any prior deployment. Used only to
 /// decide whether to print the one-line managed-mode hint on a first deploy, so any
@@ -632,7 +740,20 @@ impl CliCommand for CreateCommand {
                 Arg::new("no-wait")
                     .long("no-wait")
                     .action(clap::ArgAction::SetTrue)
-                    .help("Don't wait for deployment to complete"),
+                    .help("Return as soon as the deployment is accepted. The exit code then says nothing about its outcome; follow it with `deploy info`"),
+            )
+            .arg(
+                Arg::new("timeout")
+                    .long("timeout")
+                    .value_name("MINUTES")
+                    .value_parser(clap::value_parser!(u64).range(1..))
+                    .help("Stop waiting after this many minutes and exit 3 (default 45). The deployment continues on the platform"),
+            )
+            .arg(
+                Arg::new("create-environment")
+                    .long("create-environment")
+                    .action(clap::ArgAction::SetTrue)
+                    .help("Allow this deploy to create the environment if the application does not have one by that name"),
             )
             .arg(
                 Arg::new("dry-run")
@@ -653,6 +774,12 @@ impl CliCommand for CreateCommand {
                     .help("Cluster placement for the app's FIRST deploy to this environment/region: platform-shared (cheapest, ForkLaunch-managed hosts), org-shared (your org's shared hosts), or dedicated (your own cluster)"),
             )
             .arg(
+                Arg::new("compute")
+                    .long("compute")
+                    .value_parser(COMPUTE_CHOICES)
+                    .help("How services run on their FIRST deploy to this environment/region: scale-to-zero (suspended when idle, woken by the next request in about a second; you pay for the time awake), always-on (never waits), or auto (the default: scale to zero wherever a service can run that way, always on where it cannot). Change a service later with `forklaunch app compute`"),
+            )
+            .arg(
                 Arg::new("node-env")
                     .long("node-env")
                     .value_parser(["production", "development"])
@@ -662,7 +789,7 @@ impl CliCommand for CreateCommand {
                 Arg::new("force")
                     .long("force")
                     .action(clap::ArgAction::SetTrue)
-                    .help("Deploy even if this app is a managed template (bypasses the managed-template guard)"),
+                    .help("Deploy even if this app is a managed template, the checkout's origin is not the application's repository, or the environment does not exist yet"),
             )
     }
 
@@ -690,6 +817,31 @@ impl CliCommand for CreateCommand {
         let wait = !matches.get_flag("no-wait");
         let dry_run = matches.get_flag("dry-run");
         let force = matches.get_flag("force");
+        let create_environment = matches.get_flag("create-environment");
+        let max_wait = matches
+            .get_one::<u64>("timeout")
+            .map(|m| std::time::Duration::from_secs(m * 60))
+            .unwrap_or(DEFAULT_WAIT);
+
+        // Say which application this is about, and refuse the two ways a
+        // deploy lands on the wrong one: a checkout whose origin is another
+        // repository, and an environment that would be created as a side
+        // effect. See deploy/target.rs.
+        let target = resolve_target(
+            &auth_mode,
+            &application_id,
+            &environment,
+            manifest.git_repository.as_deref(),
+        );
+        confirm_target(
+            &target,
+            release_version,
+            &environment,
+            region,
+            create_environment,
+            force,
+            &mut stdout,
+        )?;
 
         // Managed-template guard. Whether an app is "managed" is a control-plane fact
         // (a template keyed by its source repository), not a manifest flag, so ask the
@@ -744,15 +896,27 @@ impl CliCommand for CreateCommand {
         let existing_config: HashMap<String, String> =
             http_client::get_with_auth(&auth_mode, &config_pull_url)
                 .ok()
-                .and_then(|r| if r.status().is_success() { r.text().ok() } else { None })
+                .and_then(|r| {
+                    if r.status().is_success() {
+                        r.text().ok()
+                    } else {
+                        None
+                    }
+                })
                 .map(|text| {
                     text.lines()
                         .filter_map(|line| {
                             let line = line.trim();
-                            if line.starts_with('#') || line.is_empty() { return None; }
+                            if line.starts_with('#') || line.is_empty() {
+                                return None;
+                            }
                             let (key, val) = line.split_once('=')?;
                             let val = val.trim().trim_matches('"').trim_matches('\'').to_string();
-                            if !val.is_empty() { Some((key.trim().to_string(), val)) } else { None }
+                            if !val.is_empty() {
+                                Some((key.trim().to_string(), val))
+                            } else {
+                                None
+                            }
                         })
                         .collect()
                 })
@@ -824,19 +988,32 @@ impl CliCommand for CreateCommand {
                     .cloned()
                     .unwrap_or_else(|| "centralized".to_string()),
             ),
-            force_refresh: if matches.get_flag("full") { Some(true) } else { None },
+            force_refresh: if matches.get_flag("full") {
+                Some(true)
+            } else {
+                None
+            },
             cluster_type: matches.get_one::<String>("cluster-type").cloned(),
+            compute: matches.get_one::<String>("compute").cloned(),
             force_single_app_deploy: if force { Some(true) } else { None },
         };
 
         if dry_run {
-            log_header!(stdout, Color::Cyan, "Deployment Preview: {} -> {} ({})",
-                release_version, environment, region
+            log_header!(
+                stdout,
+                Color::Cyan,
+                "Deployment Preview: {} -> {} ({})",
+                release_version,
+                environment,
+                region
             );
             writeln!(stdout)?;
 
             let preview_url = if auth_mode.is_hmac() {
-                format!("{}/deployments/internal/preview", get_platform_management_api_url())
+                format!(
+                    "{}/deployments/internal/preview",
+                    get_platform_management_api_url()
+                )
             } else {
                 format!("{}/deployments/preview", get_platform_management_api_url())
             };
@@ -849,7 +1026,9 @@ impl CliCommand for CreateCommand {
             .with_context(|| ERROR_FAILED_TO_SEND_REQUEST)?;
 
             if !response.status().is_success() {
-                let error_text = response.text().unwrap_or_else(|_| "Unknown error".to_string());
+                let error_text = response
+                    .text()
+                    .unwrap_or_else(|_| "Unknown error".to_string());
                 log_error!(stdout, "Preview failed: {}", error_text);
                 bail!("Failed to preview deployment: {}", error_text);
             }
@@ -863,20 +1042,37 @@ impl CliCommand for CreateCommand {
                 for comp in components {
                     let size = comp.instance_size.as_deref().unwrap_or("default");
                     let replicas = comp.replicas.unwrap_or(1);
-                    let deps = comp.runtime_dependencies.as_ref()
+                    let deps = comp
+                        .runtime_dependencies
+                        .as_ref()
                         .map(|d| d.join(", "))
                         .unwrap_or_default();
 
                     match comp.component_type.as_str() {
                         "worker" => {
                             let wt = comp.worker_type.as_deref().unwrap_or("unknown");
-                            let conc = comp.concurrency.map(|c| format!(", concurrency: {}", c)).unwrap_or_default();
-                            log_info!(stdout, "  [worker] {} — size: {}, replicas: {}, type: {}{}",
-                                comp.name, size, replicas, wt, conc);
+                            let conc = comp
+                                .concurrency
+                                .map(|c| format!(", concurrency: {}", c))
+                                .unwrap_or_default();
+                            log_info!(
+                                stdout,
+                                "  [worker] {} — size: {}, replicas: {}, type: {}{}",
+                                comp.name,
+                                size,
+                                replicas,
+                                wt,
+                                conc
+                            );
                         }
                         _ => {
-                            log_info!(stdout, "  [service] {} — size: {}, replicas: {}",
-                                comp.name, size, replicas);
+                            log_info!(
+                                stdout,
+                                "  [service] {} — size: {}, replicas: {}",
+                                comp.name,
+                                size,
+                                replicas
+                            );
                         }
                     }
 
@@ -887,8 +1083,15 @@ impl CliCommand for CreateCommand {
                 writeln!(stdout)?;
             }
 
-            log_header!(stdout, Color::White, "Environment Variables: {} total", preview.summary.total);
-            log_ok!(stdout, "  Resolved: {} (existing: {}, new: {})",
+            log_header!(
+                stdout,
+                Color::White,
+                "Environment Variables: {} total",
+                preview.summary.total
+            );
+            log_ok!(
+                stdout,
+                "  Resolved: {} (existing: {}, new: {})",
                 preview.summary.resolved + preview.summary.existing,
                 preview.summary.existing,
                 preview.summary.resolved
@@ -916,22 +1119,29 @@ impl CliCommand for CreateCommand {
                 let components_ref = preview.components.as_ref();
 
                 for cv in comp_vars {
-                    let comp_meta = components_ref.and_then(|comps| {
-                        comps.iter().find(|c| c.name == cv.name)
-                    });
+                    let comp_meta =
+                        components_ref.and_then(|comps| comps.iter().find(|c| c.name == cv.name));
 
                     let type_label = cv.component_type.to_uppercase();
                     let meta_line = if let Some(meta) = comp_meta {
                         let size = meta.instance_size.as_deref().unwrap_or("default");
                         let replicas = meta.replicas.unwrap_or(1);
-                        let deps = meta.runtime_dependencies.as_ref()
+                        let deps = meta
+                            .runtime_dependencies
+                            .as_ref()
                             .map(|d| d.join(", "))
                             .unwrap_or_else(|| "none".to_string());
                         match cv.component_type.as_str() {
                             "worker" => {
                                 let wt = meta.worker_type.as_deref().unwrap_or("unknown");
-                                let conc = meta.concurrency.map(|c| format!(", concurrency={}", c)).unwrap_or_default();
-                                format!(" — size={}, replicas={}, type={}{}, deps=[{}]", size, replicas, wt, conc, deps)
+                                let conc = meta
+                                    .concurrency
+                                    .map(|c| format!(", concurrency={}", c))
+                                    .unwrap_or_default();
+                                format!(
+                                    " — size={}, replicas={}, type={}{}, deps=[{}]",
+                                    size, replicas, wt, conc, deps
+                                )
                             }
                             _ => {
                                 format!(" — size={}, replicas={}, deps=[{}]", size, replicas, deps)
@@ -946,10 +1156,26 @@ impl CliCommand for CreateCommand {
                         type_label, cv.name, meta_line
                     ));
 
-                    let infra_count = cv.variables.iter().filter(|v| v.source == "infrastructure").count();
-                    let app_count = cv.variables.iter().filter(|v| v.source == "application").count();
-                    let comp_count = cv.variables.iter().filter(|v| v.source == "component").count();
-                    let resolved_count = cv.variables.iter().filter(|v| v.source == "manifest-resolved").count();
+                    let infra_count = cv
+                        .variables
+                        .iter()
+                        .filter(|v| v.source == "infrastructure")
+                        .count();
+                    let app_count = cv
+                        .variables
+                        .iter()
+                        .filter(|v| v.source == "application")
+                        .count();
+                    let comp_count = cv
+                        .variables
+                        .iter()
+                        .filter(|v| v.source == "component")
+                        .count();
+                    let resolved_count = cv
+                        .variables
+                        .iter()
+                        .filter(|v| v.source == "manifest-resolved")
+                        .count();
                     let empty_count = cv.variables.iter().filter(|v| v.source == "empty").count();
 
                     file_content.push_str(&format!(
@@ -971,7 +1197,8 @@ impl CliCommand for CreateCommand {
                             "empty" => " # ⚠ NEEDS CONFIGURATION",
                             _ => "",
                         };
-                        file_content.push_str(&format!("{}={}{}\n", var.key, var.value, source_tag));
+                        file_content
+                            .push_str(&format!("{}={}{}\n", var.key, var.value, source_tag));
                     }
                     file_content.push_str("\n\n");
                 }
@@ -981,7 +1208,11 @@ impl CliCommand for CreateCommand {
                     let group_key = if var.scope == "application" {
                         "APPLICATION".to_string()
                     } else {
-                        format!("{}:{}", var.scope.to_uppercase(), var.scope_id.as_deref().unwrap_or("unknown"))
+                        format!(
+                            "{}:{}",
+                            var.scope.to_uppercase(),
+                            var.scope_id.as_deref().unwrap_or("unknown")
+                        )
                     };
                     grouped.entry(group_key).or_default().push(var);
                 }
@@ -993,9 +1224,13 @@ impl CliCommand for CreateCommand {
                             "empty" => " # [empty] NEEDS CONFIGURATION",
                             "existing" => " # [existing]",
                             "resolved" => " # [resolved]",
-                            other => { file_content.push_str(&format!(" # [{}]", other)); "" }
+                            other => {
+                                file_content.push_str(&format!(" # [{}]", other));
+                                ""
+                            }
                         };
-                        file_content.push_str(&format!("{}={}{}\n", var.key, var.value, source_tag));
+                        file_content
+                            .push_str(&format!("{}={}{}\n", var.key, var.value, source_tag));
                     }
                     file_content.push('\n');
                 }
@@ -1005,14 +1240,19 @@ impl CliCommand for CreateCommand {
                     for comp in components {
                         let size = comp.instance_size.as_deref().unwrap_or("default");
                         let replicas = comp.replicas.unwrap_or(1);
-                        let deps = comp.runtime_dependencies.as_ref()
+                        let deps = comp
+                            .runtime_dependencies
+                            .as_ref()
                             .map(|d| d.join(", "))
                             .unwrap_or_else(|| "none".to_string());
 
                         match comp.component_type.as_str() {
                             "worker" => {
                                 let wt = comp.worker_type.as_deref().unwrap_or("unknown");
-                                let conc = comp.concurrency.map(|c| format!(", concurrency={}", c)).unwrap_or_default();
+                                let conc = comp
+                                    .concurrency
+                                    .map(|c| format!(", concurrency={}", c))
+                                    .unwrap_or_default();
                                 file_content.push_str(&format!(
                                     "# [worker] {} — size={}, replicas={}, type={}{}, deps=[{}]\n",
                                     comp.name, size, replicas, wt, conc, deps
@@ -1030,8 +1270,9 @@ impl CliCommand for CreateCommand {
                 }
             }
 
-            std::fs::write(&temp_path, &file_content)
-                .with_context(|| format!("Failed to write preview file to {}", temp_path.display()))?;
+            std::fs::write(&temp_path, &file_content).with_context(|| {
+                format!("Failed to write preview file to {}", temp_path.display())
+            })?;
 
             writeln!(stdout)?;
             log_ok!(stdout, "Full preview written to: {}", temp_path.display());
@@ -1042,8 +1283,13 @@ impl CliCommand for CreateCommand {
             return Ok(());
         }
 
-        log_header!(stdout, Color::Cyan, "Creating deployment: {} -> {} ({})",
-            release_version, environment, region
+        log_header!(
+            stdout,
+            Color::Cyan,
+            "Creating deployment: {} -> {} ({})",
+            release_version,
+            environment,
+            region
         );
         writeln!(stdout)?;
 
@@ -1072,27 +1318,52 @@ impl CliCommand for CreateCommand {
 
                 let dashboard_url = format!(
                     "{}/dashboard/deployments/{}",
-                    get_platform_ui_url(), deployment.id
+                    get_platform_ui_url(),
+                    deployment.id
                 );
 
                 log_ok!(stdout, "Triggered deployment: {}", dashboard_url);
                 log_info!(stdout, "Ctrl+C will not cancel the deployment");
 
+                if let Some(remediation) = deployment
+                    .remediation
+                    .as_ref()
+                    .filter(|r| !r.unset_variables.is_empty())
+                {
+                    writeln!(stdout)?;
+                    log_warn!(
+                        stdout,
+                        "First deploy: {} variable(s) the app marks optional have no value. A container that reads one at start-up will not boot:",
+                        remediation.unset_variables.len()
+                    );
+                    print_remediation(&mut stdout, remediation)?;
+                }
+
                 if wait {
                     writeln!(stdout)?;
-                    stream_deployment_status(
+                    stream_deployment_status_for(
                         &auth_mode,
                         &deployment.id,
                         Some(&environment),
                         Some(region.as_str()),
+                        max_wait,
                         &mut stdout,
                     )?;
                     writeln!(stdout)?;
                     log_info!(stdout, "Dashboard: {}", dashboard_url);
                 } else {
                     writeln!(stdout)?;
-                    writeln!(stdout, "Deployment started. Check status at:")?;
-                    writeln!(stdout, "  {}", dashboard_url)?;
+                    writeln!(stdout, "Deployment started; not waiting for it to finish.")?;
+                    writeln!(
+                        stdout,
+                        "This exit code says nothing about the deployment's outcome."
+                    )?;
+                    writeln!(
+                        stdout,
+                        "  Follow it:  forklaunch deploy info --deployment {}",
+                        deployment.id
+                    )?;
+                    writeln!(stdout, "  Dashboard:  {}", dashboard_url)?;
                 }
                 break;
             } else if status.as_u16() == 428 {
@@ -1111,12 +1382,17 @@ impl CliCommand for CreateCommand {
                 // Printing the same "this is the first deployment" header for both
                 // told a user who had already chosen at `app create` that they had
                 // never chosen, and silently dropped the server's explanation.
-                let rejected_choice =
-                    selection_required.message.starts_with("cluster_unavailable");
+                let rejected_choice = selection_required
+                    .message
+                    .starts_with("cluster_unavailable");
 
                 writeln!(stdout)?;
                 if rejected_choice {
-                    log_header!(stdout, Color::Yellow, "That cluster isn't available for this app");
+                    log_header!(
+                        stdout,
+                        Color::Yellow,
+                        "That cluster isn't available for this app"
+                    );
                     writeln!(stdout)?;
                     writeln!(
                         stdout,
@@ -1127,12 +1403,23 @@ impl CliCommand for CreateCommand {
                             .trim()
                     )?;
                     writeln!(stdout)?;
-                    writeln!(stdout, "  Pick another placement for {} ({}):", environment, region)?;
+                    writeln!(
+                        stdout,
+                        "  Pick another placement for {} ({}):",
+                        environment, region
+                    )?;
                 } else {
                     log_header!(stdout, Color::Cyan, "First deploy — choose a cluster");
                     writeln!(stdout)?;
-                    writeln!(stdout, "  This is the first deployment of this application to {} ({}).", environment, region)?;
-                    writeln!(stdout, "  Pick where its compute should run (estimates are monthly, compute only):")?;
+                    writeln!(
+                        stdout,
+                        "  This is the first deployment of this application to {} ({}).",
+                        environment, region
+                    )?;
+                    writeln!(
+                        stdout,
+                        "  Pick where its compute should run (estimates are monthly, compute only):"
+                    )?;
                 }
                 writeln!(stdout)?;
                 for opt in &selection_required.cluster_options {
@@ -1160,7 +1447,10 @@ impl CliCommand for CreateCommand {
                     .filter(|o| o.available)
                     .collect();
                 if available.is_empty() {
-                    bail!("No cluster options are available: {}", selection_required.message);
+                    bail!(
+                        "No cluster options are available: {}",
+                        selection_required.message
+                    );
                 }
 
                 if !std::io::IsTerminal::is_terminal(&std::io::stdin()) {
@@ -1184,8 +1474,27 @@ impl CliCommand for CreateCommand {
                     .default(0)
                     .interact()?;
                 request_body.cluster_type = Some(available[selection].cluster_type.clone());
-                log_ok!(stdout, "Selected cluster: {}", available[selection].cluster_type);
+                log_ok!(
+                    stdout,
+                    "Selected cluster: {}",
+                    available[selection].cluster_type
+                );
                 writeln!(stdout)?;
+                // The same first deploy decides how the services run. Asked
+                // here because this is the one moment the CLI knows the
+                // deploy is a first one; `--compute` answers it up front.
+                if request_body.compute.is_none() {
+                    let labels: Vec<&str> =
+                        COMPUTE_PROMPT.iter().map(|(label, _)| *label).collect();
+                    let picked = Select::with_theme(&ColorfulTheme::default())
+                        .with_prompt("How should its services run")
+                        .items(&labels)
+                        .default(0)
+                        .interact()?;
+                    request_body.compute = Some(COMPUTE_PROMPT[picked].1.to_string());
+                    log_ok!(stdout, "Selected compute: {}", COMPUTE_PROMPT[picked].1);
+                    writeln!(stdout)?;
+                }
                 continue;
             } else if status.as_u16() == 400 {
                 let error_text = response.text().unwrap_or_default();
@@ -1204,18 +1513,22 @@ impl CliCommand for CreateCommand {
 
                     // Filter out Pulumi-injected vars (inter-service URLs, auth URLs)
                     // that the platform will auto-inject at deploy time
-                    let project_names: Vec<String> = manifest.projects.iter().map(|p| p.name.clone()).collect();
+                    let project_names: Vec<String> =
+                        manifest.projects.iter().map(|p| p.name.clone()).collect();
                     let mut blocked_error = blocked_error;
                     for detail in &mut blocked_error.details {
-                        detail.missing_keys.retain(|k| {
-                            !is_pulumi_injected(&k.name, &project_names)
-                        });
+                        detail
+                            .missing_keys
+                            .retain(|k| !is_pulumi_injected(&k.name, &project_names));
                     }
                     blocked_error.details.retain(|d| !d.missing_keys.is_empty());
 
                     // If all vars were Pulumi-injected, nothing left for the user
                     if blocked_error.details.is_empty() {
-                        log_ok!(stdout, "All missing variables are Pulumi-injected — retrying deployment");
+                        log_ok!(
+                            stdout,
+                            "All missing variables are Pulumi-injected — retrying deployment"
+                        );
                         writeln!(stdout)?;
                         retry_count += 1;
                         continue;
@@ -1223,9 +1536,20 @@ impl CliCommand for CreateCommand {
 
                     if auth_mode.is_hmac() {
                         writeln!(stdout)?;
-                        log_error!(stdout, "Deployment blocked: {}",
-                            blocked_error.message
-                        );
+                        log_error!(stdout, "Deployment blocked: {}", blocked_error.message);
+
+                        if let Some(remediation) = blocked_error
+                            .remediation
+                            .as_ref()
+                            .filter(|r| !r.unset_variables.is_empty())
+                        {
+                            writeln!(stdout, "Set each variable, then redeploy:")?;
+                            print_remediation(&mut stdout, remediation)?;
+                            bail!(
+                                "Deployment blocked: {} environment variable(s) have no value.",
+                                remediation.unset_variables.len()
+                            );
+                        }
 
                         for detail in &blocked_error.details {
                             writeln!(
@@ -1236,6 +1560,7 @@ impl CliCommand for CreateCommand {
                                 detail
                                     .missing_keys
                                     .iter()
+                                    .filter(|k| !k.resolved)
                                     .map(|k| k.name.as_str())
                                     .collect::<Vec<_>>()
                                     .join(", ")
@@ -1256,34 +1581,60 @@ impl CliCommand for CreateCommand {
                     // Print grouped counts matching the file structure
                     {
                         let mut seen = HashSet::new();
-                        let app_missing = blocked_error.details.iter()
+                        let app_missing = blocked_error
+                            .details
+                            .iter()
                             .flat_map(|d| &d.missing_keys)
-                            .filter(|k| app_var_keys.contains(&k.name)
-                                && seen.insert(k.name.clone())
-                                && !k.resolved)
+                            .filter(|k| {
+                                app_var_keys.contains(&k.name)
+                                    && seen.insert(k.name.clone())
+                                    && !k.resolved
+                            })
                             .count();
                         if app_missing > 0 {
-                            log_warn!(stdout, "  [APPLICATION] {} shared variable(s) need configuration", app_missing);
+                            log_warn!(
+                                stdout,
+                                "  [APPLICATION] {} shared variable(s) need configuration",
+                                app_missing
+                            );
                         }
                         for detail in &blocked_error.details {
-                            if detail.component_type == "application" { continue; }
-                            let missing = detail.missing_keys.iter()
-                                .filter(|k| !app_var_keys.contains(&k.name)
-                                    && !k.resolved)
+                            if detail.component_type == "application" {
+                                continue;
+                            }
+                            let missing = detail
+                                .missing_keys
+                                .iter()
+                                .filter(|k| !app_var_keys.contains(&k.name) && !k.resolved)
                                 .count();
-                            if missing == 0 { continue; }
-                            log_warn!(stdout, "  [{}] {} — {} variable(s) need configuration",
-                                detail.component_type.to_uppercase(), detail.name, missing);
+                            if missing == 0 {
+                                continue;
+                            }
+                            log_warn!(
+                                stdout,
+                                "  [{}] {} — {} variable(s) need configuration",
+                                detail.component_type.to_uppercase(),
+                                detail.name,
+                                missing
+                            );
                         }
                     }
                     writeln!(stdout)?;
 
                     let temp_path = write_missing_vars_template(
-                        &blocked_error, &environment, region, release_version,
-                        &application_id, &app_var_keys, &existing_config,
+                        &blocked_error,
+                        &environment,
+                        region,
+                        release_version,
+                        &application_id,
+                        &app_var_keys,
+                        &existing_config,
                     )?;
 
-                    writeln!(stdout, "Fill in the required variables, then press Enter to continue:")?;
+                    writeln!(
+                        stdout,
+                        "Fill in the required variables, then press Enter to continue:"
+                    )?;
                     writeln!(stdout, "  {}", temp_path.display())?;
                     writeln!(stdout)?;
 
@@ -1298,7 +1649,10 @@ impl CliCommand for CreateCommand {
                         // Confirm unset vars with the user before proceeding
                         if !unset_keys.is_empty() {
                             writeln!(stdout)?;
-                            writeln!(stdout, "The following variables will be marked as UNSET (not sent to deployment):")?;
+                            writeln!(
+                                stdout,
+                                "The following variables will be marked as UNSET (not sent to deployment):"
+                            )?;
                             for var in &unset_keys {
                                 writeln!(stdout, "  • {}", var)?;
                             }
@@ -1328,7 +1682,8 @@ impl CliCommand for CreateCommand {
 
                     // --- Submit phase ---
                     // Post app-scoped vars to the application endpoint
-                    let mut app_vars: Vec<EnvironmentVariableCreation> = app_var_keys.iter()
+                    let mut app_vars: Vec<EnvironmentVariableCreation> = app_var_keys
+                        .iter()
                         .filter_map(|k| {
                             if unset_set.contains(k) {
                                 return None; // handled separately below
@@ -1359,17 +1714,26 @@ impl CliCommand for CreateCommand {
                     if !app_vars.is_empty() {
                         let update_url = format!(
                             "{}/applications/{}/environments/{}/variables",
-                            get_platform_management_api_url(), application_id, environment
+                            get_platform_management_api_url(),
+                            application_id,
+                            environment
                         );
                         let update_body = UpdateApplicationVariablesRequest {
                             region: region.clone(),
                             variables: app_vars,
                         };
-                        let resp = http_client::put_with_auth(&auth_mode, &update_url, serde_json::to_value(&update_body)?)
-                            .with_context(|| "Failed to save application environment variables")?;
+                        let resp = http_client::put_with_auth(
+                            &auth_mode,
+                            &update_url,
+                            serde_json::to_value(&update_body)?,
+                        )
+                        .with_context(|| "Failed to save application environment variables")?;
                         if !resp.status().is_success() {
                             log_error!(stdout, "Failed to save application variables");
-                            bail!("Failed to save application variables: {}", resp.text().unwrap_or_default());
+                            bail!(
+                                "Failed to save application variables: {}",
+                                resp.text().unwrap_or_default()
+                            );
                         }
                         log_ok!(stdout, "Saved application variables");
                     }
@@ -1380,14 +1744,20 @@ impl CliCommand for CreateCommand {
                         if detail.component_type == "application" {
                             continue;
                         }
-                        let mut vars: Vec<EnvironmentVariableUpdate> = detail.missing_keys.iter()
-                            .filter(|k| !app_var_keys.contains(&k.name) && !unset_set.contains(&k.name))
-                            .filter_map(|k| collected.get(&k.name).map(|v| EnvironmentVariableUpdate {
-                                key: k.name.clone(),
-                                value: v.clone(),
-                                component: k.component.clone(),
-                                is_unset: None,
-                            }))
+                        let mut vars: Vec<EnvironmentVariableUpdate> = detail
+                            .missing_keys
+                            .iter()
+                            .filter(|k| {
+                                !app_var_keys.contains(&k.name) && !unset_set.contains(&k.name)
+                            })
+                            .filter_map(|k| {
+                                collected.get(&k.name).map(|v| EnvironmentVariableUpdate {
+                                    key: k.name.clone(),
+                                    value: v.clone(),
+                                    component: k.component.clone(),
+                                    is_unset: None,
+                                })
+                            })
                             .collect();
                         // Add unset component-scoped vars
                         for k in &detail.missing_keys {
@@ -1404,19 +1774,37 @@ impl CliCommand for CreateCommand {
                             continue;
                         }
                         let update_url = if detail.component_type == "worker" {
-                            format!("{}/workers/{}/environments/{}/variables", get_platform_management_api_url(), detail.id, environment)
+                            format!(
+                                "{}/workers/{}/environments/{}/variables",
+                                get_platform_management_api_url(),
+                                detail.id,
+                                environment
+                            )
                         } else {
-                            format!("{}/services/{}/environments/{}/variables", get_platform_management_api_url(), detail.id, environment)
+                            format!(
+                                "{}/services/{}/environments/{}/variables",
+                                get_platform_management_api_url(),
+                                detail.id,
+                                environment
+                            )
                         };
                         let update_body = UpdateEnvironmentVariablesRequest {
                             region: region.clone(),
                             variables: vars,
                         };
-                        let resp = http_client::put_with_auth(&auth_mode, &update_url, serde_json::to_value(&update_body)?)
-                            .with_context(|| "Failed to save environment variables")?;
+                        let resp = http_client::put_with_auth(
+                            &auth_mode,
+                            &update_url,
+                            serde_json::to_value(&update_body)?,
+                        )
+                        .with_context(|| "Failed to save environment variables")?;
                         if !resp.status().is_success() {
                             log_error!(stdout, "Failed to save variables for {}", detail.name);
-                            bail!("Failed to save variables for {}: {}", detail.name, resp.text().unwrap_or_default());
+                            bail!(
+                                "Failed to save variables for {}: {}",
+                                detail.name,
+                                resp.text().unwrap_or_default()
+                            );
                         }
                         log_ok!(stdout, "Saved variables for {}", detail.name);
                     }
@@ -1464,6 +1852,83 @@ impl CliCommand for CreateCommand {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod compute_choice_tests {
+    use super::*;
+
+    fn deploy_cmd() -> Command {
+        CreateCommand::new().command().version("0.0.0-test")
+    }
+
+    fn request(compute: Option<&str>) -> serde_json::Value {
+        serde_json::to_value(CreateDeploymentRequest {
+            application_id: "app-1".to_string(),
+            release_version: "1.0.0".to_string(),
+            environment: "production".to_string(),
+            region: "us-west-2".to_string(),
+            distribution_config: None,
+            force_refresh: None,
+            cluster_type: None,
+            compute: compute.map(str::to_string),
+            force_single_app_deploy: None,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn the_flag_takes_each_mode_and_nothing_else() {
+        for mode in COMPUTE_CHOICES {
+            let matches = deploy_cmd()
+                .try_get_matches_from([
+                    "create",
+                    "--release",
+                    "1.0.0",
+                    "--environment",
+                    "production",
+                    "--region",
+                    "us-west-2",
+                    "--compute",
+                    mode,
+                ])
+                .unwrap();
+            assert_eq!(matches.get_one::<String>("compute").unwrap(), mode);
+        }
+        // The stored value is not what a person types.
+        assert!(
+            deploy_cmd()
+                .try_get_matches_from([
+                    "create",
+                    "--release",
+                    "1.0.0",
+                    "--environment",
+                    "production",
+                    "--region",
+                    "us-west-2",
+                    "--compute",
+                    "microvm",
+                ])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn nothing_is_sent_when_nothing_was_chosen() {
+        // An absent field is how the control plane knows to apply its own
+        // default, and how an older control plane stays unaffected.
+        assert!(request(None).get("compute").is_none());
+        assert_eq!(request(Some("always-on"))["compute"], "always-on");
+    }
+
+    #[test]
+    fn the_prompt_defaults_to_scale_to_zero_where_possible() {
+        assert_eq!(COMPUTE_PROMPT[0].1, "auto");
+        assert!(COMPUTE_PROMPT[0].0.starts_with("Scale to zero"));
+        for (_, value) in COMPUTE_PROMPT {
+            assert!(COMPUTE_CHOICES.contains(&value));
+        }
     }
 }
 
@@ -1549,5 +2014,60 @@ mod cluster_option_tests {
             "cluster_selection_required: this is the first deployment of this application";
         assert!(rejected.starts_with("cluster_unavailable"));
         assert!(!first_deploy.starts_with("cluster_unavailable"));
+    }
+}
+
+#[cfg(test)]
+mod remediation_tests {
+    use super::*;
+
+    const BLOCKED: &str = r#"{
+        "message": "Deployment blocked due to missing configuration: worker 'billing-worker' missing keys: STRIPE_API_KEY",
+        "details": [{
+            "type": "worker",
+            "id": "w-1",
+            "name": "billing-worker",
+            "missingKeys": [
+                { "key": "STRIPE_API_KEY" },
+                { "key": "QUEUE_NAME", "defaultValue": "billing", "hasValue": true }
+            ]
+        }],
+        "remediation": {
+            "unsetVariables": [{
+                "key": "STRIPE_API_KEY",
+                "scope": "worker",
+                "component": "billing-worker",
+                "reason": "missing",
+                "setCommand": "forklaunch config set STRIPE_API_KEY=<value> -e production -r us-west-2 -s billing-worker"
+            }],
+            "redeployCommand": "forklaunch deploy create --release 1.2.0 -e production --region us-west-2",
+            "agentPrompt": "My ForkLaunch deploy ..."
+        }
+    }"#;
+
+    #[test]
+    fn reads_has_value_as_resolved() {
+        let blocked: DeploymentBlockedError = serde_json::from_str(BLOCKED).unwrap();
+        let keys = &blocked.details[0].missing_keys;
+        assert!(!keys[0].resolved);
+        assert!(keys[1].resolved, "hasValue must mark a key as already set");
+    }
+
+    #[test]
+    fn prints_each_command_and_the_redeploy() {
+        let blocked: DeploymentBlockedError = serde_json::from_str(BLOCKED).unwrap();
+        let mut out = Vec::new();
+        print_remediation(&mut out, blocked.remediation.as_ref().unwrap()).unwrap();
+        let out = String::from_utf8(out).unwrap();
+        assert!(out.contains("STRIPE_API_KEY [worker 'billing-worker']"));
+        assert!(out.contains("-s billing-worker"));
+        assert!(out.contains("forklaunch deploy create --release 1.2.0"));
+        assert!(!out.contains("QUEUE_NAME"));
+    }
+
+    #[test]
+    fn older_platforms_without_remediation_still_parse() {
+        let success: CreateDeploymentResponse = serde_json::from_str(r#"{"id":"d-1"}"#).unwrap();
+        assert!(success.remediation.is_none());
     }
 }

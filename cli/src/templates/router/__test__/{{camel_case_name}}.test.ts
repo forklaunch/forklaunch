@@ -3,23 +3,20 @@ import {
   clearDatabase,
   mock{{pascal_case_name}}Data,
   {{#is_database_enabled}}setupTestData,
-  {{/is_database_enabled}}setupTestDatabase,
-  TestSetupResult
+  {{/is_database_enabled}}setupTestDatabase{{#is_database_enabled}},
+  TestSetupResult{{/is_database_enabled}}{{^is_database_enabled}}{{#is_cache_enabled}},
+  TestSetupResult{{/is_cache_enabled}}{{/is_database_enabled}}
 } from './test-utils';
 
 describe('{{pascal_case_name}} Routes E2E Tests', () => {
   {{#is_database_enabled}}let orm: TestSetupResult['orm'];{{/is_database_enabled}}
   {{#is_cache_enabled}}let redis: TestSetupResult['redis'];{{/is_cache_enabled}}
-  {{#is_kafka_enabled}}let kafkaContainer: TestSetupResult['kafkaContainer'];{{/is_kafka_enabled}}
-  {{#is_s3_enabled}}let s3Container: TestSetupResult['s3Container'];{{/is_s3_enabled}}
 
   beforeAll(async () => {
-    const setup = await setupTestDatabase();
+    {{#is_database_enabled}}const setup = {{/is_database_enabled}}{{^is_database_enabled}}{{#is_cache_enabled}}const setup = {{/is_cache_enabled}}{{/is_database_enabled}}await setupTestDatabase();
     {{#is_database_enabled}}orm = setup.orm;{{/is_database_enabled}}
     {{#is_cache_enabled}}redis = setup.redis;{{/is_cache_enabled}}
-    {{#is_kafka_enabled}}kafkaContainer = setup.kafkaContainer;{{/is_kafka_enabled}}
-    {{#is_s3_enabled}}s3Container = setup.s3Container;{{/is_s3_enabled}}
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({{#is_database_enabled}}{{#is_cache_enabled}}{ orm, redis }{{/is_cache_enabled}}{{^is_cache_enabled}}{ orm }{{/is_cache_enabled}}{{/is_database_enabled}}{{^is_database_enabled}}{{#is_cache_enabled}}{ redis }{{/is_cache_enabled}}{{/is_database_enabled}});
@@ -30,7 +27,7 @@ describe('{{pascal_case_name}} Routes E2E Tests', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('GET /{{camel_case_name}} - {{camel_case_name}}Get', () => {
     it('should handle {{camel_case_name}} get request successfully', async () => {

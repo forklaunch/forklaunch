@@ -19,7 +19,9 @@ setupTenantFilter(orm, { logger: openTelemetryCollector });
 setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
-const app = forklaunchExpress(schemaValidator, openTelemetryCollector);
+const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment'
+});
 
 //! resolves the protocol, host, port, and version from the configuration
 const protocol = ci.resolve(tokens.PROTOCOL);
@@ -35,7 +37,8 @@ app.use(sampleWorkerRouter);
 app.registerSdks(sampleWorkerSdkClient);
 
 //! starts the server
-app.listen(port, host, () => {
+// hyper-express returns a Promise from listen; nothing awaits startup here.
+void app.listen(port, host, () => {
   openTelemetryCollector.info(
     `🎉 SampleWorker Server is running at ${protocol}://${host}:${port} 🎉.
     // An API reference can be accessed at ${protocol}://${host}:${port}/api/${version}${docsPath}`

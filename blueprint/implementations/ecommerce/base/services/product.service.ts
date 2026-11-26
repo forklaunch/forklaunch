@@ -22,8 +22,7 @@ export class BaseProductService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseProductEntities,
   MapperDomains extends BaseProductDtos = BaseProductDtos
-> implements ProductService
-{
+> implements ProductService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -107,7 +106,7 @@ export class BaseProductService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(product);
+      innerEm.persist(product);
     });
     return this.mappers.ProductMapper.toDto(product);
   }

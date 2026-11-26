@@ -1,0 +1,23 @@
+# CodeQL configuration for the advanced setup in .github/workflows/codeql.yml.
+#
+# Test-only Rust sources are excluded. The fixtures there hold literal HMAC
+# keys, nonces and passwords by design (they exercise signing, replay and
+# credential checks), which the Rust queries report as hard-coded
+# cryptographic values. Inline `#[cfg(test)]` modules live in their own
+# `tests.rs` / `*_tests.rs` files so they can be excluded here too; shipped
+# code stays fully analysed.
+name: forklaunch
+paths-ignore:
+  - '**/tests/**'
+  - '**/examples/**'
+  - '**/__test__/**'
+  - '**/tests.rs'
+  - '**/*_tests.rs'
+  # #[cfg(test)]-only module of forklaunch-axum's module_auth.
+  - 'framework-rs/crates/axum/src/module_auth/route_keys.rs'
+  # Vendored third-party crates (jsonschema, referencing), kept as upstream
+  # sources. Their HTTP retriever exposes an opt-in
+  # danger_accept_invalid_certs(bool) option (default false); nothing in
+  # ForkLaunch calls it or configures an HTTP retriever, so the
+  # rust/disabled-certificate-check results there are unreachable from our code.
+  - 'framework-rs/crates/vendor/**'

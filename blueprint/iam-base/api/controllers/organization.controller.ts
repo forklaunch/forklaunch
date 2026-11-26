@@ -1,17 +1,8 @@
-import {
-  handlers,
-  IdSchema,
-  PLATFORM_ADMIN_ROLES,
-  schemaValidator,
-  string
-} from '@forklaunch/blueprint-core';
+import { bindRuntimeAuth } from '@forklaunch/blueprint-core';
+import { organizationContract } from '../contracts/organization.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 import { UniqueConstraintViolationException } from '@mikro-orm/core';
 import { ci, tokens } from '../../bootstrapper';
-import {
-  CreateOrganizationMapper,
-  OrganizationMapper,
-  UpdateOrganizationMapper
-} from '../../domain/mappers/organization.mappers';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.OrganizationService);
@@ -20,24 +11,10 @@ const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 
 export const createOrganization = handlers.post(
   schemaValidator,
-  '/',
-  {
-    name: 'Create Organization',
-    access: 'internal',
-    summary: 'Creates a new organization',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: CreateOrganizationMapper.schema,
-    responses: {
-      201: OrganizationMapper.schema,
-      409: string
-    }
-  },
+  organizationContract.createOrganization.path,
+  bindRuntimeAuth(organizationContract.createOrganization.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Creating organization', req.body);
     try {
@@ -54,23 +31,10 @@ export const createOrganization = handlers.post(
 );
 export const getOrganization = handlers.get(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Get Organization',
-    access: 'protected',
-    summary: 'Gets an organization by ID',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedRoles: PLATFORM_ADMIN_ROLES
-    },
-    responses: {
-      200: OrganizationMapper.schema,
-      404: string
-    },
-    params: IdSchema
-  },
+  organizationContract.getOrganization.path,
+  bindRuntimeAuth(organizationContract.getOrganization.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Retrieving organization', req.params);
     const organizationDto = await serviceFactory().getOrganization(req.params);
@@ -85,24 +49,10 @@ export const getOrganization = handlers.get(
 
 export const updateOrganization = handlers.put(
   schemaValidator,
-  '/',
-  {
-    name: 'Update Organization',
-    access: 'internal',
-    summary: 'Updates an organization by ID',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: UpdateOrganizationMapper.schema,
-    responses: {
-      200: OrganizationMapper.schema,
-      404: string
-    }
-  },
+  organizationContract.updateOrganization.path,
+  bindRuntimeAuth(organizationContract.updateOrganization.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Updating organization', req.body);
     res.status(200).json(await serviceFactory().updateOrganization(req.body));
@@ -111,24 +61,10 @@ export const updateOrganization = handlers.put(
 
 export const deleteOrganization = handlers.delete(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Delete Organization',
-    access: 'internal',
-    summary: 'Deletes an organization by ID',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: string,
-      404: string
-    },
-    params: IdSchema
-  },
+  organizationContract.deleteOrganization.path,
+  bindRuntimeAuth(organizationContract.deleteOrganization.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Deleting organization', req.params);
     await serviceFactory().deleteOrganization(req.params);

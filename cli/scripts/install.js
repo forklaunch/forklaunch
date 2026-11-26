@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
@@ -75,10 +75,10 @@ function updatePathVariable(binDir) {
       }
     `;
     try {
-      execSync(
-        `powershell -Command "${powershellCommand.replace(/"/g, '\\"')}"`,
-        { stdio: "inherit" }
-      );
+      // Pass the script as one argument; no shell quoting to get wrong.
+      execFileSync("powershell", ["-NoProfile", "-Command", powershellCommand], {
+        stdio: "inherit"
+      });
     } catch (e) {
       console.error(
         "Failed to update PATH with PowerShell. Please add it manually."

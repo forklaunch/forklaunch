@@ -1,5 +1,109 @@
 # @forklaunch/implementation-iam-base
 
+## 2.0.0
+
+### Major Changes
+
+- 4ec1f4b: Built on `@forklaunch/core` 4 and `@mikro-orm/core` 7.2.10. The previous versions depend on core 3 and pin MikroORM 7.2.5, so an application on core 4 that used them installed two copies of each and its entity types stopped matching.
+
+  Breaking, because core 4 changes defaults these packages run with: cross-origin browser access is denied unless the application names its origins (`CORS_ORIGINS` or a `cors` option), an HMAC-signed request is accepted once and only within 5 minutes of the server clock (multi-instance services need a shared nonce store), and JWT verification pins the signature algorithm. See the `@forklaunch/core` 4.0.0 changelog for what to change. 0.x packages take a minor bump, the 0.x equivalent of a major.
+
+### Patch Changes
+
+- Updated dependencies [4ec1f4b]
+  - @forklaunch/interfaces-iam@2.0.0
+
+## 1.0.43
+
+### Patch Changes
+
+- d2319b3: - `updateBatchPermissions` resolves each permission's roles on the transaction's EntityManager, one at a time, and flushes inside the transaction. It used to start the updates without awaiting them, so the batch could persist before its role changes were read.
+  - `updatePermission` passes the caller's EntityManager through to role resolution.
+  - `getBatchUsers` and `deleteBatchUsers` filter by `id: { $in: ids }` and no longer pass the `ids` array itself as a filter field.
+  - Services stop awaiting MikroORM's synchronous `persist`.
+
+## 1.0.42
+
+### Patch Changes
+
+- Built on @forklaunch/core 3.2.0 (default audit trail, listUnsubscribe, compliant fields decrypt under their loading tenant) and a dependency refresh; Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.39
+
+## 1.0.41
+
+### Patch Changes
+
+- Dependency refresh: @forklaunch/core 3.1.0 (explicit Stripe apiKey wins over a detected managed contract; managed email for regular apps), MikroORM 7.2.5, and other minor updates. Stripe stays on 22.x.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.38
+
+## 1.0.40
+
+### Patch Changes
+
+- Depend on @forklaunch/core 3 (pii/phi/pci properties load as CompliantField; read them with .deanon or .anon) and refresh dependencies to their latest versions, including @mikro-orm 7.2.3.
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.37
+
+## 1.0.39
+
+### Patch Changes
+
+- Refresh every dependency and move the blueprint onto the framework wave released alongside it.
+
+  The whole set is versioned together on purpose. These packages reference each other as `workspace:^`, which is rewritten to the sibling's _current_ version at publish time — so releasing one ahead of the others pins their **previous** versions and a scaffolded app installs two copies of the same package. That is what produced the duplicate-`@forklaunch/core` type errors behind #311 and #331, and the fix is procedural rather than technical: release the whole set in one wave.
+
+  Framework references now point at `@forklaunch/core@^2.1.1` and its siblings (`common@^1.2.28`, `validator@^1.2.29`, `express`/`hyper-express@^1.2.46`, `internal@^1.2.31`, `testing@^1.2.33`, `universal-sdk@^1.2.29`, `infrastructure-redis`/`infrastructure-s3@^1.4.17`).
+
+  `@mikro-orm/*` is **deliberately held at 7.2.1** rather than moved to the 7.2.2 that shipped during this wave. The framework packages were published pinned to 7.2.1, and MikroORM's decorators and `EntityManager` identity do not survive two copies in one dependency graph — a blueprint on 7.2.2 against a framework on 7.2.1 is the same duplicate-package failure in a different package. `pnpm update --latest` moved six of the eleven `@mikro-orm/*` entries and left five, which is the split this normalizes; the pair moves together in the next wave.
+
+  Also adds the three `__test__/test-utils.ts` files the shared `vitest.config.ts` names in `setupFiles` but that were never created — `implementations/iam/base`, `implementations/ecommerce/stripe`, and `implementations/worker/redis`. Without the file vitest cannot load the suite and reports "no tests" rather than an error, so those 16 tests had never run in CI. They pass.
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.36
+
+## 1.0.37
+
+### Patch Changes
+
+- `@forklaunch/core` 1.6.5, and shape entities that carry no `any`.
+
+  The implementation packages describe the entities they work with through minimal "shape"
+  entities. Their enum columns were declared `fp.enum()` with no members, which infers
+  `any`; `ResolvedEntity` in core 1.6.5 no longer papers over that, so every such column is
+  now `fp.enum<string[]>()`: a string column whose members the application supplies.
+
+  With the shape typed honestly, the `& { status: StatusEnum[keyof StatusEnum] }`
+  intersections on the entity constraint types (`OrganizationEntities`, `BaseSmsEntities`,
+  `BaseCheckoutSessionEntities`, `BasePaymentLinkEntities`, `BasePlanEntities`,
+  `BaseSubscriptionEntities`, and the Stripe equivalents) had to go: a service queries with
+  the shape schema (`entity as typeof Plan`), and that cast is only valid when the shape is
+  comparable to the constraint, which a generic enum member never is. The services never
+  read those columns; the DTO types still carry the enums, and the application's mapper is
+  where entity and DTO meet. The constraint types therefore lose their enum type parameters
+  (`BasePlanEntities<Cadence, Currency, Provider>` is now `BasePlanEntities`); services and
+  mapper types keep theirs for the DTO side.
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.35
+
+## 1.0.36
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions and move to `@forklaunch/core`
+  1.6.4 on mikro-orm 7.2.1.
+
+  The framework, the blueprint and the CLI's scaffold constants now agree on a single
+  mikro-orm version (7.2.1, pinned exactly), so a generated app resolves one copy. The
+  worker implementations (bullmq, database, kafka, redis) now declare `@forklaunch/validator`
+  directly: their schema resolvers name `AnySchemaValidator` in emitted declarations, and
+  TypeScript refuses to reference a package that is not a dependency of the emitting one.
+
+- Updated dependencies
+  - @forklaunch/interfaces-iam@1.0.34
+
 ## 1.0.35
 
 ### Patch Changes

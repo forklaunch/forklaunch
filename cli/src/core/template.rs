@@ -2,7 +2,7 @@ use std::{fs::create_dir_all, path::Path};
 
 use anyhow::{Context, Result};
 use include_dir::{Dir, File};
-use ramhorns::Template;
+use ramhorns::{Content, Template};
 use regex::Regex;
 
 use super::{
@@ -18,11 +18,28 @@ pub(crate) struct PathIO {
     pub(crate) module_id: Option<Module>,
 }
 
+/// Files the OS drops next to real ones. `include_dir!` embeds whatever is on
+/// disk -- it does not consult .gitignore -- and several template directories
+/// are symlinks into `blueprint/`, so a single Finder visit to any of them
+/// bakes a binary `.DS_Store` into the next build. It is not a template and
+/// cannot be rendered, so it is dropped here rather than left to fail later.
+fn is_os_metadata_path(path: &Path) -> bool {
+    matches!(
+        path.file_name().and_then(|name| name.to_str()),
+        Some(".DS_Store" | "Thumbs.db" | "desktop.ini")
+    )
+}
+
+fn is_os_metadata(file: &File<'_>) -> bool {
+    is_os_metadata_path(file.path())
+}
+
 pub(crate) fn get_directory_filenames(path: &'_ PathIO) -> Result<Vec<&'_ File<'_>>> {
     Ok(TEMPLATES_DIR
         .get_dir(&path.input_path)
         .unwrap()
         .files()
+        .filter(|file| !is_os_metadata(file))
         .collect())
 }
 
@@ -35,12 +52,16 @@ pub(crate) fn get_directory_subdirectory_names(path: &'_ PathIO) -> Result<Vec<&
 }
 
 pub(crate) fn get_file_contents(filepath: &Path) -> Result<String> {
-    Ok(TEMPLATES_DIR
+    let path = filepath.to_string_lossy();
+    let file = TEMPLATES_DIR
         .get_file(filepath)
-        .unwrap()
-        .contents_utf8()
-        .unwrap()
-        .to_string())
+        .with_context(|| format!("No template file embedded at {path}"))?;
+    // Both of these used to be `unwrap()`, which reported a non-UTF-8 template
+    // as a bare `Option::unwrap()` panic naming no file -- the whole scaffold
+    // died and the offending path had to be hunted by hand.
+    file.contents_utf8()
+        .map(str::to_string)
+        .with_context(|| format!("Template file {path} is not valid UTF-8"))
 }
 
 fn database_replacements(database: &String, template: String) -> String {
@@ -56,6 +77,25 @@ fn database_replacements(database: &String, template: String) -> String {
 
 fn forklaunch_replacements(app_name: &String, template: String) -> String {
     template.replace("@forklaunch/blueprint-", format!("@{app_name}/").as_str())
+}
+
+/// Shared rendering primitive for legacy manifests, native scaffolds and SDKs.
+/// Language-specific replacements and file ownership stay with their callers.
+pub(crate) fn render_template<T: Content>(source: &str, data: &T) -> Result<String> {
+    Ok(Template::new(source)?.render(data))
+}
+
+pub(crate) fn render_embedded_template<T: Content>(
+    template_path: &str,
+    data: &T,
+) -> Result<String> {
+    let source = TEMPLATES_DIR
+        .get_file(template_path)
+        .with_context(|| format!("Missing embedded template {template_path}"))?
+        .contents_utf8()
+        .with_context(|| format!("Embedded template {template_path} is not UTF-8"))?;
+    render_template(source, data)
+        .with_context(|| format!("Failed to render embedded template {template_path}"))
 }
 
 pub(crate) fn generate_with_template(
@@ -96,25 +136,44 @@ pub(crate) fn generate_with_template(
                 &entry.path().to_string_lossy()
             )
         })?;
-        let tpl = Template::new(file_contents.clone())?;
         let rendered = match data {
-            ManifestData::Application(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Application(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
             ManifestData::Service(manifest_data) => database_replacements(
                 &manifest_data.database,
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data)),
+                forklaunch_replacements(
+                    &manifest_data.app_name,
+                    render_template(&file_contents, manifest_data)?,
+                ),
             ),
-            ManifestData::Library(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Router(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
-            ManifestData::Worker(manifest_data) => {
-                forklaunch_replacements(&manifest_data.app_name, tpl.render(&manifest_data))
-            }
+            ManifestData::Library(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Router(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
+            ManifestData::Worker(manifest_data) => forklaunch_replacements(
+                &manifest_data.app_name,
+                render_template(&file_contents, manifest_data)?,
+            ),
         };
+        // Blueprint schema factories use TypeBox locally; generated contracts must
+        // use the application's selected validator, just like registrations.
+        let validator = match data {
+            ManifestData::Application(data) => &data.validator,
+            ManifestData::Service(data) => &data.validator,
+            ManifestData::Library(data) => &data.validator,
+            ManifestData::Router(data) => &data.validator,
+            ManifestData::Worker(data) => &data.validator,
+        };
+        let rendered = rendered.replace(
+            "@forklaunch/validator/typebox",
+            &format!("@forklaunch/validator/{validator}"),
+        );
         if !output_path.exists() {
             let output_path_str = output_path.file_name().unwrap().to_str().unwrap();
             let should_ignore = ignore_files
@@ -204,9 +263,7 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
             String::from("user"),
         ]),
         Module::BaseMessaging => Some(vec![String::from("sms")]),
-        Module::TwilioMessaging => {
-            Some(vec![String::from("sms"), String::from("webhook")])
-        }
+        Module::TwilioMessaging => Some(vec![String::from("sms"), String::from("webhook")]),
         Module::StripeEcommerce => Some(vec![
             String::from("product"),
             String::from("variant"),
@@ -221,6 +278,18 @@ pub(crate) fn get_routers_from_standard_package(package: Module) -> Option<Vec<S
         // Skeleton only so far — patient/encounter/claim/eligibility/remittance/
         // codeSet routers land in later phases (see plan/cac/), not this PR.
         Module::BaseCac => None,
+        // In the order mlse-base's server.ts mounts them.
+        Module::BaseMlse => Some(vec![
+            String::from("source"),
+            String::from("document"),
+            String::from("search"),
+            String::from("topic"),
+            String::from("answer"),
+            String::from("voice"),
+            String::from("savedSearch"),
+            String::from("governance"),
+            String::from("compliance"),
+        ]),
         // Relay injects its router directly into an existing iam service
         // (init/relay.rs); it never goes through the standard-package manifest
         // path, so it declares no routers here.
@@ -241,7 +310,7 @@ mod tests {
     /// ones it does. That is how "subscription" survived here with no
     /// subscription route, while checkout shipped undeclared.
     ///
-    /// Only ecommerce is asserted. billing-stripe and iam-base drift the same
+    /// Only ecommerce and mlse are asserted. billing-stripe and iam-base drift the same
     /// way today on main — billing omits compliance, iam omits compliance and
     /// discovery — and correcting those belongs with those modules, not here.
     fn routers_in_template(project: &str) -> Vec<String> {
@@ -265,4 +334,158 @@ mod tests {
         declared.sort();
         assert_eq!(declared, routers_in_template("ecommerce-stripe"));
     }
+
+    #[test]
+    fn mlse_declares_exactly_the_routers_it_ships() {
+        let mut declared = get_routers_from_standard_package(Module::BaseMlse).unwrap_or_default();
+        declared.sort();
+        assert_eq!(declared, routers_in_template("mlse-base"));
+    }
+    #[test]
+    fn emitted_service_and_worker_templates_keep_only_used_dependencies() {
+        #[derive(ramhorns::Content)]
+        struct Flags {
+            is_worker: bool,
+            is_database_enabled: bool,
+            is_iam_configured: bool,
+        }
+        for worker in [false, true] {
+            for database in [false, true] {
+                let flags = Flags {
+                    is_worker: worker,
+                    is_database_enabled: database,
+                    is_iam_configured: true,
+                };
+                let render = |path: &str| {
+                    ramhorns::Template::new(
+                        TEMPLATES_DIR
+                            .get_file(path)
+                            .unwrap()
+                            .contents_utf8()
+                            .unwrap(),
+                    )
+                    .unwrap()
+                    .render(&flags)
+                };
+                let registration = render("project/service/registrations.ts");
+                for name in [
+                    "ComplianceDataService",
+                    "RetentionService",
+                    "wrapEmWithTenantContext",
+                ] {
+                    assert_eq!(
+                        registration.contains(name),
+                        database,
+                        "{name}: worker={worker}, database={database}"
+                    );
+                }
+                let server = render("project/service/server.ts");
+                assert!(!server.contains("PERMISSIONS, ROLES"));
+                let controller = render("router/api/controllers/{{camel_case_name}}.controller.ts");
+                assert!(!controller.contains("const openTelemetryCollector"));
+                assert!(controller.contains("bindRuntimeAuth("));
+                assert!(controller.contains("jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL"));
+                assert!(!controller.contains("ROLES.ADMIN"));
+                let contract = render("router/api/contracts/{{camel_case_name}}.contract.ts");
+                assert!(contract.contains("auth: { scheme: 'jwt', allowedRoles: ['admin'] }"));
+                assert!(contract.contains("access: 'protected'"));
+                for kind in ["service", "worker"] {
+                    let utils = render(&format!("project/{kind}/__test__/test-utils.ts"));
+                    assert_eq!(utils.contains("import { getEnvVar }"), database);
+                }
+                let event = render("router/domain/types/{{camel_case_name}}EventRecord.types.ts");
+                assert_eq!(event.contains("export {};"), !worker);
+                if worker {
+                    assert!(
+                        render("router/domain/services/{{camel_case_name}}.service.ts")
+                            .contains("id: _id, createdAt: _createdAt, updatedAt: _updatedAt")
+                    );
+                }
+            }
+        }
+    }
+
+    /// `include_dir!` embeds from the filesystem and ignores .gitignore, and
+    /// many template directories are symlinks into `blueprint/`. A Finder
+    /// visit to one of them leaves a binary `.DS_Store` that used to reach
+    /// `get_file_contents` and abort every `forklaunch init` -- for any
+    /// module, including a bare app -- with an `Option::unwrap()` panic that
+    /// named no file. CI never saw it because the junk only exists locally.
+    #[test]
+    fn os_metadata_files_are_not_treated_as_templates() {
+        let junk = ["\u{2e}DS_Store", "Thumbs.db", "desktop.ini"];
+        for name in junk {
+            assert!(
+                is_os_metadata_path(Path::new("project/core").join(name).as_path()),
+                "{name} must be filtered out of the template file list"
+            );
+        }
+        assert!(
+            !is_os_metadata_path(Path::new("project/core/package.json")),
+            "a real template must not be mistaken for OS metadata"
+        );
+    }
+
+    /// Every embedded template has to be renderable text; a binary one now
+    /// returns a named error instead of panicking.
+    #[test]
+    fn every_embedded_template_is_valid_utf8() {
+        fn walk(dir: &Dir<'_>, bad: &mut Vec<String>) {
+            for file in dir.files() {
+                if is_os_metadata(file) {
+                    continue;
+                }
+                if file.contents_utf8().is_none() {
+                    bad.push(file.path().to_string_lossy().to_string());
+                }
+            }
+            for sub in dir.dirs() {
+                walk(sub, bad);
+            }
+        }
+
+        let mut bad = Vec::new();
+        for file in TEMPLATES_DIR.files() {
+            if !is_os_metadata(file) && file.contents_utf8().is_none() {
+                bad.push(file.path().to_string_lossy().to_string());
+            }
+        }
+        for dir in TEMPLATES_DIR.dirs() {
+            walk(dir, &mut bad);
+        }
+        assert!(
+            bad.is_empty(),
+            "non-UTF-8 files are embedded as templates: {bad:?}"
+        );
+    }
+}
+
+/// One file of the TypeScript service template rendered for `data`, as init
+/// writes it (replacements and watermark included), or `None` when the
+/// template has no such file.
+pub(crate) fn render_service_template_file(
+    relative: &str,
+    data: &super::manifest::service::ServiceManifestData,
+) -> Result<Option<String>> {
+    let Some(file) = TEMPLATES_DIR.get_file(Path::new("project/service").join(relative)) else {
+        return Ok(None);
+    };
+    let source = file
+        .contents_utf8()
+        .with_context(|| format!("Template {relative} is not UTF-8"))?;
+    let rendered = database_replacements(
+        &data.database,
+        forklaunch_replacements(&data.app_name, render_template(source, data)?),
+    )
+    .replace(
+        "@forklaunch/validator/typebox",
+        &format!("@forklaunch/validator/{}", data.validator),
+    );
+    Ok(Some(super::watermark::apply_watermark(
+        &RenderedTemplate {
+            path: Path::new(relative).to_path_buf(),
+            content: rendered,
+            context: None,
+        },
+    )?))
 }

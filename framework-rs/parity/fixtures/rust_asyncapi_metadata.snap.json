@@ -1,0 +1,2078 @@
+[
+  {
+    "asyncapi": "3.0.0",
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "any": {
+        "address": "any",
+        "messages": {
+          "any": {
+            "name": "any",
+            "payload": {}
+          }
+        }
+      },
+      "never": {
+        "address": "never",
+        "messages": {
+          "never": {
+            "name": "never",
+            "payload": {
+              "not": {}
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-any-any": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/any"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/any/messages/any"
+          }
+        ]
+      },
+      "send-never-never": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/never"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/never/messages/never"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "default": {
+        "address": "default",
+        "messages": {
+          "default": {
+            "name": "default",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-default-default": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/default"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/default/messages/default"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "default": {
+        "address": "default",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-default-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/default"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/default/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "room/~feed": {
+        "address": "room/~feed",
+        "messages": {
+          "room/~feed": {
+            "name": "room/~feed",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-room/~feed-room/~feed": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/room~1~0feed"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/room~1~0feed/messages/room~1~0feed"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "room/~feed": {
+        "address": "room/~feed",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-room/~feed-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/room~1~0feed"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/room~1~0feed/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "hello 水 🦀": {
+        "address": "hello 水 🦀",
+        "messages": {
+          "hello 水 🦀": {
+            "name": "hello 水 🦀",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-hello 水 🦀-hello 水 🦀": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/hello%20%E6%B0%B4%20%F0%9F%A6%80"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/hello%20%E6%B0%B4%20%F0%9F%A6%80/messages/hello%20%E6%B0%B4%20%F0%9F%A6%80"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "hello 水 🦀": {
+        "address": "hello 水 🦀",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-hello 水 🦀-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/hello%20%E6%B0%B4%20%F0%9F%A6%80"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/hello%20%E6%B0%B4%20%F0%9F%A6%80/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "percent%2F": {
+        "address": "percent%2F",
+        "messages": {
+          "percent%2F": {
+            "name": "percent%2F",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-percent%2F-percent%2F": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/percent%252F"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/percent%252F/messages/percent%252F"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "percent%2F": {
+        "address": "percent%2F",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-percent%2F-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/percent%252F"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/percent%252F/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "space name": {
+        "address": "space name",
+        "messages": {
+          "space name": {
+            "name": "space name",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-space name-space name": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/space%20name"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/space%20name/messages/space%20name"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "space name": {
+        "address": "space name",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "receive-space name-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/space%20name"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/space%20name/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "quote!'()*": {
+        "address": "quote!'()*",
+        "messages": {
+          "quote!'()*": {
+            "name": "quote!'()*",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-quote!'()*-quote!'()*": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/quote%21%27%28%29%2A"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/quote%21%27%28%29%2A/messages/quote%21%27%28%29%2A"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "quote!'()*": {
+        "address": "quote!'()*",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-quote!'()*-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/quote%21%27%28%29%2A"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/quote%21%27%28%29%2A/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "fragment-channel": {
+        "address": "fragment-channel",
+        "messages": {
+          "#fragment": {
+            "name": "#fragment",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-fragment-channel-#fragment": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/fragment-channel"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/fragment-channel/messages/%23fragment"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "fragment-channel": {
+        "address": "fragment-channel",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-fragment-channel-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/fragment-channel"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/fragment-channel/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "__proto__": {
+        "address": "__proto__",
+        "messages": {
+          "__proto__": {
+            "name": "__proto__",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-__proto__-__proto__": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/__proto__"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/__proto__/messages/__proto__"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "__proto__": {
+        "address": "__proto__",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-__proto__-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/__proto__"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/__proto__/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "constructor": {
+        "address": "constructor",
+        "messages": {
+          "constructor": {
+            "name": "constructor",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-constructor-constructor": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/constructor"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/constructor/messages/constructor"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "constructor": {
+        "address": "constructor",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-constructor-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/constructor"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/constructor/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "toString": {
+        "address": "toString",
+        "messages": {
+          "toString": {
+            "name": "toString",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-toString-toString": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/toString"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/toString/messages/toString"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "toString": {
+        "address": "toString",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "receive-toString-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/toString"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/toString/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "line\nbreak": {
+        "address": "line\nbreak",
+        "messages": {
+          "line\nbreak": {
+            "name": "line\nbreak",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-line\nbreak-line\nbreak": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/line%0Abreak"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/line%0Abreak/messages/line%0Abreak"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "errors": {
+        "address": "errors",
+        "messages": {
+          "failure": {
+            "name": "failure",
+            "payload": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "line\nbreak": {
+        "address": "line\nbreak",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      },
+      "shared": {
+        "address": "shared",
+        "messages": {
+          "publish": {
+            "name": "publish",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          },
+          "received": {
+            "name": "received",
+            "payload": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-line\nbreak-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/line%0Abreak"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/line%0Abreak/messages/publish"
+          }
+        ]
+      },
+      "receive-shared-publish": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/publish"
+          }
+        ]
+      },
+      "send-shared-received": {
+        "action": "send",
+        "channel": {
+          "$ref": "#/channels/shared"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/shared/messages/received"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "preferred": {
+        "address": "preferred",
+        "messages": {
+          "preferred": {
+            "name": "preferred",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-preferred-preferred": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/preferred"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/preferred/messages/preferred"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "fallback": {
+        "address": "fallback",
+        "messages": {
+          "chosen": {
+            "name": "chosen",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-fallback-chosen": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/fallback"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/fallback/messages/chosen"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "nested": {
+        "address": "nested",
+        "messages": {
+          "nested": {
+            "name": "nested",
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "any": {},
+                "list": {
+                  "items": {
+                    "not": {}
+                  },
+                  "type": "array"
+                },
+                "never": {
+                  "not": {}
+                }
+              },
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-nested-nested": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/nested"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/nested/messages/nested"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "draft-04": {
+        "address": "draft-04",
+        "messages": {
+          "draft-04": {
+            "name": "draft-04",
+            "payload": {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-04/schema#",
+                "exclusiveMinimum": true,
+                "minimum": 0,
+                "type": "number"
+              },
+              "schemaFormat": "application/schema+json;version=draft-04"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-draft-04-draft-04": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/draft-04"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/draft-04/messages/draft-04"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "draft-06": {
+        "address": "draft-06",
+        "messages": {
+          "draft-06": {
+            "name": "draft-06",
+            "payload": {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-06/schema#",
+                "const": "value",
+                "type": "string"
+              },
+              "schemaFormat": "application/schema+json;version=draft-06"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-draft-06-draft-06": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/draft-06"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/draft-06/messages/draft-06"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "2019-09": {
+        "address": "2019-09",
+        "messages": {
+          "2019-09": {
+            "name": "2019-09",
+            "payload": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2019-09/schema",
+                "contains": {
+                  "minimum": 0
+                },
+                "items": {
+                  "type": "integer"
+                },
+                "minContains": 2,
+                "type": "array"
+              },
+              "schemaFormat": "application/schema+json;version=2019-09"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-2019-09-2019-09": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/2019-09"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/2019-09/messages/2019-09"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "2020-12": {
+        "address": "2020-12",
+        "messages": {
+          "2020-12": {
+            "name": "2020-12",
+            "payload": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "items": {
+                  "not": {}
+                },
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  }
+                ],
+                "type": "array"
+              },
+              "schemaFormat": "application/schema+json;version=2020-12"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-2020-12-2020-12": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/2020-12"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/2020-12/messages/2020-12"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "request": {
+        "address": "request",
+        "messages": {
+          "request": {
+            "name": "request",
+            "payload": {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-04/schema#",
+                "contains": 42,
+                "contentSchema": false,
+                "dependentSchemas": {
+                  "annotation": 42
+                },
+                "else": true,
+                "if": 42,
+                "prefixItems": [
+                  "literal"
+                ],
+                "propertyNames": [
+                  "literal"
+                ],
+                "then": false,
+                "type": "string",
+                "unevaluatedItems": true,
+                "unevaluatedProperties": false
+              },
+              "schemaFormat": "application/schema+json;version=draft-04"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-request-request": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/request"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/request/messages/request"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "request": {
+        "address": "request",
+        "messages": {
+          "request": {
+            "name": "request",
+            "payload": {
+              "schema": {
+                "$schema": "http://json-schema.org/draft-06/schema#",
+                "contentSchema": false,
+                "dependentSchemas": {
+                  "annotation": 42
+                },
+                "else": true,
+                "if": 42,
+                "prefixItems": [
+                  "literal"
+                ],
+                "then": false,
+                "type": "string",
+                "unevaluatedItems": true,
+                "unevaluatedProperties": false
+              },
+              "schemaFormat": "application/schema+json;version=draft-06"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-request-request": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/request"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/request/messages/request"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "asyncapi": "3.0.0",
+    "channels": {
+      "request": {
+        "address": "request",
+        "messages": {
+          "request": {
+            "name": "request",
+            "payload": {
+              "$schema": "http://json-schema.org/draft-07/schema#",
+              "properties": {
+                "message": {
+                  "maxLength": 8,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "message"
+              ],
+              "title": "Input",
+              "type": "object"
+            }
+          }
+        }
+      }
+    },
+    "info": {
+      "title": "Fixture",
+      "version": "1.0.0"
+    },
+    "operations": {
+      "receive-request-request": {
+        "action": "receive",
+        "channel": {
+          "$ref": "#/channels/request"
+        },
+        "messages": [
+          {
+            "$ref": "#/channels/request/messages/request"
+          }
+        ]
+      }
+    }
+  }
+]

@@ -1,0 +1,1 @@
+default-src 'none'; script-src 'sha256-Ia5rMMwFH6jrlBIY0OKdgoe2jYTwVNAgvRuYVQ41AgE='; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'

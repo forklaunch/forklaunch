@@ -1,18 +1,7 @@
-import {
-  array,
-  handlers,
-  IdSchema,
-  IdsSchema,
-  PLATFORM_READ_PERMISSIONS,
-  schemaValidator,
-  string
-} from '@forklaunch/blueprint-core';
+import { bindRuntimeAuth } from '@forklaunch/blueprint-core';
+import { roleContract } from '../contracts/role.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
-import {
-  CreateRoleMapper,
-  RoleMapper,
-  UpdateRoleMapper
-} from '../../domain/mappers/role.mappers';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.RoleService);
@@ -21,24 +10,10 @@ const JWKS_PUBLIC_KEY_URL = ci.resolve(tokens.JWKS_PUBLIC_KEY_URL);
 
 export const createRole = handlers.post(
   schemaValidator,
-  '/',
-  {
-    name: 'Create Role',
-    access: 'internal',
-    summary: 'Creates a new role',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: CreateRoleMapper.schema,
-    responses: {
-      201: string,
-      500: string
-    }
-  },
+  roleContract.createRole.path,
+  bindRuntimeAuth(roleContract.createRole.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Creating role', req.body);
     await serviceFactory().createRole(req.body);
@@ -48,24 +23,10 @@ export const createRole = handlers.post(
 
 export const createBatchRoles = handlers.post(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Create Batch Roles',
-    access: 'internal',
-    summary: 'Creates multiple roles',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: array(CreateRoleMapper.schema),
-    responses: {
-      201: string,
-      500: string
-    }
-  },
+  roleContract.createBatchRoles.path,
+  bindRuntimeAuth(roleContract.createBatchRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Creating batch roles', req.body);
     await serviceFactory().createBatchRoles(req.body);
@@ -75,23 +36,10 @@ export const createBatchRoles = handlers.post(
 
 export const getRole = handlers.get(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Get Role',
-    access: 'protected',
-    summary: 'Gets a role by ID',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedPermissions: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: RoleMapper.schema,
-      500: string
-    },
-    params: IdSchema
-  },
+  roleContract.getRole.path,
+  bindRuntimeAuth(roleContract.getRole.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Retrieving role', req.params);
     res.status(200).json(await serviceFactory().getRole(req.params));
@@ -100,23 +48,10 @@ export const getRole = handlers.get(
 
 export const getBatchRoles = handlers.get(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Get Batch Roles',
-    access: 'protected',
-    summary: 'Gets multiple roles by IDs',
-    auth: {
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      allowedPermissions: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: array(RoleMapper.schema),
-      500: string
-    },
-    query: IdsSchema
-  },
+  roleContract.getBatchRoles.path,
+  bindRuntimeAuth(roleContract.getBatchRoles.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Retrieving batch roles', req.query);
     res.status(200).json(await serviceFactory().getBatchRoles(req.query));
@@ -125,24 +60,10 @@ export const getBatchRoles = handlers.get(
 
 export const updateRole = handlers.put(
   schemaValidator,
-  '/',
-  {
-    name: 'Update Role',
-    access: 'internal',
-    summary: 'Updates a role by ID',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: UpdateRoleMapper.schema,
-    responses: {
-      200: string,
-      500: string
-    }
-  },
+  roleContract.updateRole.path,
+  bindRuntimeAuth(roleContract.updateRole.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Updating role', req.body);
     await serviceFactory().updateRole(req.body);
@@ -152,24 +73,10 @@ export const updateRole = handlers.put(
 
 export const updateBatchRoles = handlers.put(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Update Batch Roles',
-    access: 'internal',
-    summary: 'Updates multiple roles by IDs',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: array(UpdateRoleMapper.schema),
-    responses: {
-      200: string,
-      500: string
-    }
-  },
+  roleContract.updateBatchRoles.path,
+  bindRuntimeAuth(roleContract.updateBatchRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Updating batch roles', req.body);
     await serviceFactory().updateBatchRoles(req.body);
@@ -179,24 +86,10 @@ export const updateBatchRoles = handlers.put(
 
 export const deleteRole = handlers.delete(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Delete Role',
-    access: 'internal',
-    summary: 'Deletes a role by ID',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: string,
-      500: string
-    },
-    params: IdSchema
-  },
+  roleContract.deleteRole.path,
+  bindRuntimeAuth(roleContract.deleteRole.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Deleting role', req.params);
     await serviceFactory().deleteRole(req.params);
@@ -206,24 +99,10 @@ export const deleteRole = handlers.delete(
 
 export const deleteBatchRoles = handlers.delete(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Delete Batch Roles',
-    access: 'internal',
-    summary: 'Deletes multiple roles by IDs',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: string,
-      500: string
-    },
-    query: IdsSchema
-  },
+  roleContract.deleteBatchRoles.path,
+  bindRuntimeAuth(roleContract.deleteBatchRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Deleting batch roles', req.query);
     await serviceFactory().deleteBatchRoles(req.query);

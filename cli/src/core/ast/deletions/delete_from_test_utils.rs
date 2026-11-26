@@ -78,7 +78,7 @@ pub(crate) fn delete_from_test_harness_options<'a>(
                     Some(ObjectPropertyKind::ObjectProperty(prop.clone_in(allocator)))
                 }
             }),
-            allocator,
+            &allocator,
         );
 
         object_expr.properties = new_properties;
@@ -158,7 +158,7 @@ pub(crate) fn delete_from_test_harness_custom_env_vars<'a>(
                             ))
                         }
                     }),
-                allocator,
+                &allocator,
             );
 
             custom_env_vars_obj.properties = new_properties;

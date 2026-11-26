@@ -15,6 +15,10 @@ use anyhow::Result;
 use serde::Serialize;
 
 use crate::core::ast::infrastructure::compliance::scan_entity_compliance;
+use crate::core::static_analysis::{
+    route_analyzer, rust_entity_analyzer::scan_rust_entity_compliance,
+    rust_route_analyzer::rust_production_files,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -31,6 +35,113 @@ pub(crate) struct LocalFinding {
     pub(crate) check: String,
     pub(crate) subject: String,
     pub(crate) message: String,
+}
+
+/// What the offline checks found to read. A check that fires nothing has
+/// passed only if there was something for it to look at: an app with no
+/// ForkLaunch routes has not shown that every endpoint requires sign-in.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub(crate) struct LocalEvidence {
+    /// Routes the route scanner read (framework contracts and raw
+    /// registrations), TypeScript and Rust together.
+    pub(crate) routes: usize,
+    /// Entities declared with compliance classifications, TypeScript and Rust
+    /// together.
+    pub(crate) entities: usize,
+    /// Projects wired the ForkLaunch way (`registrations.ts`, or a Rust crate
+    /// with a `capabilities` module).
+    pub(crate) projects: usize,
+    /// The part of `routes` read from Rust sources.
+    pub(crate) rust_routes: usize,
+    /// The part of `rust_routes` declared through ForkLaunch contracts, which
+    /// the framework validates; a raw Axum route is not one.
+    pub(crate) rust_contract_routes: usize,
+    /// The part of `entities` declared in Rust crates. Only the checks in
+    /// `RUST_ENTITY_CHECKS` read these.
+    pub(crate) rust_entities: usize,
+    /// Rust types that classify members without binding them to protected
+    /// storage, as `Entity.member (project/file:line)`. Whether those members
+    /// are stored as ciphertext cannot be decided from source.
+    pub(crate) rust_unbound: Vec<String>,
+}
+
+/// The entity-driven checks that read Rust services. Every other check that
+/// hangs off classified entities looks for TypeScript wiring only
+/// (`registrations.ts`, `server.ts`, `.deanon` in `.ts` sources), so on a
+/// Rust entity it has decided nothing and must not be reported as a pass.
+///
+/// `encryptor-registration` on Rust reads the protected-model binding:
+/// `#[compliance(persisted)]` makes every classified member a ciphertext-only
+/// `ProtectedField`, or the crate does not compile. That is the Rust
+/// counterpart of a registered field encryptor, and it can only be confirmed,
+/// never refuted: a type that classifies members without the binding may
+/// still be encrypted by other means (a sealed queue envelope, an adapter of
+/// the app's own), so it is recorded in `LocalEvidence::rust_unbound` as
+/// undecided instead of failed.
+pub(crate) const RUST_ENTITY_CHECKS: &[&str] =
+    &["encryptor-registration", "possible-misclassification"];
+
+#[cfg(test)]
+impl LocalEvidence {
+    /// A workspace with something for every check to read.
+    pub(crate) fn everything() -> Self {
+        Self {
+            routes: 1,
+            entities: 1,
+            projects: 1,
+            ..Self::default()
+        }
+    }
+}
+
+/// Count what `run_local_checks` has to read under `modules_path`.
+pub(crate) fn local_evidence(modules_path: &Path) -> LocalEvidence {
+    let mut evidence = LocalEvidence::default();
+    let Ok(entries) = fs::read_dir(modules_path) else {
+        return evidence;
+    };
+    let mut entries: Vec<_> = entries.flatten().collect();
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let project_path = entry.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        for route in route_analyzer::scan_routes(&project_path).routes {
+            evidence.routes += 1;
+            if route.file.ends_with(".rs") {
+                evidence.rust_routes += 1;
+                if route.source == route_analyzer::RouteSource::Contract {
+                    evidence.rust_contract_routes += 1;
+                }
+            }
+        }
+        let rust_entities = scan_rust_entity_compliance(&project_path);
+        let project = entry.file_name().to_string_lossy().to_string();
+        for entity in &rust_entities {
+            if !entity.classified.is_empty() && !entity.protected {
+                evidence.rust_unbound.push(format!(
+                    "{}.{} ({}/{}:{})",
+                    entity.info.entity_name,
+                    entity.classified.join("/"),
+                    project,
+                    entity.file,
+                    entity.line
+                ));
+            }
+        }
+        evidence.rust_entities += rust_entities.len();
+        evidence.entities += rust_entities.len()
+            + scan_entity_compliance(&project_path)
+                .unwrap_or_default()
+                .len();
+        let rust_wired = rust_source_root(&project_path)
+            .is_some_and(|root| root.join("capabilities/mod.rs").is_file());
+        if project_path.join("registrations.ts").is_file() || rust_wired {
+            evidence.projects += 1;
+        }
+    }
+    evidence
 }
 
 /// Entrypoint files that host a runtime and therefore must wire tenant
@@ -122,6 +233,1031 @@ fn read_production_sources(project_path: &Path) -> String {
     let mut out = String::new();
     walk(project_path, &mut out);
     out
+}
+
+/// Every check `run_local_checks` performs. Reported in the audit JSON as
+/// `localChecks`, so a consumer can tell a check that ran and found nothing
+/// (a pass) from one this CLI version does not have.
+pub(crate) const LOCAL_CHECK_IDS: &[&str] = &[
+    // From `deps::scan` over the app's lockfiles (run beside these, not by run_local_checks).
+    "dependency-vulnerable",
+    "dependency-malicious",
+    "dependency-lockfile-missing",
+    "dependency-scan-incomplete",
+    "route-auth-missing",
+    "route-outside-framework",
+    "route-scan-incomplete",
+    "encryptor-registration",
+    "tenant-em-wiring",
+    "better-auth-encryption-context",
+    "possible-misclassification",
+    "tenant-isolation-wiring",
+    "tenant-context-half-wired",
+    "retention-wiring",
+    "erasure-wiring",
+    "ai-provider-direct",
+    "managed-provider-credentials",
+    "object-store-wiring",
+    "object-store-static-credentials",
+    "object-store-public-access",
+    "object-store-bucket-managed-in-app",
+    "presigned-upload-unbounded",
+    "capability-wiring",
+    "email-provider-direct-in-managed",
+    "email-protected-data",
+    "sms-provider-direct-in-managed",
+    "sms-protected-data",
+    "whatsapp-provider-direct-in-managed",
+    "whatsapp-protected-data",
+    "voice-provider-direct-in-managed",
+    "voice-protected-data",
+    "payments-stripe-keys-in-managed",
+    "stripe-webhook-unverified",
+    "payments-protected-data",
+];
+
+/// AI model provider SDKs a service might call directly.
+const AI_PROVIDER_PACKAGES: &[&str] = &[
+    "openai",
+    "@anthropic-ai/sdk",
+    "@azure/openai",
+    "@aws-sdk/client-bedrock-runtime",
+    "@google/generative-ai",
+    "@google/genai",
+    "cohere-ai",
+    "@mistralai/mistralai",
+    "groq-sdk",
+    "together-ai",
+];
+
+/// Vercel AI SDK provider packages are `@ai-sdk/<provider>`.
+const AI_SDK_PROVIDER_PREFIX: &str = "@ai-sdk/";
+
+/// Credentials for AI model providers.
+const AI_PROVIDER_KEYS: &[&str] = &[
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AWS_BEARER_TOKEN_BEDROCK",
+    "GEMINI_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "COHERE_API_KEY",
+    "MISTRAL_API_KEY",
+    "GROQ_API_KEY",
+];
+
+/// Credentials for messaging providers a managed platform supplies itself.
+const MESSAGING_PROVIDER_KEYS: &[&str] = &[
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "SENDGRID_API_KEY",
+    "MAILGUN_API_KEY",
+    "POSTMARK_SERVER_TOKEN",
+    "VONAGE_API_KEY",
+    "VONAGE_API_SECRET",
+    "NEXMO_API_KEY",
+    "NEXMO_API_SECRET",
+    "MESSAGEBIRD_ACCESS_KEY",
+    "MESSAGEBIRD_API_KEY",
+];
+
+/// SMS vendor SDKs a managed service must not call: the platform sends texts
+/// through its End User Messaging gateway (createSmsClient). Their keys are
+/// reported by `managed-provider-credentials`, so this only names SDKs.
+const SMS_PROVIDER_PACKAGES: &[&str] = &["twilio", "vonage", "messagebird"];
+const SMS_PROVIDER_PREFIXES: &[&str] = &["@aws-sdk/client-pinpoint", "@vonage/"];
+/// SNS is a general pub/sub SDK; it sends SMS only when publishing to a
+/// phone number.
+const SNS_PACKAGE: &str = "@aws-sdk/client-sns";
+
+/// SMS vendor SDKs the sources import. Sorted and de-duplicated.
+pub(crate) fn direct_sms_providers(sources: &str) -> Vec<String> {
+    let sns_texts = sources.contains("PhoneNumber") || sources.contains("SetSMSAttributes");
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            SMS_PROVIDER_PACKAGES.contains(&module.as_str())
+                || SMS_PROVIDER_PREFIXES.iter().any(|p| module.starts_with(p))
+                || (module == SNS_PACKAGE && sns_texts)
+        })
+        .collect();
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The text between the parenthesis at `open` and its match.
+fn balanced_args(text: &str, open: usize) -> &str {
+    let mut depth = 0usize;
+    for (i, ch) in text[open..].char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &text[open + 1..open + i];
+                }
+            }
+            _ => {}
+        }
+    }
+    &text[open + 1..]
+}
+
+/// Calls in one file that hand a `.deanon` value (plaintext of a compliant
+/// field) to an SMS send: the framework client (`sms.send`,
+/// `this.smsClient.send`), Twilio's `messages.create`, End User Messaging's
+/// `SendTextMessageCommand` and an SNS `PublishCommand` to a phone number.
+/// A variable assigned from `.deanon` (directly or through other variables)
+/// counts too. Returns a short description per call.
+pub(crate) fn sms_sends_with_protected_data(source: &str) -> Vec<String> {
+    static SENDS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static ASSIGN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let sends = SENDS.get_or_init(|| {
+        regex::Regex::new(
+            r"(?:\b[\w$]*[sS][mM][sS][\w$]*\s*\??\.\s*send|\.messages\s*\.\s*create|\bnew\s+SendTextMessageCommand|\bnew\s+PublishCommand)\s*\(",
+        )
+        .expect("sms send pattern")
+    });
+    let assign = ASSIGN.get_or_init(|| {
+        regex::Regex::new(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*([^;]*)")
+            .expect("assignment pattern")
+    });
+    if !source.contains(".deanon") {
+        return Vec::new();
+    }
+    // Variables that hold plaintext, propagated through a few assignments.
+    let assignments: Vec<(String, String)> = assign
+        .captures_iter(source)
+        .map(|c| (c[1].to_string(), c[2].to_string()))
+        .collect();
+    let mut tainted: Vec<String> = Vec::new();
+    for _ in 0..3 {
+        for (name, value) in &assignments {
+            if tainted.contains(name) {
+                continue;
+            }
+            let from_tainted = tainted.iter().any(|t| mentions(value, t));
+            if value.contains(".deanon") || from_tainted {
+                tainted.push(name.clone());
+            }
+        }
+    }
+    let twilio = source.contains("'twilio'") || source.contains("\"twilio\"");
+    let mut found = Vec::new();
+    for m in sends.find_iter(source) {
+        let call = m.as_str();
+        if call.contains("messages") && !twilio {
+            continue;
+        }
+        let args = balanced_args(source, m.end() - 1);
+        if call.contains("PublishCommand") && !args.contains("PhoneNumber") {
+            continue;
+        }
+        // Only the text of the message counts: the destination number is
+        // rightly a `.deanon` value.
+        let leaks = message_bodies(args)
+            .iter()
+            .any(|body| body.contains(".deanon") || tainted.iter().any(|t| mentions(body, t)));
+        if leaks {
+            let line = source[..m.start()].matches('\n').count() + 1;
+            let callee: String = call.trim_end_matches('(').split_whitespace().collect();
+            found.push(format!("{callee} (line {line})"));
+        }
+    }
+    found
+}
+
+/// The expressions given as a message's text in a send's arguments:
+/// `body:`/`Body:` (framework, Twilio), `MessageBody:` (End User Messaging),
+/// `Message:` (SNS), or the shorthand `{ body }`.
+fn message_bodies(args: &str) -> Vec<String> {
+    static KEY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let key = KEY.get_or_init(|| {
+        regex::Regex::new(r"(?:^|[{,\s])(?:body|Body|MessageBody|Message)\s*(:|[,}])")
+            .expect("body key pattern")
+    });
+    let mut out = Vec::new();
+    for c in key.captures_iter(args) {
+        let marker = c.get(1).unwrap();
+        if marker.as_str() != ":" {
+            out.push("body".to_string());
+            continue;
+        }
+        // The value runs to the next top-level comma or the object's end.
+        let rest = &args[marker.end()..];
+        let mut depth = 0i32;
+        let mut end = rest.len();
+        let mut in_template = false;
+        for (i, ch) in rest.char_indices() {
+            match ch {
+                '`' => in_template = !in_template,
+                '(' | '[' | '{' => depth += 1,
+                ')' | ']' | '}' if depth > 0 => depth -= 1,
+                '}' | ')' if depth == 0 && !in_template => {
+                    end = i;
+                    break;
+                }
+                ',' if depth == 0 && !in_template => {
+                    end = i;
+                    break;
+                }
+                _ => {}
+            }
+        }
+        out.push(rest[..end].trim().to_string());
+    }
+    out
+}
+
+/// Whether `text` uses the identifier `name` (not as part of a longer one).
+fn mentions(text: &str, name: &str) -> bool {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_' || c == '$';
+    text.match_indices(name).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + name.len()..].chars().next();
+        !before.is_some_and(|c| is_ident(c) || c == '.') && !after.is_some_and(is_ident)
+    })
+}
+
+/// Production TypeScript files, relative path and text, for per-file checks.
+fn production_files(project_path: &Path) -> Vec<(String, String)> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, String)>) {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = entry.file_name().to_string_lossy().to_string();
+            if path.is_dir() {
+                if !NON_PRODUCTION_DIRS.contains(&name.as_str()) {
+                    walk(root, &path, out);
+                }
+            } else if name.ends_with(".ts") && !name.ends_with(".test.ts") {
+                if let Ok(text) = fs::read_to_string(&path) {
+                    let rel = path.strip_prefix(root).unwrap_or(&path);
+                    out.push((rel.to_string_lossy().to_string(), text));
+                }
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(project_path, project_path, &mut out);
+    out.sort();
+    out
+}
+
+/// The instance-gateway contract the platform injects into a managed
+/// instance; a service that reads these as its own configuration is written
+/// to run as one (see [`is_managed_instance`]).
+const MANAGED_INSTANCE_MARKERS: &[&str] = &["INSTANCE_HMAC_KEY", "PLATFORM_GATEWAY_URL"];
+
+/// The module specifiers a source imports or requires, in order of appearance.
+fn imported_modules(sources: &str) -> Vec<String> {
+    static IMPORTS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = IMPORTS.get_or_init(|| {
+        regex::Regex::new(
+            r#"(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|^\s*import\s+)['"]([^'"]+)['"]"#,
+        )
+        .expect("import pattern")
+    });
+    re.captures_iter(sources)
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
+/// AI providers the sources call directly: provider SDK imports and provider
+/// key reads. Sorted and de-duplicated.
+pub(crate) fn direct_ai_providers(sources: &str) -> Vec<String> {
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            AI_PROVIDER_PACKAGES.contains(&module.as_str())
+                || module.starts_with(AI_SDK_PROVIDER_PREFIX)
+        })
+        .collect();
+    found.extend(
+        AI_PROVIDER_KEYS
+            .iter()
+            .filter(|key| sources.contains(**key))
+            .map(|key| key.to_string()),
+    );
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Provider credentials the sources read, for a managed template.
+pub(crate) fn provider_credentials_read(sources: &str) -> Vec<String> {
+    let mut found: Vec<String> = MESSAGING_PROVIDER_KEYS
+        .iter()
+        .chain(AI_PROVIDER_KEYS.iter())
+        .filter(|key| sources.contains(**key))
+        .map(|key| key.to_string())
+        .collect();
+    found.sort();
+    found
+}
+
+/// Email provider SDKs. A managed instance sends email through the platform
+/// (`createEmailClient`), which holds the SES identity and the suppression
+/// list; a provider SDK in the instance needs a credential it never gets.
+const EMAIL_PROVIDER_PACKAGES: &[&str] = &[
+    "nodemailer",
+    "@aws-sdk/client-ses",
+    "@aws-sdk/client-sesv2",
+    "@sendgrid/mail",
+    "postmark",
+    "mailgun.js",
+    "mailgun-js",
+];
+
+/// Whether a credential name belongs to an email provider (SMTP, SendGrid,
+/// Postmark, Mailgun). `email-provider-direct-in-managed` reports these, so
+/// `managed-provider-credentials` leaves them out rather than report twice.
+pub(crate) fn is_email_credential(key: &str) -> bool {
+    key.starts_with("SMTP_")
+        || key == "SENDGRID_API_KEY"
+        || key.starts_with("POSTMARK_")
+        || key.starts_with("MAILGUN_")
+}
+
+/// Email providers the sources use directly: provider SDK imports (including
+/// subpaths) and provider credential reads. Sorted and de-duplicated.
+pub(crate) fn direct_email_providers(sources: &str) -> Vec<String> {
+    static KEYS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let keys = KEYS.get_or_init(|| {
+        regex::Regex::new(
+            r"\b(?:SMTP_[A-Z0-9_]+|SENDGRID_API_KEY|POSTMARK_[A-Z0-9_]+|MAILGUN_[A-Z0-9_]+)\b",
+        )
+        .expect("email credential pattern")
+    });
+    let mut found: Vec<String> = imported_modules(sources)
+        .into_iter()
+        .filter(|module| {
+            EMAIL_PROVIDER_PACKAGES
+                .iter()
+                .any(|p| module == p || module.starts_with(&format!("{p}/")))
+        })
+        .collect();
+    found.extend(keys.find_iter(sources).map(|m| m.as_str().to_string()));
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The text of the balanced `{ … }` starting at `open` (a `{`), or to the end.
+fn balanced_object(text: &str, open: usize) -> &str {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut i = open;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 1;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'{' | b'(' | b'[' => depth += 1,
+                b'}' | b')' | b']' => {
+                    depth = depth.saturating_sub(1);
+                    if depth == 0 {
+                        return &text[open..=i];
+                    }
+                }
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    &text[open..]
+}
+
+/// The value expression after a `key:` at `start`: up to the next top-level
+/// comma or closing bracket (template literals and nested calls kept whole).
+fn property_value(text: &str, start: usize) -> &str {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut quote: Option<u8> = None;
+    let mut i = start;
+    while i < bytes.len() {
+        let c = bytes[i];
+        match quote {
+            Some(q) => {
+                if c == b'\\' {
+                    i += 1;
+                } else if c == q {
+                    quote = None;
+                }
+            }
+            None => match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'{' | b'(' | b'[' => depth += 1,
+                b'}' | b')' | b']' if depth == 0 => return &text[start..i],
+                b'}' | b')' | b']' => depth -= 1,
+                b',' | b';' if depth == 0 => return &text[start..i],
+                _ => {}
+            },
+        }
+        i += 1;
+    }
+    &text[start..]
+}
+
+/// Email sends whose subject carries a `.deanon` value, as the subject
+/// expressions found.
+///
+/// Conservative on purpose: only an object literal passed straight to an
+/// email send is read — `sendMail(…)`/`sendEmail(…)`, `.send(…)` on a
+/// receiver whose name mentions mail (`EmailClient.send`, `mailer.send`,
+/// `sgMail.send`), or `new SendEmailCommand(…)` — and only its own `subject`
+/// (SES's `Subject: { Data }` included). A body may carry what the recipient
+/// is entitled to read; a subject is shown in notification previews and mail
+/// logs, so plaintext protected data there is the finding.
+pub(crate) fn protected_data_in_email_subjects(sources: &str) -> Vec<String> {
+    static CALLS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static SUBJECT: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let calls = CALLS.get_or_init(|| {
+        regex::Regex::new(
+            r"(?:\b([A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*)\s*\.\s*(send|sendMail|sendEmail)|\bnew\s+(SendEmailCommand))\s*\(\s*\{",
+        )
+        .expect("email send pattern")
+    });
+    let subject = SUBJECT.get_or_init(|| {
+        regex::Regex::new(r#"(?:^|[{,\s])['"]?(?i:subject)['"]?\s*:"#).expect("subject pattern")
+    });
+    let mut found = Vec::new();
+    for call in calls.captures_iter(sources) {
+        let receiver = call.get(1).map(|m| m.as_str()).unwrap_or("");
+        let method = call.get(2).map(|m| m.as_str()).unwrap_or("");
+        let is_email = call.get(3).is_some()
+            || method == "sendMail"
+            || method == "sendEmail"
+            || receiver.to_ascii_lowercase().contains("mail");
+        if !is_email {
+            continue;
+        }
+        let whole = call.get(0).unwrap();
+        let object = balanced_object(sources, whole.end() - 1);
+        for m in subject.find_iter(object) {
+            let value = property_value(object, m.end()).trim();
+            if value.contains(".deanon") {
+                found.push(value.split_whitespace().collect::<Vec<_>>().join(" "));
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// Whether a project is written to run as a managed instance: its own code
+/// reads the instance-gateway contract from its own environment.
+///
+/// That is a read of `INSTANCE_HMAC_KEY` or `PLATFORM_GATEWAY_URL` as this
+/// process's configuration: `getEnvVar('…')`, `process.env.…` /
+/// `process.env['…']` (or `Bun.env`, `import.meta.env`, `Deno.env.get`), a
+/// destructure of `process.env`, or resolving the config value from the
+/// container (`tokens.INSTANCE_HMAC_KEY`, as the installed relay controllers
+/// do). `forklaunch infra add` and `init relay` write exactly these reads.
+///
+/// Comments are ignored, and so is any other mention of the names: the
+/// platform that issues the keys, relays sessions or documents the contract
+/// names them as strings (`key: 'INSTANCE_HMAC_KEY'`) but never reads them as
+/// its own configuration. A file named `relay.controller.ts` is no signal on
+/// its own either: the platform's product relay has one too.
+pub(crate) fn is_managed_instance(_project_path: &Path, sources: &str) -> bool {
+    reads_instance_gateway_contract(sources)
+}
+
+/// Whether `sources` read one of [`MANAGED_INSTANCE_MARKERS`] as their own
+/// environment configuration (see [`is_managed_instance`]).
+fn reads_instance_gateway_contract(sources: &str) -> bool {
+    static READS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let reads = READS.get_or_init(|| {
+        let names = MANAGED_INSTANCE_MARKERS.join("|");
+        regex::Regex::new(&format!(
+            concat!(
+                r#"(?:\bgetEnvVar\s*(?:<[^>]*>)?\s*\(\s*|\bDeno\.env\.get\s*\(\s*|"#,
+                r#"\b(?:process|Bun)\.env\s*\[\s*|\bimport\.meta\.env\s*\[\s*)['"`](?:{names})['"`]"#,
+                r#"|\b(?:process|Bun)\.env\.(?:{names})\b|\bimport\.meta\.env\.(?:{names})\b"#,
+                r#"|\btokens\.(?:{names})\b"#,
+                r#"|\{{[^{{}}]*\b(?:{names})\b[^{{}}]*\}}\s*=\s*(?:process|Bun)\.env\b"#,
+            ),
+            names = names
+        ))
+        .expect("gateway contract read pattern")
+    });
+    if !MANAGED_INSTANCE_MARKERS.iter().any(|m| sources.contains(m)) {
+        return false;
+    }
+    reads.is_match(&super::tenancy::strip_comments(sources))
+}
+
+/// Stripe credentials a service might read.
+const STRIPE_KEYS: &[&str] = &[
+    "STRIPE_API_KEY",
+    "STRIPE_SECRET_KEY",
+    "STRIPE_WEBHOOK_SECRET",
+];
+
+/// Stripe credentials a service depends on: a key declared as a REQUIRED
+/// config value or read straight from `process.env`, and a Stripe client built
+/// with `new Stripe(` where `createStripeClient` is never used.
+///
+/// A key declared `optional(...)` and only used outside managed mode
+/// (`createStripeClient({ Stripe, apiKey })`, or an `isManagedInstance()`
+/// branch) is fine: a hosted instance runs without it.
+pub(crate) fn managed_stripe_credentials(sources: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    for key in STRIPE_KEYS {
+        let entry = regex::Regex::new(&format!(
+            r"\b{key}\s*:\s*\{{[^{{}}]*?\btype\s*:\s*([^,\n}}]+)"
+        ))
+        .expect("stripe key entry pattern");
+        let required = entry
+            .captures_iter(sources)
+            .any(|c| !c[1].trim().starts_with("optional("));
+        let direct = regex::Regex::new(&format!(
+            r#"process\.env(?:\.{key}\b|\[\s*['"]{key}['"]\s*\])"#
+        ))
+        .expect("process.env pattern")
+        .is_match(sources);
+        if required || direct {
+            found.push(key.to_string());
+        }
+    }
+    if sources.contains("new Stripe(") && !sources.contains("createStripeClient") {
+        found.push("new Stripe(".to_string());
+    }
+    found
+}
+
+/// Signs that a service acts on Stripe webhook events.
+const STRIPE_WEBHOOK_MARKERS: &[&str] = &[
+    "stripe-signature",
+    "Stripe.Event",
+    "checkout.session.completed",
+    "invoice.payment_succeeded",
+    "customer.subscription.",
+];
+
+/// Whether the sources act on Stripe webhook events without verifying them:
+/// neither Stripe's signature (`constructEvent`) nor the platform's
+/// (`verifyPlatformEvent`, for events the platform relays) is checked.
+pub(crate) fn stripe_webhook_unverified(sources: &str) -> bool {
+    STRIPE_WEBHOOK_MARKERS.iter().any(|m| sources.contains(m))
+        && ![
+            "constructEvent(",
+            "constructEventAsync(",
+            "verifyPlatformEvent(",
+        ]
+        .iter()
+        .any(|v| sources.contains(v))
+}
+
+/// A Rust service's production sources, concatenated.
+fn read_rust_production_sources(project_path: &Path) -> String {
+    let mut out = String::new();
+    for (_, file) in rust_production_files(project_path) {
+        if let Ok(text) = fs::read_to_string(file) {
+            out.push_str(&text);
+            out.push('\n');
+        }
+    }
+    out
+}
+
+/// The Rust counterpart of `stripe_webhook_unverified`: the sources receive
+/// Stripe webhook events (they read the `stripe-signature` header or name
+/// Stripe event types) and nothing verifies one. Verification is the
+/// framework's `StripeWebhookVerifier`, a platform-relayed event checked with
+/// `PlatformEventVerifier`, or a Stripe SDK's `construct_event`.
+pub(crate) fn rust_stripe_webhook_unverified(sources: &str) -> bool {
+    let lower = sources.to_lowercase();
+    let receives = [
+        "stripe-signature",
+        "checkout.session.completed",
+        "invoice.payment_succeeded",
+        "customer.subscription.",
+    ]
+    .iter()
+    .any(|marker| lower.contains(marker));
+    receives
+        && ![
+            "StripeWebhookVerifier",
+            "PlatformEventVerifier",
+            "construct_event",
+        ]
+        .iter()
+        .any(|verifier| sources.contains(verifier))
+}
+
+/// Index of the bracket that closes a group opened just before `from`.
+fn closing_bracket(text: &str, from: usize) -> usize {
+    let mut depth = 1i32;
+    let mut quote: Option<char> = None;
+    let mut prev = ' ';
+    for (i, c) in text[from..].char_indices() {
+        if let Some(q) = quote {
+            if c == q && prev != '\\' {
+                quote = None;
+            }
+        } else {
+            match c {
+                '\'' | '"' | '`' => quote = Some(c),
+                '(' | '{' | '[' => depth += 1,
+                ')' | '}' | ']' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return from + i;
+                    }
+                }
+                _ => {}
+            }
+        }
+        prev = c;
+    }
+    text.len()
+}
+
+/// The text of a property value starting at the beginning of `rest`: a
+/// bracketed group, or everything up to the next comma or newline at its depth.
+fn stripe_property_value(rest: &str) -> &str {
+    if rest.starts_with(['{', '[', '(']) {
+        let end = closing_bracket(rest, 1);
+        return &rest[..(end + 1).min(rest.len())];
+    }
+    let mut depth = 0i32;
+    let end = rest
+        .char_indices()
+        .find(|(_, ch)| match ch {
+            '(' | '{' | '[' => {
+                depth += 1;
+                false
+            }
+            ')' | '}' | ']' => {
+                depth -= 1;
+                depth < 0
+            }
+            ',' | '\n' => depth == 0,
+            _ => false,
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(rest.len());
+    &rest[..end]
+}
+
+/// Stripe calls that send a `.deanon` value (compliant fields expose plaintext
+/// only through `.deanon`) as `metadata`, `description` or
+/// `statement_descriptor`: protected data leaving for Stripe, which signs no
+/// BAA. Heuristic: the value must be written inside the call expression, so a
+/// plaintext assigned to a variable first is not seen.
+pub(crate) fn stripe_calls_with_protected_data(sources: &str) -> Vec<String> {
+    static CALL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static FIELD: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let call = CALL.get_or_init(|| {
+        regex::Regex::new(
+            r"\b[sS]tripe\w*\s*\.\s*([A-Za-z]+(?:\s*\.\s*[A-Za-z]+)?)\s*\.\s*(create|update)\s*\(",
+        )
+        .expect("stripe call pattern")
+    });
+    let field = FIELD.get_or_init(|| {
+        regex::Regex::new(r"\b(metadata|description|statement_descriptor(?:_suffix)?)\s*:\s*")
+            .expect("stripe field pattern")
+    });
+    let mut found = Vec::new();
+    for c in call.captures_iter(sources) {
+        let open = c.get(0).unwrap().end();
+        let args = &sources[open..closing_bracket(sources, open)];
+        let leaks = field
+            .captures_iter(args)
+            .any(|f| stripe_property_value(&args[f.get(0).unwrap().end()..]).contains(".deanon"));
+        if leaks {
+            let name = format!("{}.{}", c[1].split_whitespace().collect::<String>(), &c[2]);
+            if !found.contains(&name) {
+                found.push(name);
+            }
+        }
+    }
+    found
+}
+
+/// Object-store capability as the manifest declares it, per project name.
+/// None when no manifest is found above the modules directory.
+fn declared_object_stores(modules_path: &Path) -> Option<std::collections::HashMap<String, bool>> {
+    let mut dir = modules_path.canonicalize().ok()?;
+    loop {
+        let manifest = dir.join(".forklaunch").join("manifest.toml");
+        if manifest.exists() {
+            let text = fs::read_to_string(manifest).ok()?;
+            let value: toml::Value = toml::from_str(&text).ok()?;
+            let projects = value.get("projects")?.as_array()?;
+            return Some(
+                projects
+                    .iter()
+                    .filter_map(|p| {
+                        let name = p.get("name")?.as_str()?.to_string();
+                        let declared = p
+                            .get("resources")
+                            .and_then(|r| r.get("object_store"))
+                            .and_then(|o| o.as_str())
+                            .is_some();
+                        Some((name, declared))
+                    })
+                    .collect(),
+            );
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Platform-held capabilities (payments, email, …) the manifest declares, per
+/// project name. None when no manifest is found above the modules directory.
+fn declared_capabilities(
+    modules_path: &Path,
+) -> Option<std::collections::HashMap<String, Vec<String>>> {
+    let mut dir = modules_path.canonicalize().ok()?;
+    loop {
+        let manifest = dir.join(".forklaunch").join("manifest.toml");
+        if manifest.exists() {
+            let value: toml::Value = toml::from_str(&fs::read_to_string(manifest).ok()?).ok()?;
+            return Some(
+                value
+                    .get("projects")?
+                    .as_array()?
+                    .iter()
+                    .filter_map(|p| {
+                        let name = p.get("name")?.as_str()?.to_string();
+                        let capabilities = p
+                            .get("resources")
+                            .and_then(|r| r.get("capabilities"))
+                            .and_then(|c| c.as_array())
+                            .map(|a| {
+                                a.iter()
+                                    .filter_map(|v| v.as_str().map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        Some((name, capabilities))
+                    })
+                    .collect(),
+            );
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Whether the sources use S3 at all (the framework store or the AWS SDK).
+fn uses_object_store(sources: &str) -> bool {
+    sources.contains("@forklaunch/infrastructure-s3") || sources.contains("@aws-sdk/client-s3")
+}
+
+/// Long-lived storage credentials the sources read instead of the task role.
+///
+/// `S3_ACCESS_KEY_ID` is fine when it only reaches `s3ClientConfig`, which
+/// passes keys only when both are set (local MinIO) and otherwise leaves the
+/// default credential chain to the task role. Reading the raw AWS keys is
+/// never fine. Naming one is not reading it: a comment, a list of variables to
+/// keep out of a child process and a generated program all mention the name
+/// and take nothing from the environment.
+pub(crate) fn static_storage_credentials(sources: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    if sources.contains("S3_ACCESS_KEY_ID") && !sources.contains("s3ClientConfig(") {
+        found.push("S3_ACCESS_KEY_ID".to_string());
+    }
+    let code = super::tenancy::strip_comments(sources);
+    for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] {
+        if reads_env_key(&code, key) {
+            found.push(key.to_string());
+        }
+    }
+    found
+}
+
+/// Whether code takes `key` from the environment or hands it to a client:
+/// `process.env.KEY`, `env['KEY']`, `getEnvVar('KEY')`, `{ KEY } = process.env`
+/// or `accessKeyId: KEY`.
+fn reads_env_key(code: &str, key: &str) -> bool {
+    regex::Regex::new(&format!(
+        r#"\benv\s*(?:\??\.\s*{key}\b|\[\s*['"`]{key}['"`]\s*\])|getEnvVar\s*\(\s*['"`]{key}['"`]|\{{[^{{}}]*\b{key}\b[^{{}}]*\}}\s*=\s*(?:process\.)?env\b|(?:accessKeyId|secretAccessKey)\s*:\s*(?:\w+\.)*{key}\b"#
+    ))
+    .expect("env key read pattern")
+    .is_match(code)
+}
+
+/// Code that makes stored files public: public ACLs, a removed public access
+/// block, or CORS open to every site.
+pub(crate) fn public_storage_access(sources: &str) -> Vec<String> {
+    static CORS_ANY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let cors_any = CORS_ANY.get_or_init(|| {
+        regex::Regex::new(r#"AllowedOrigins\s*:\s*\[\s*['"]\*['"]"#).expect("cors pattern")
+    });
+    let mut found: Vec<String> = [
+        "public-read",
+        "PutPublicAccessBlockCommand",
+        "DeletePublicAccessBlockCommand",
+    ]
+    .iter()
+    .filter(|p| sources.contains(**p))
+    .map(|p| p.to_string())
+    .collect();
+    if cors_any.is_match(sources) {
+        found.push("AllowedOrigins: ['*']".to_string());
+    }
+    found
+}
+
+/// Bucket administration done from app code. On ForkLaunch the platform owns
+/// the bucket, its policy and CORS, and the task role cannot change them.
+pub(crate) fn bucket_administration(sources: &str) -> Vec<String> {
+    [
+        "CreateBucketCommand",
+        "PutBucketPolicyCommand",
+        "DeleteBucketPolicyCommand",
+        "PutBucketCorsCommand",
+        "PutBucketAclCommand",
+    ]
+    .iter()
+    .filter(|p| sources.contains(**p))
+    .map(|p| p.to_string())
+    .collect()
+}
+
+/// Browser upload grants with no size limit: a presigned PUT that does not sign
+/// the body's length, or a presigned POST without a `content-length-range`
+/// condition. `ContentLength` on the signed command is a signed header, so
+/// storage refuses a body of any other size.
+pub(crate) fn unbounded_presigned_uploads(sources: &str) -> Vec<String> {
+    let mut found = Vec::new();
+    if has_unbounded_presigned_put(sources) {
+        found.push("getSignedUrl(PutObjectCommand)".to_string());
+    }
+    if sources.contains("createPresignedPost(") && !sources.contains("content-length-range") {
+        found.push("createPresignedPost without content-length-range".to_string());
+    }
+    found
+}
+
+const PUT_COMMAND: &str = "new PutObjectCommand(";
+
+fn has_unbounded_presigned_put(sources: &str) -> bool {
+    // Brackets inside strings and comments are not code.
+    let code = &code_shape(sources);
+    static CALL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let call = CALL
+        .get_or_init(|| regex::Regex::new(r"\bgetSignedUrl\s*\(").expect("presign call pattern"));
+    call.find_iter(code).any(|m| {
+        let arguments = parenthesised(code, m.end() - 1);
+        match arguments.find(PUT_COMMAND) {
+            Some(at) => !signs_length(arguments, at),
+            // The command is built first and passed by name.
+            None => second_argument(arguments)
+                .and_then(|name| put_command_named(&code[..m.start()], name))
+                .is_some_and(|(before, at)| !signs_length(before, at)),
+        }
+    })
+}
+
+/// Whether the `new PutObjectCommand({ ... })` at `at` always sets
+/// `ContentLength`: as a property of the object literal itself. One inside a
+/// nested expression, such as `...(prepared ? { ContentLength } : {})`, bounds
+/// only some of the grants.
+fn signs_length(code: &str, at: usize) -> bool {
+    static PROPERTY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let property = PROPERTY.get_or_init(|| {
+        regex::Regex::new(r"\bContentLength\s*[:,}]").expect("content length pattern")
+    });
+    let arguments = parenthesised(code, at + PUT_COMMAND.len() - 1);
+    property.find_iter(arguments).any(|m| {
+        let i = m.start();
+        let depth = arguments[..i]
+            .bytes()
+            .fold(0usize, |depth, byte| match byte {
+                b'(' | b'[' | b'{' => depth + 1,
+                b')' | b']' | b'}' => depth.saturating_sub(1),
+                _ => depth,
+            });
+        // `(` of the call, then `{` of the command input.
+        depth == 2
+    })
+}
+
+/// `source` with the contents of comments and string literals blanked out,
+/// byte for byte, so offsets still line up and only code is left to scan.
+fn code_shape(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    let mut in_block = false;
+    let mut in_line = false;
+    let mut in_string: Option<char> = None;
+    let blank = |out: &mut String, c: char| {
+        if c == '\n' {
+            out.push('\n');
+        } else {
+            out.extend(std::iter::repeat_n(' ', c.len_utf8()));
+        }
+    };
+    while let Some(c) = chars.next() {
+        if in_block {
+            blank(&mut out, c);
+            if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                out.push(' ');
+                in_block = false;
+            }
+        } else if in_line {
+            blank(&mut out, c);
+            in_line = c != '\n';
+        } else if let Some(quote) = in_string {
+            if c == quote {
+                out.push(c);
+                in_string = None;
+            } else {
+                blank(&mut out, c);
+                if c == '\\'
+                    && let Some(next) = chars.next()
+                {
+                    blank(&mut out, next);
+                }
+            }
+        } else if c == '/' && matches!(chars.peek(), Some('*') | Some('/')) {
+            in_block = chars.next() == Some('*');
+            in_line = !in_block;
+            out.push_str("  ");
+        } else {
+            if matches!(c, '\'' | '"' | '`') {
+                in_string = Some(c);
+            }
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// The text from an opening parenthesis to its closing one.
+fn parenthesised(code: &str, open: usize) -> &str {
+    let mut depth = 0usize;
+    for (i, byte) in code.bytes().enumerate().skip(open) {
+        match byte {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &code[open..=i];
+                }
+            }
+            _ => {}
+        }
+    }
+    &code[open..]
+}
+
+/// The second argument of a call when it is a plain name.
+fn second_argument(arguments: &str) -> Option<&str> {
+    let mut depth = 0usize;
+    let mut start = None;
+    for (i, byte) in arguments.bytes().enumerate() {
+        match byte {
+            b'(' | b'[' | b'{' => depth += 1,
+            b')' | b']' | b'}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+        let end = depth == 0 || (byte == b',' && depth == 1);
+        if end {
+            if let Some(from) = start {
+                let name = arguments[from..i].trim();
+                return (!name.is_empty()
+                    && name
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'$')))
+                .then_some(name);
+            }
+            start = Some(i + 1);
+        }
+    }
+    None
+}
+
+/// The nearest `name = new PutObjectCommand(` in `before`.
+fn put_command_named<'a>(before: &'a str, name: &str) -> Option<(&'a str, usize)> {
+    let assigned = regex::Regex::new(&format!(
+        r"\b{}(?:\s*:[^=;]+)?\s*=\s*new PutObjectCommand\(",
+        regex::escape(name)
+    ))
+    .ok()?;
+    let last = assigned.find_iter(before).last()?;
+    Some((before, last.end() - PUT_COMMAND.len()))
 }
 
 /// Any of these means the service can bind an encryption tenant. There is more
@@ -265,6 +1401,244 @@ pub(crate) fn suggest_classification(field_name: &str) -> Option<&'static str> {
     None
 }
 
+/// Container registrations that are the database itself: resolving one, or a
+/// registration whose factory depends on one, opens the ORM.
+const DATABASE_REGISTRATIONS: &[&str] = &["Orm", "EntityMgr", "EntityManager"];
+
+/// Project files that define the dependency container. They register the ORM
+/// factory (lazily) but do not open it: an entrypoint reaches the database
+/// only by resolving a registration that does, which is followed instead.
+const CONTAINER_FILES: &[&str] = &["registrations.ts", "bootstrapper.ts"];
+
+/// Text that opens or resolves the ORM in a TypeScript module, comments
+/// stripped: building one (`MikroORM.init(`, `new MikroORM(`), loading the
+/// module's ORM config (`mikro-orm.config`), or building an entity manager
+/// (`new EntityManager(`).
+fn opens_orm_directly(source: &str) -> Option<&'static str> {
+    static OPENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let opens = OPENS.get_or_init(|| {
+        regex::Regex::new(
+            r#"\bMikroORM\s*\.\s*init\b|\bnew\s+MikroORM\b|['"`][^'"`]*mikro-orm\.config(?:\.[jt]s)?['"`]|\bnew\s+EntityManager\b"#,
+        )
+        .expect("orm open pattern")
+    });
+    opens.find(source).map(|m| {
+        let text = m.as_str();
+        if text.contains("mikro-orm.config") {
+            "mikro-orm.config"
+        } else if text.contains("EntityManager") {
+            "new EntityManager"
+        } else if text.contains("init") {
+            "MikroORM.init"
+        } else {
+            "new MikroORM"
+        }
+    })
+}
+
+/// The container registrations in `registrations` (`Name: { lifetime: …,
+/// factory: ({ Dep, … }) => … }`), each with the registrations its factory
+/// destructures and whether its factory builds an ORM itself.
+fn container_registrations(
+    registrations: &str,
+) -> std::collections::HashMap<String, (Vec<String>, bool)> {
+    static ENTRY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static FACTORY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let entry = ENTRY.get_or_init(|| regex::Regex::new(r"\b([A-Za-z_$][\w$]*)\s*:\s*\{").unwrap());
+    let factory = FACTORY.get_or_init(|| {
+        regex::Regex::new(r"\bfactory\s*:\s*(?:async\s*)?\(\s*\{([^{}]*)\}").unwrap()
+    });
+    let mut out = std::collections::HashMap::new();
+    for m in entry.captures_iter(registrations) {
+        let name = m[1].to_string();
+        if out.contains_key(&name) {
+            continue;
+        }
+        let whole = m.get(0).unwrap();
+        let body = balanced_object(registrations, whole.end() - 1);
+        if !body.contains("lifetime") {
+            continue;
+        }
+        let deps = factory
+            .captures(body)
+            .map(|c| {
+                c[1].split(',')
+                    .map(|d| d.split(':').next().unwrap_or("").trim().to_string())
+                    .filter(|d| !d.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.insert(name, (deps, opens_orm_directly(body).is_some()));
+    }
+    out
+}
+
+/// Whether resolving registration `name` opens the database: it is the
+/// database, builds an ORM, or depends (transitively) on one that does.
+fn registration_opens_database(
+    name: &str,
+    registrations: &std::collections::HashMap<String, (Vec<String>, bool)>,
+    seen: &mut std::collections::HashSet<String>,
+) -> bool {
+    if DATABASE_REGISTRATIONS.contains(&name) {
+        return true;
+    }
+    if !seen.insert(name.to_string()) {
+        return false;
+    }
+    let Some((deps, builds_orm)) = registrations.get(name) else {
+        return false;
+    };
+    *builds_orm
+        || deps
+            .iter()
+            .any(|dep| registration_opens_database(dep, registrations, seen))
+}
+
+/// Project-local modules a source imports by value (`import … from './x'`,
+/// `export … from './x'`, `import('./x')`, `require('./x')`), resolved to
+/// files under `project_path`. Type-only imports load nothing at runtime and
+/// are skipped.
+fn local_imports(source: &str, from: &Path, project_path: &Path) -> Vec<std::path::PathBuf> {
+    static IMPORTS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = IMPORTS.get_or_init(|| {
+        regex::Regex::new(
+            r#"\b(?:import|export)\s+(type\s+)?(?:[^'";]*?\s+from\s*)?['"](\.{1,2}/[^'"]+)['"]|\b(?:import|require)\s*\(\s*['"](\.{1,2}/[^'"]+)['"]"#,
+        )
+        .expect("local import pattern")
+    });
+    let dir = from.parent().unwrap_or(project_path);
+    let mut out = Vec::new();
+    for c in re.captures_iter(source) {
+        if c.get(1).is_some() {
+            continue;
+        }
+        let Some(spec) = c.get(2).or_else(|| c.get(3)) else {
+            continue;
+        };
+        let base = dir.join(spec.as_str());
+        let stem = base.to_string_lossy().trim_end_matches(".js").to_string();
+        let candidates = [
+            base.clone(),
+            std::path::PathBuf::from(format!("{stem}.ts")),
+            std::path::PathBuf::from(format!("{stem}.tsx")),
+            base.join("index.ts"),
+        ];
+        if let Some(found) = candidates
+            .into_iter()
+            .find(|p| p.is_file() && p.extension().is_some_and(|e| e == "ts" || e == "tsx"))
+        {
+            out.push(found);
+        }
+    }
+    out
+}
+
+/// Just the `opened_by` of [`entrypoint_database_opening`].
+#[cfg(test)]
+pub(crate) fn entrypoint_database_access(project_path: &Path, entrypoint: &Path) -> Option<String> {
+    entrypoint_database_opening(project_path, entrypoint).map(|opening| opening.opened_by)
+}
+
+/// Where a runtime entrypoint opens the database.
+pub(crate) struct DatabaseOpening {
+    /// What shows it, as `file: marker`.
+    pub(crate) opened_by: String,
+    /// The comment-stripped source of every file on the import chain from
+    /// the entrypoint to the file that opens the database, both included.
+    /// The tenant gates may sit anywhere on it: a bootstrap module that
+    /// initializes the ORM and gates it right away covers the entrypoint.
+    pub(crate) chain_sources: Vec<String>,
+}
+
+/// Whether a runtime entrypoint opens the project's database, where (see
+/// [`DatabaseOpening`]). The entrypoint and every project-local module it
+/// imports by value are read, comments stripped; any one of them that
+/// builds the ORM (see [`opens_orm_directly`]) or resolves a container
+/// registration that is or depends on `Orm` / `EntityMgr` / `EntityManager`
+/// (`ci.resolve(tokens.Orm)`, a database `WorkerConsumer` built from
+/// `EntityMgr`, a service whose factory takes the entity manager) opens it.
+///
+/// The container files themselves are not followed: registering the ORM
+/// factory does not open it.
+pub(crate) fn entrypoint_database_opening(
+    project_path: &Path,
+    entrypoint: &Path,
+) -> Option<DatabaseOpening> {
+    static TOKENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let token = TOKENS.get_or_init(|| regex::Regex::new(r"\btokens\.([A-Za-z_$][\w$]*)").unwrap());
+    let registrations = container_registrations(
+        &CONTAINER_FILES
+            .iter()
+            .filter_map(|f| fs::read_to_string(project_path.join(f)).ok())
+            .map(|s| super::tenancy::strip_comments(&s))
+            .collect::<Vec<_>>()
+            .join("\n"),
+    );
+    let root = project_path
+        .canonicalize()
+        .unwrap_or_else(|_| project_path.to_path_buf());
+    use std::path::PathBuf;
+    /// Each file read: its comment-stripped source and the file that imported it.
+    type Read = std::collections::HashMap<PathBuf, (String, Option<PathBuf>)>;
+    /// The opener's source, then each importer's back to the entrypoint.
+    fn chain(opener: &Path, source: String, importer: Option<PathBuf>, read: &Read) -> Vec<String> {
+        let mut sources = vec![source];
+        let mut seen = std::collections::HashSet::from([opener.to_path_buf()]);
+        let mut next = importer;
+        while let Some(file) = next {
+            let Some((text, parent)) = read.get(&file).filter(|_| seen.insert(file.clone())) else {
+                break;
+            };
+            sources.push(text.clone());
+            next = parent.clone();
+        }
+        sources
+    }
+    let mut queue: Vec<(PathBuf, Option<PathBuf>)> = vec![(entrypoint.to_path_buf(), None)];
+    let mut visited = std::collections::HashSet::new();
+    let mut read = Read::default();
+    while let Some((file, importer)) = queue.pop() {
+        let canonical = file.canonicalize().unwrap_or_else(|_| file.clone());
+        if !canonical.starts_with(&root) || !visited.insert(canonical.clone()) {
+            continue;
+        }
+        let relative = canonical
+            .strip_prefix(&root)
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        if CONTAINER_FILES.contains(&relative.as_str()) {
+            continue;
+        }
+        let Ok(text) = fs::read_to_string(&canonical) else {
+            continue;
+        };
+        let source = super::tenancy::strip_comments(&text);
+        let opened_by = opens_orm_directly(&source)
+            .map(|marker| format!("{relative}: {marker}"))
+            .or_else(|| {
+                token.captures_iter(&source).find_map(|c| {
+                    let name = &c[1];
+                    registration_opens_database(name, &registrations, &mut Default::default())
+                        .then(|| format!("{relative}: tokens.{name}"))
+                })
+            });
+        if let Some(opened_by) = opened_by {
+            return Some(DatabaseOpening {
+                opened_by,
+                chain_sources: chain(&canonical, source, importer, &read),
+            });
+        }
+        queue.extend(
+            local_imports(&source, &canonical, &root)
+                .into_iter()
+                .map(|import| (import, Some(canonical.clone()))),
+        );
+        read.insert(canonical, (source, importer));
+    }
+    None
+}
+
 /// Which tenant gates an entrypoint source is missing.
 pub(crate) fn missing_tenant_gates(source: &str) -> Vec<&'static (&'static str, &'static str)> {
     TENANT_GATES
@@ -273,6 +1647,119 @@ pub(crate) fn missing_tenant_gates(source: &str) -> Vec<&'static (&'static str, 
         .collect()
 }
 
+/// Ways a service reaches WhatsApp without the platform: Meta's Cloud API
+/// host, WhatsApp/Meta token variables, and WhatsApp SDKs (Meta's, community
+/// Cloud API wrappers, and AWS End User Messaging Social itself). Sorted.
+pub(crate) fn direct_whatsapp_access(sources: &str) -> Vec<String> {
+    static TOKENS: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let tokens = TOKENS.get_or_init(|| {
+        regex::Regex::new(
+            r"\b(?:WHATSAPP_[A-Z0-9_]*(?:TOKEN|SECRET|API_KEY)|META_[A-Z0-9_]*(?:TOKEN|SECRET|APP_KEY|API_KEY))\b",
+        )
+        .expect("whatsapp token pattern")
+    });
+    let mut found: Vec<String> = tokens
+        .find_iter(sources)
+        .map(|m| m.as_str().to_string())
+        .collect();
+    if sources.contains("graph.facebook.com") {
+        found.push("graph.facebook.com".to_string());
+    }
+    found.extend(imported_modules(sources).into_iter().filter(|m| {
+        matches!(
+            m.as_str(),
+            "whatsapp"
+                | "whatsapp-cloud-api"
+                | "whatsapp-api-js"
+                | "@aws-sdk/client-socialmessaging"
+        )
+    }));
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// WhatsApp sends in one source file whose arguments carry a compliant
+/// field's plaintext (`.deanon`), directly or through a variable assigned
+/// from it. Returns `line: call` for each.
+///
+/// Only files that mention WhatsApp are read, and only calls on a
+/// WhatsApp-named receiver (`whatsapp.sendText(`, `tokens.WhatsAppClient).sendTemplate(`)
+/// or `SendWhatsAppMessageCommand(` count, so SMS or email sends with the
+/// same method names are not flagged here.
+pub(crate) fn whatsapp_protected_sends(source: &str) -> Vec<String> {
+    static SEND: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static ASSIGN: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let send = SEND.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)(?:whats_?app\w*\)?\s*\.\s*(?:sendTemplate|sendText)|SendWhatsAppMessageCommand)\s*\(",
+        )
+        .expect("whatsapp send pattern")
+    });
+    let assign = ASSIGN.get_or_init(|| {
+        regex::Regex::new(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=([^;]*)")
+            .expect("assignment pattern")
+    });
+    if !source.to_ascii_lowercase().contains("whatsapp") {
+        return Vec::new();
+    }
+    // Variables holding plaintext, followed through a few assignments.
+    let mut tainted: Vec<String> = Vec::new();
+    for _ in 0..3 {
+        for caps in assign.captures_iter(source) {
+            let name = caps[1].to_string();
+            if tainted.contains(&name) {
+                continue;
+            }
+            let rhs = &caps[2];
+            if rhs.contains(".deanon") || tainted.iter().any(|t| mentions(rhs, t)) {
+                tainted.push(name);
+            }
+        }
+    }
+    let mut found = Vec::new();
+    for m in send.find_iter(source) {
+        let args = call_args(&source[m.end()..]);
+        let leaks = args.contains(".deanon") || tainted.iter().any(|t| mentions(args, t));
+        if leaks {
+            let line = source[..m.start()].matches('\n').count() + 1;
+            let call: String = m.as_str().split_whitespace().collect();
+            found.push(format!("{line}: {}", call.trim_end_matches('(')));
+        }
+    }
+    found
+}
+
+/// The argument text of a call, from just after `(` to its matching `)`
+/// (bounded, so a broken file cannot make this scan everything).
+fn call_args(rest: &str) -> &str {
+    let mut depth = 1usize;
+    for (i, c) in rest.char_indices() {
+        if i > 4000 {
+            return &rest[..i];
+        }
+        match c {
+            '(' | '{' | '[' => depth += 1,
+            ')' | '}' | ']' => {
+                depth -= 1;
+                if depth == 0 {
+                    return &rest[..i];
+                }
+            }
+            _ => {}
+        }
+    }
+    rest
+}
+
+/// Starts a `route-scan-incomplete` finding about routes that were read but
+/// not decided (as opposed to a file that could not be parsed).
+pub(crate) const UNDECIDED_ROUTES: &str = "Declares ";
+
+/// Marks a `whatsapp-protected-data` finding on a service whose entities hold
+/// phi; the report card scores those critical.
+pub(crate) const WHATSAPP_PHI_MARKER: &str = "entities hold health data (phi)";
+
 /// Run all local checks for every project under `modules_path`.
 pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>> {
     let mut findings: Vec<LocalFinding> = Vec::new();
@@ -280,6 +1767,19 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
     if !modules_path.exists() {
         return Ok(findings);
     }
+
+    // Whether any service holds health data: a `.deanon` value texted from
+    // anywhere in the app may be it.
+    let app_has_phi = fs::read_dir(modules_path)?.flatten().any(|entry| {
+        entry.path().is_dir()
+            && (scan_entity_compliance(&entry.path())
+                .unwrap_or_default()
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"))
+                || scan_rust_entity_compliance(&entry.path())
+                    .iter()
+                    .any(|e| e.info.field_classifications.values().any(|c| c == "phi")))
+    });
 
     for entry in fs::read_dir(modules_path)? {
         let entry = entry?;
@@ -291,21 +1791,117 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
 
         let owns_persistence = project_path.join("persistence").is_dir();
 
-        // 1. Tenant-isolation wiring in every runtime entrypoint
+        // 0. Route protection, read from each route's contract. A non-public contract with no
+        //    auth method lets callers in without a credential; a route registered on the raw
+        //    application with an inline handler gets none of the framework's auth or validation.
+        let route_scan = route_analyzer::scan_routes(&project_path);
+        for file in &route_scan.unreadable {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "route-scan-incomplete".to_string(),
+                subject: file.clone(),
+                message: "Could not be fully parsed, so routes declared in it may be missing from the route list. Fix the syntax error, or check this file's routes by hand.".to_string(),
+            });
+        }
+        // Declarations the Rust reader found but could not decide, one finding per file.
+        let mut undecided: std::collections::BTreeMap<&str, Vec<&route_analyzer::UndecidedRoute>> =
+            Default::default();
+        for route in &route_scan.undecided {
+            undecided
+                .entry(route.file.as_str())
+                .or_default()
+                .push(route);
+        }
+        for (file, routes) in undecided {
+            let first = routes[0];
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "route-scan-incomplete".to_string(),
+                subject: file.to_string(),
+                message: format!(
+                    "{UNDECIDED_ROUTES}{} route(s) the offline reader could not decide, so they are missing from the route list: {} ({}:{}) because {}{}. Check {} by hand.",
+                    routes.len(),
+                    first.what,
+                    first.file,
+                    first.line,
+                    first.why,
+                    if routes.len() > 1 {
+                        format!(" (and {} more)", routes.len() - 1)
+                    } else {
+                        String::new()
+                    },
+                    if routes.len() > 1 { "them" } else { "it" },
+                ),
+            });
+        }
+        for route in route_scan.routes {
+            let at = format!(
+                "{} {} ({}:{})",
+                route.method, route.path, route.file, route.line
+            );
+            let rust = route.file.ends_with(".rs");
+            if route.missing_auth() {
+                let access = route.access.as_deref().unwrap_or("(none)");
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "route-auth-missing".to_string(),
+                    subject: at,
+                    message: if rust {
+                        format!(
+                            "Declares access '{access}' but no auth method: the contract has no .with_auth(..) and the endpoint is mounted without an authorization policy, so nothing states how callers prove who they are (the Rust framework then refuses the mount or rejects every call). Mount it with bind_authorized(policy, handler) or add .with_auth(..), or declare it #[access(Public)] if it is meant to be open."
+                        )
+                    } else {
+                        format!(
+                            "Declares access '{access}' but no auth method, so the framework lets callers in without a credential. Add an auth block (e.g. auth: jwtAuth(ROLES)) or mark the route access: 'public' if it is meant to be open."
+                        )
+                    },
+                });
+            } else if route.source == route_analyzer::RouteSource::OutsideFramework {
+                findings.push(LocalFinding {
+                    severity: Severity::Info,
+                    project: project.clone(),
+                    check: "route-outside-framework".to_string(),
+                    subject: at,
+                    message: if rust {
+                        "Registered directly on an Axum router, so ForkLaunch's access levels, auth and validation do not apply to it. Confirm it is protected some other way or is meant to be open, or declare it as a contract endpoint (#[forklaunch_core::contract::api]) and mount it on a ContractRouter.".to_string()
+                    } else {
+                        "Registered on the raw application with an inline handler, so ForkLaunch's access levels, auth and validation do not apply. Confirm it is meant to be open, or declare it with handlers.* and a contract.".to_string()
+                    },
+                });
+            }
+        }
+
+        // 1. Tenant-isolation wiring in every runtime entrypoint that opens
+        //    the database. A worker that holds no ORM (it calls the service
+        //    over HTTP) has nothing to gate; one that opens it, directly or
+        //    through a module or container registration, must gate it.
         if owns_persistence {
             for entrypoint in ENTRYPOINTS {
                 let entrypoint_path = project_path.join(entrypoint);
                 if !entrypoint_path.exists() {
                     continue;
                 }
-                let source = fs::read_to_string(&entrypoint_path)?;
-                for (_, consequence) in missing_tenant_gates(&source) {
+                let Some(opening) = entrypoint_database_opening(&project_path, &entrypoint_path)
+                else {
+                    continue;
+                };
+                // The gates count anywhere between the entrypoint and the
+                // file that opens the ORM (comments stripped).
+                let opened_by = opening.opened_by;
+                let chain = opening.chain_sources.join("\n");
+                for (_, consequence) in missing_tenant_gates(&chain) {
                     findings.push(LocalFinding {
                         severity: Severity::Warning,
                         project: project.clone(),
                         check: "tenant-isolation-wiring".to_string(),
                         subject: (*entrypoint).to_string(),
-                        message: format!("{} {}", entrypoint, consequence),
+                        message: format!(
+                            "{} {} (it opens the database: {})",
+                            entrypoint, consequence, opened_by
+                        ),
                     });
                 }
             }
@@ -428,6 +2024,442 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
                     }
                 }
             }
+
+            // 6. AI features on health data must not call a provider directly.
+            //
+            // Microsoft's, Amazon's and Google's BAAs cover only specific
+            // services, and a raw provider key sends PHI to whatever the key
+            // reaches. The model gateway only offers BAA-covered models to a
+            // HIPAA product; anything else needs its own BAA, which this check
+            // cannot see, so it asks rather than assumes.
+            let has_phi = entities.iter().any(|e| {
+                e.field_classifications
+                    .values()
+                    .any(|classification| classification == "phi")
+            });
+            if has_phi {
+                let sources = read_production_sources(&project_path);
+                let providers = direct_ai_providers(&sources);
+                if !providers.is_empty() {
+                    findings.push(LocalFinding {
+                        severity: Severity::Warning,
+                        project: project.clone(),
+                        check: "ai-provider-direct".to_string(),
+                        subject: providers.join(", "),
+                        message: format!(
+                            "entities hold health data (phi) and this service calls an AI provider directly ({}) — run `forklaunch infra add <service> models` and call models through the injected ModelGatewayClient (the managed gateway offers HIPAA products only BAA-covered models), or confirm the provider has signed a BAA covering this use",
+                            providers.join(", ")
+                        ),
+                    });
+                }
+            }
+        }
+
+        // 6b. Sensitive-field heuristics on a Rust crate's entities, read from
+        //     the `ComplianceMetadata` derive on each stored type. Whether
+        //     their classified members are bound to protected storage is
+        //     reported through `LocalEvidence`, not as a finding: source can
+        //     confirm the binding but cannot show its absence means plaintext.
+        let rust_entities = scan_rust_entity_compliance(&project_path);
+        for entity in &rust_entities {
+            // Sensitive-field heuristics, on the member names as declared.
+            let mut fields: Vec<_> = entity.info.field_classifications.iter().collect();
+            fields.sort();
+            for (field, classification) in fields {
+                if classification != "none" {
+                    continue;
+                }
+                if let Some(suggested) = suggest_classification(field) {
+                    findings.push(LocalFinding {
+                        severity: Severity::Info,
+                        project: project.clone(),
+                        check: "possible-misclassification".to_string(),
+                        subject: format!("{}.{}", entity.info.entity_name, field),
+                        message: format!(
+                            "field name suggests '{}' data but it is classified 'none' — review the classification",
+                            suggested
+                        ),
+                    });
+                }
+            }
+        }
+
+        // 7. A managed template must not ship its own provider credentials.
+        //
+        // Hosted instances never receive them: SMS/email one-time codes go
+        // through the platform's instance gateway and model calls through the
+        // model gateway, both signed with the instance's own key. A template
+        // that reads TWILIO_AUTH_TOKEN or OPENAI_API_KEY either fails on every
+        // hosted instance or carries a credential shared by every customer.
+        let project_sources = read_production_sources(&project_path);
+        if is_managed_instance(&project_path, &project_sources) {
+            let mut credentials = provider_credentials_read(&project_sources);
+            credentials.retain(|key| !is_email_credential(key));
+            if !credentials.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "managed-provider-credentials".to_string(),
+                    subject: credentials.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but reads provider credentials ({}) — hosted instances do not get them; use the platform's instance gateway for one-time codes and createModelGatewayClient for models",
+                        credentials.join(", ")
+                    ),
+                });
+            }
+
+            // Payments in a managed instance go through the platform's Stripe
+            // Connect gateway: no Stripe key in the app.
+            let stripe = managed_stripe_credentials(&project_sources);
+            if !stripe.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "payments-stripe-keys-in-managed".to_string(),
+                    subject: stripe.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but depends on Stripe credentials ({}) — a hosted instance has none; build the client with createStripeClient() (forklaunch infra add <service> payments) and declare any key optional for use outside managed mode",
+                        stripe.join(", ")
+                    ),
+                });
+            }
+
+            // 7b. Email goes through the platform, not a provider SDK or key.
+            let providers = direct_email_providers(&project_sources);
+            if !providers.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "email-provider-direct-in-managed".to_string(),
+                    subject: providers.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but sends email with its own provider ({}) — hosted instances get no mail credential; send with createEmailClient() (`forklaunch infra add <service> email`), which uses the instance's platform sending identity and suppression list",
+                        providers.join(", ")
+                    ),
+                });
+            }
+            // SMS vendor SDKs (their keys are the finding above).
+            let sms_sdks = direct_sms_providers(&project_sources);
+            if !sms_sdks.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "sms-provider-direct-in-managed".to_string(),
+                    subject: sms_sdks.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but calls an SMS vendor SDK directly ({}) — hosted instances hold no vendor credential or number; send with createSmsClient() (`forklaunch infra add <service> sms`), which the platform limits, attributes and opts out per instance",
+                        sms_sdks.join(", ")
+                    ),
+                });
+            }
+        }
+
+        // 7b. Protected data must not be texted: SMS is not a secure channel.
+        for (file, text) in production_files(&project_path) {
+            let calls = sms_sends_with_protected_data(&text);
+            if calls.is_empty() {
+                continue;
+            }
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "sms-protected-data".to_string(),
+                subject: format!("{file}: {}", calls.join(", ")),
+                message: format!(
+                    "{}a `.deanon` value (the plaintext of a compliant field) reaches an SMS body in {file} — texts are not a secure channel: carriers store them and lock screens show them. Send a sign-in link or a neutral notice instead",
+                    if app_has_phi {
+                        "health data (phi): "
+                    } else {
+                        ""
+                    }
+                ),
+            });
+        }
+
+        // 7c. Protected data in an email subject (previews, mail logs).
+        let subjects = protected_data_in_email_subjects(&project_sources);
+        if !subjects.is_empty() {
+            let has_phi = scan_entity_compliance(&project_path)
+                .unwrap_or_default()
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "email-protected-data".to_string(),
+                subject: subjects.join(", "),
+                message: format!(
+                    "{}an email subject carries a decrypted protected value ({}) — subjects show in lock-screen and notification previews and in mail logs; keep the protected detail in the body (or behind a link) and use a generic subject",
+                    if has_phi { "health data (phi): " } else { "" },
+                    subjects.join(", ")
+                ),
+            });
+        }
+
+        // 7b. WhatsApp goes through the platform, and never carries protected
+        //     data: WhatsApp is not covered by the AWS BAA and Meta signs none.
+        if is_managed_instance(&project_path, &project_sources) {
+            let direct = direct_whatsapp_access(&project_sources);
+            if !direct.is_empty() {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "whatsapp-provider-direct-in-managed".to_string(),
+                    subject: direct.join(", "),
+                    message: format!(
+                        "this service runs as a managed instance but reaches WhatsApp directly ({}) — hosted instances hold no Meta token or AWS credential; send with createWhatsAppClient() (forklaunch infra add <service> whatsapp)",
+                        direct.join(", ")
+                    ),
+                });
+            }
+        }
+        let holds_phi = entities
+            .iter()
+            .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+        for (file, text) in production_files(&project_path) {
+            for send in whatsapp_protected_sends(&text) {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "whatsapp-protected-data".to_string(),
+                    subject: format!("{file}:{send}"),
+                    message: format!(
+                        "{}a compliant field's plaintext (.deanon) is sent over WhatsApp ({file}:{send}) — WhatsApp is not covered by the AWS BAA and Meta signs no BAA; send a template that carries no protected data (a reminder to open the app) instead",
+                        if holds_phi { format!("{WHATSAPP_PHI_MARKER} and ") } else { String::new() }
+                    ),
+                });
+            }
+        }
+
+        // 7b. Voice: a managed service calls through the platform's Connect
+        //     instance (createVoiceClient), never a voice vendor of its own;
+        //     and no protected value rides along in call attributes, which
+        //     Connect keeps in its contact records.
+        let has_phi_entities = entities.iter().any(|e| {
+            e.field_classifications
+                .values()
+                .any(|classification| classification == "phi")
+        });
+        findings.extend(voice_findings(
+            &project,
+            is_managed_instance(&project_path, &project_sources),
+            has_phi_entities,
+            &project_sources,
+        ));
+
+        // 10. Stripe webhooks are acted on only after a signature check. Only
+        //     a service's own endpoints (api/) receive them: a library that
+        //     processes events its caller verified is not the receiver.
+        let receives_stripe_events = STRIPE_WEBHOOK_MARKERS
+            .iter()
+            .any(|m| read_production_sources(&project_path.join("api")).contains(m));
+        if receives_stripe_events && stripe_webhook_unverified(&project_sources) {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "stripe-webhook-unverified".to_string(),
+                subject: "webhook".to_string(),
+                message: "this service handles Stripe webhook events but never verifies a signature — check Stripe's with stripe.webhooks.constructEvent(rawBody, signature, secret), or, in managed mode, receive them as platform events verified with verifyPlatformEvent".to_string(),
+            });
+        }
+        // The same question of a Rust service's sources.
+        if rust_stripe_webhook_unverified(&read_rust_production_sources(&project_path)) {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "stripe-webhook-unverified".to_string(),
+                subject: "webhook".to_string(),
+                message: "this service handles Stripe webhook events but never verifies a signature — check the raw body against the stripe-signature header with StripeWebhookVerifier (forklaunch_core::http::stripe_webhook) before acting on the event, or, in managed mode, receive them as platform events verified with PlatformEventVerifier".to_string(),
+            });
+        }
+
+        // 11. Protected data sent to Stripe (no BAA) as metadata or text.
+        let leaks = stripe_calls_with_protected_data(&project_sources);
+        if !leaks.is_empty() {
+            let phi = entities
+                .iter()
+                .any(|e| e.field_classifications.values().any(|c| c == "phi"));
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "payments-protected-data".to_string(),
+                subject: format!("{}{}", if phi { "phi: " } else { "" }, leaks.join(", ")),
+                message: format!(
+                    "a decrypted (.deanon) value is sent to Stripe as metadata or a description ({}) — Stripe signs no BAA, and these fields are shown to anyone with dashboard access; send an opaque reference (the record id) instead",
+                    leaks.join(", ")
+                ),
+            });
+        }
+    }
+
+    // 8. Object storage: provisioned by the platform, reached with the task
+    //    role, private, and bounded when a browser uploads to it.
+    let declared = declared_object_stores(modules_path);
+    for entry in fs::read_dir(modules_path)? {
+        let project_path = entry?.path();
+        if !project_path.is_dir() {
+            continue;
+        }
+        let project = project_path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let sources = read_production_sources(&project_path);
+        let registrations =
+            fs::read_to_string(project_path.join("registrations.ts")).unwrap_or_default();
+        // A Rust crate holds what `infra add` wrote in its own sources: the
+        // object-store factory and the capability client factories.
+        let rust_root = rust_source_root(&project_path);
+        let wired = match &rust_root {
+            Some(root) => root.join("infrastructure/s3.rs").is_file(),
+            None => registrations.contains("S3ObjectStore"),
+        };
+        let rust_capabilities = rust_root
+            .as_ref()
+            .and_then(|root| fs::read_to_string(root.join("capabilities/mod.rs")).ok())
+            .unwrap_or_default();
+        if let Some(declared_in) = declared.as_ref().and_then(|d| d.get(&project)) {
+            let message = match (*declared_in, wired) {
+                (true, false) if rust_root.is_some() => Some(
+                    "the manifest declares an object store but the crate has no infrastructure/s3.rs factory — run `forklaunch infra add <service> object-store`",
+                ),
+                (false, true) if rust_root.is_some() => Some(
+                    "the crate has an infrastructure/s3.rs object store but the manifest declares no object store — the platform will not provision a bucket or grant access to one",
+                ),
+                (true, false) => Some(
+                    "the manifest declares an object store but registrations.ts registers no S3ObjectStore — the service has nothing to call it with",
+                ),
+                (false, true) => Some(
+                    "registrations.ts registers an S3ObjectStore but the manifest declares no object store — the platform will not provision a bucket or grant access to one",
+                ),
+                _ => None,
+            };
+            if let Some(message) = message {
+                findings.push(LocalFinding {
+                    severity: Severity::Warning,
+                    project: project.clone(),
+                    check: "object-store-wiring".to_string(),
+                    subject: "registrations.ts".to_string(),
+                    message: message.to_string(),
+                });
+            }
+        }
+        // 9. Platform-held capabilities: the manifest and registrations.ts agree.
+        if let Some(declared) = declared_capabilities(modules_path)
+            .as_ref()
+            .and_then(|d| d.get(&project))
+        {
+            for capability in crate::infra::capabilities::CAPABILITIES {
+                let is_declared = declared.iter().any(|c| c == capability.id);
+                // A registration only counts as the capability in a service that
+                // reads the gateway contract: billing-stripe's own keyed
+                // `StripeClient` is ordinary Stripe, not undeclared payments.
+                let factory = if capability.id == "models" {
+                    "fn models_client(".to_owned()
+                } else {
+                    format!("fn {}_client(", capability.id)
+                };
+                let registered = if rust_root.is_some() {
+                    rust_capabilities.contains(&factory)
+                } else {
+                    registrations.contains(&format!("{}:", capability.registration_key))
+                };
+                let is_wired =
+                    registered && (is_declared || is_managed_instance(&project_path, &sources));
+                // A managed template may enable the model gateway for the whole
+                // product (`managed template update --gateway-*`) and build the
+                // client by hand: the platform serves it without a manifest
+                // resource, so an undeclared one there is not a gap.
+                let template_models = capability.id == "models"
+                    && !is_declared
+                    && is_managed_instance(&project_path, &sources);
+                let message = match (is_declared, is_wired && !template_models) {
+                    (true, false) if rust_root.is_some() => Some(format!(
+                        "the manifest declares {} but capabilities/mod.rs has no {}) — the service has nothing to call it with",
+                        capability.id,
+                        factory.trim_start_matches("fn ")
+                    )),
+                    (false, true) if rust_root.is_some() => Some(format!(
+                        "capabilities/mod.rs builds {}) but the manifest does not declare {} — the platform will not provision it for this service",
+                        factory.trim_start_matches("fn "),
+                        capability.id
+                    )),
+                    (true, false) => Some(format!(
+                        "the manifest declares {} but registrations.ts registers no {} — the service has nothing to call it with",
+                        capability.id, capability.registration_key
+                    )),
+                    (false, true) => Some(format!(
+                        "registrations.ts registers {} but the manifest does not declare {} — the platform will not provision it for this service",
+                        capability.registration_key, capability.id
+                    )),
+                    _ => None,
+                };
+                if let Some(message) = message {
+                    findings.push(LocalFinding {
+                        severity: Severity::Warning,
+                        project: project.clone(),
+                        check: "capability-wiring".to_string(),
+                        subject: capability.id.to_string(),
+                        message,
+                    });
+                }
+            }
+        }
+
+        if !uses_object_store(&sources) {
+            continue;
+        }
+        let credentials = static_storage_credentials(&sources);
+        if !credentials.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-static-credentials".to_string(),
+                subject: credentials.join(", "),
+                message: format!(
+                    "the S3 client is built from long-lived keys ({}) — deployed on ForkLaunch the service's task role grants access to its own bucket; build the client with s3ClientConfig so keys are used only for local MinIO",
+                    credentials.join(", ")
+                ),
+            });
+        }
+        let public = public_storage_access(&sources);
+        if !public.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-public-access".to_string(),
+                subject: public.join(", "),
+                message: format!(
+                    "code makes stored files reachable by anyone ({}) — keep the bucket private and hand out presignDownload links instead",
+                    public.join(", ")
+                ),
+            });
+        }
+        let administration = bucket_administration(&sources);
+        if !administration.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "object-store-bucket-managed-in-app".to_string(),
+                subject: administration.join(", "),
+                message: format!(
+                    "app code administers the bucket ({}) — the platform creates the bucket and sets its policy and CORS, and the task role is not allowed to change them",
+                    administration.join(", ")
+                ),
+            });
+        }
+        let unbounded = unbounded_presigned_uploads(&sources);
+        if !unbounded.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.clone(),
+                check: "presigned-upload-unbounded".to_string(),
+                subject: unbounded.join(", "),
+                message: format!(
+                    "a browser upload grant has no size limit ({}) — use ObjectStore.presignUpload, a presigned POST that enforces maxBytes and the content type",
+                    unbounded.join(", ")
+                ),
+            });
         }
     }
 
@@ -437,6 +2469,335 @@ pub(crate) fn run_local_checks(modules_path: &Path) -> Result<Vec<LocalFinding>>
             .cmp(&(&b.project, &b.check, &b.subject, &b.message))
     });
     Ok(findings)
+}
+
+// ------------------------------------------------------------------ voice
+
+/// Voice vendor SDKs a managed service must not call itself. `twilio` counts
+/// only where the code uses its voice API: the same SDK sends SMS, and its
+/// credentials are `managed-provider-credentials`' to report.
+const VOICE_PROVIDER_PACKAGES: &[&str] = &[
+    "@aws-sdk/client-connect",
+    "@aws-sdk/client-connectcontactlens",
+    "@vonage/voice",
+    "@vonage/server-sdk",
+    "@vonage/vcr-sdk",
+];
+
+/// Signs that code uses Twilio's voice API rather than its messaging API.
+const TWILIO_VOICE_MARKERS: &[&str] = &[".calls.create(", "VoiceResponse", "twiml.voice"];
+
+/// Voice credentials and ids the platform holds (Twilio's are reported by
+/// `managed-provider-credentials`, so they are not repeated here).
+const VOICE_PROVIDER_KEYS: &[&str] = &[
+    "CONNECT_INSTANCE_ID",
+    "AMAZON_CONNECT_INSTANCE_ID",
+    "CONNECT_CONTACT_FLOW_ID",
+    "VONAGE_API_KEY",
+    "VONAGE_API_SECRET",
+    "VONAGE_APPLICATION_ID",
+    "VONAGE_PRIVATE_KEY",
+];
+
+/// Voice vendors the sources reach directly: SDK imports and credential reads.
+pub(crate) fn direct_voice_providers(sources: &str) -> Vec<String> {
+    let modules = imported_modules(sources);
+    let mut found: Vec<String> = modules
+        .iter()
+        .filter(|m| VOICE_PROVIDER_PACKAGES.contains(&m.as_str()))
+        .cloned()
+        .collect();
+    if modules.iter().any(|m| m == "twilio")
+        && TWILIO_VOICE_MARKERS
+            .iter()
+            .any(|marker| sources.contains(marker))
+    {
+        found.push("twilio (voice)".to_string());
+    }
+    found.extend(
+        VOICE_PROVIDER_KEYS
+            .iter()
+            .filter(|key| contains_word(sources, key))
+            .map(|key| key.to_string()),
+    );
+    found.sort();
+    found.dedup();
+    found
+}
+
+fn contains_word(text: &str, word: &str) -> bool {
+    text.match_indices(word).any(|(i, _)| {
+        let before = text[..i].chars().next_back();
+        let after = text[i + word.len()..].chars().next();
+        !before.is_some_and(|c| c.is_alphanumeric() || c == '_')
+            && !after.is_some_and(|c| c.is_alphanumeric() || c == '_')
+    })
+}
+
+/// The text between the bracket at `open` and its match, skipping strings
+/// and comments well enough for call arguments.
+fn balanced(text: &str, open: usize) -> Option<&str> {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut i = open;
+    let mut quote: Option<u8> = None;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if let Some(q) = quote {
+            if c == b'\\' {
+                i += 2;
+                continue;
+            }
+            if c == q {
+                quote = None;
+            }
+        } else {
+            match c {
+                b'\'' | b'"' | b'`' => quote = Some(c),
+                b'/' if bytes.get(i + 1) == Some(&b'/') => {
+                    while i < bytes.len() && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                    continue;
+                }
+                b'(' | b'{' | b'[' => depth += 1,
+                b')' | b'}' | b']' => {
+                    depth = depth.checked_sub(1)?;
+                    if depth == 0 {
+                        return text.get(open + 1..i);
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn is_ident_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '$'
+}
+
+/// Whether `expr` exposes a compliant field's plaintext (`x.deanon`).
+fn reads_deanon(expr: &str) -> bool {
+    expr.match_indices(".deanon")
+        .any(|(i, _)| !expr[i + 7..].chars().next().is_some_and(is_ident_char))
+}
+
+/// Identifiers declared from an expression that reads `.deanon`
+/// (`const diagnosis = record.diagnosis.deanon;`), one level deep.
+fn deanon_identifiers(sources: &str) -> Vec<String> {
+    static DECL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = DECL.get_or_init(|| {
+        regex::Regex::new(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=([^;\n]*)")
+            .expect("declaration pattern")
+    });
+    re.captures_iter(sources)
+        .filter(|c| reads_deanon(&c[2]))
+        .map(|c| c[1].to_string())
+        .collect()
+}
+
+/// The object expression an identifier is declared with, if it is one.
+fn declared_object<'a>(sources: &'a str, ident: &str) -> Option<&'a str> {
+    let re = regex::Regex::new(&format!(
+        r"\b(?:const|let|var)\s+{}\s*(?::[^=;]+)?=\s*\{{",
+        regex::escape(ident)
+    ))
+    .ok()?;
+    let m = re.find(sources)?;
+    balanced(sources, m.end() - 1)
+}
+
+/// The `attributes` expression of a `startOutboundCall({ … })` argument.
+fn attributes_of<'a>(sources: &'a str, argument: &'a str) -> Option<&'a str> {
+    static KEY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = KEY.get_or_init(|| {
+        regex::Regex::new(r"\battributes\b\s*(:)?\s*").expect("attributes pattern")
+    });
+    let m = re.captures(argument)?;
+    let rest = &argument[m.get(0)?.end()..];
+    if m.get(1).is_none() {
+        // Shorthand `{ to, flow, attributes }`: the variable of that name.
+        return declared_object(sources, "attributes");
+    }
+    if rest.starts_with('{') {
+        let open = argument.len() - rest.len();
+        return balanced(argument, open);
+    }
+    let ident: String = rest.chars().take_while(|c| is_ident_char(*c)).collect();
+    if ident.is_empty() {
+        // Some other expression: judge it as written.
+        return Some(rest.split([',', '}']).next().unwrap_or(rest));
+    }
+    declared_object(sources, &ident).or(Some(&rest[..ident.len()]))
+}
+
+/// Protected values passed in voice call attributes: `.deanon` reads, or
+/// identifiers declared from one, inside `startOutboundCall`'s attributes.
+pub(crate) fn voice_attribute_leaks(sources: &str) -> Vec<String> {
+    let tainted = deanon_identifiers(sources);
+    let mut found = Vec::new();
+    for (index, _) in sources.match_indices("startOutboundCall(") {
+        let open = index + "startOutboundCall".len();
+        let Some(argument) = balanced(sources, open) else {
+            continue;
+        };
+        let argument = argument.trim();
+        let argument_object = if argument.starts_with('{') {
+            balanced(argument, 0).unwrap_or(argument)
+        } else {
+            // A request built elsewhere: `startOutboundCall(request)`.
+            let ident: String = argument.chars().take_while(|c| is_ident_char(*c)).collect();
+            match declared_object(sources, &ident) {
+                Some(object) => object,
+                None => continue,
+            }
+        };
+        let Some(attributes) = attributes_of(sources, argument_object) else {
+            continue;
+        };
+        if reads_deanon(attributes) {
+            found.push(".deanon".to_string());
+        }
+        for ident in &tainted {
+            if contains_word(attributes, ident) {
+                found.push(ident.clone());
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    found
+}
+
+/// The voice checks for one project.
+fn voice_findings(
+    project: &str,
+    managed: bool,
+    has_phi_entities: bool,
+    sources: &str,
+) -> Vec<LocalFinding> {
+    let mut findings = Vec::new();
+    if managed {
+        let providers = direct_voice_providers(sources);
+        if !providers.is_empty() {
+            findings.push(LocalFinding {
+                severity: Severity::Warning,
+                project: project.to_string(),
+                check: "voice-provider-direct-in-managed".to_string(),
+                subject: providers.join(", "),
+                message: format!(
+                    "this service runs as a managed instance but calls a voice provider itself ({}) — hosted instances get no vendor credentials; place calls with createVoiceClient(), which dials through the platform's Amazon Connect under the instance's own limits",
+                    providers.join(", ")
+                ),
+            });
+        }
+    }
+    let leaks = voice_attribute_leaks(sources);
+    if !leaks.is_empty() {
+        findings.push(LocalFinding {
+            severity: Severity::Warning,
+            project: project.to_string(),
+            check: "voice-protected-data".to_string(),
+            subject: leaks.join(", "),
+            message: format!(
+                "a protected value ({}) is passed in startOutboundCall attributes{} — Amazon Connect stores contact attributes in its contact records; pass an id the contact flow looks up instead",
+                leaks.join(", "),
+                if has_phi_entities {
+                    " and this service holds health data (phi)"
+                } else {
+                    ""
+                }
+            ),
+        });
+    }
+    findings
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    #[test]
+    fn a_managed_service_calling_connect_or_twilio_voice_is_flagged() {
+        let sources = "getEnvVar('INSTANCE_HMAC_KEY');\nimport { ConnectClient } from '@aws-sdk/client-connect';\nimport twilio from 'twilio';\nclient.calls.create({ to, from, url });\nconst id = getEnvVar('CONNECT_INSTANCE_ID');";
+        let found = voice_findings("clinic", true, false, sources);
+        let f = found
+            .iter()
+            .find(|f| f.check == "voice-provider-direct-in-managed")
+            .expect("finding");
+        assert_eq!(
+            f.subject,
+            "@aws-sdk/client-connect, CONNECT_INSTANCE_ID, twilio (voice)"
+        );
+        // Not managed: an ordinary app may hold its own Connect account.
+        assert!(voice_findings("clinic", false, false, sources).is_empty());
+    }
+
+    #[test]
+    fn twilio_for_sms_and_twilio_keys_are_left_to_managed_provider_credentials() {
+        let sources = "import twilio from 'twilio';\nclient.messages.create({ to, body });\ngetEnvVar('TWILIO_AUTH_TOKEN');";
+        assert!(direct_voice_providers(sources).is_empty());
+        // Similar names are not the key.
+        assert!(direct_voice_providers("MY_CONNECT_INSTANCE_ID_OLD").is_empty());
+    }
+
+    #[test]
+    fn deanon_in_call_attributes_is_flagged_in_every_shape() {
+        let inline = "await voice.startOutboundCall({ to: p.phone.deanon, flow: 'appointment_reminder', attributes: { diagnosis: record.diagnosis.deanon } });";
+        assert_eq!(voice_attribute_leaks(inline), vec![".deanon"]);
+
+        let via_variable = "const dx = record.diagnosis.deanon;\nconst attrs = { dx, appointmentId: a.id };\nawait voice.startOutboundCall({ to, flow: 'x', attributes: attrs });";
+        assert_eq!(voice_attribute_leaks(via_variable), vec!["dx"]);
+
+        let shorthand = "const attributes = { name: patient.name.deanon };\nvoice.startOutboundCall({ to, flow, attributes });";
+        assert_eq!(voice_attribute_leaks(shorthand), vec![".deanon"]);
+
+        let request = "const request = { to, flow: 'x', attributes: { n: p.name.deanon() } };\nvoice.startOutboundCall(request);";
+        assert_eq!(voice_attribute_leaks(request), vec![".deanon"]);
+    }
+
+    #[test]
+    fn a_deanon_phone_number_in_to_is_not_a_leak() {
+        let sources = "const phone = patient.phone.deanon;\nawait voice.startOutboundCall({ to: phone, flow: 'appointment_reminder', attributes: { appointmentId: appt.id } });\nconst deanonymized = 1;";
+        assert!(voice_attribute_leaks(sources).is_empty());
+        assert!(voice_attribute_leaks("voice.startOutboundCall({ to, flow });").is_empty());
+    }
+
+    #[test]
+    fn phi_entities_make_the_leak_critical_in_the_message() {
+        let sources = "voice.startOutboundCall({ to, flow, attributes: { d: r.d.deanon } });";
+        let f = voice_findings("clinic", false, true, sources);
+        assert_eq!(f.len(), 1);
+        assert_eq!(f[0].check, "voice-protected-data");
+        assert!(f[0].message.contains("(phi)"));
+        assert!(
+            !voice_findings("clinic", false, false, sources)[0]
+                .message
+                .contains("(phi)")
+        );
+    }
+
+    #[test]
+    fn voice_checks_are_listed() {
+        for id in ["voice-provider-direct-in-managed", "voice-protected-data"] {
+            assert!(LOCAL_CHECK_IDS.contains(&id));
+        }
+    }
+}
+
+/// The source root of a Rust project crate (`lib.rs` beside `Cargo.toml`,
+/// or under `src/`); None for a TypeScript project.
+fn rust_source_root(project_path: &Path) -> Option<std::path::PathBuf> {
+    if !project_path.join("Cargo.toml").is_file() || project_path.join("registrations.ts").is_file()
+    {
+        return None;
+    }
+    [project_path.to_path_buf(), project_path.join("src")]
+        .into_iter()
+        .find(|root| root.join("lib.rs").is_file())
 }
 
 #[cfg(test)]
@@ -553,7 +2914,11 @@ mod fs_tests {
         let proj = dir.join("svc");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(proj.join("persistence")).unwrap();
-        std::fs::write(proj.join("server.ts"), "const app = express();").unwrap();
+        std::fs::write(
+            proj.join("server.ts"),
+            "const orm = ci.resolve(tokens.Orm);\nconst app = express();",
+        )
+        .unwrap();
         let findings = run_local_checks(&dir).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(
@@ -844,5 +3209,2042 @@ mod fs_tests {
             "wrapped ORM should not be flagged, got: {:?}",
             findings
         );
+    }
+}
+
+#[cfg(test)]
+mod wiring_tests {
+    use super::*;
+
+    #[test]
+    fn direct_ai_providers_finds_sdk_imports_and_keys_only() {
+        let sources = r#"
+            import OpenAI from 'openai';
+            import { createAnthropic } from "@ai-sdk/anthropic";
+            const bedrock = require('@aws-sdk/client-bedrock-runtime');
+            const key = process.env.ANTHROPIC_API_KEY;
+            import { openai_helpers } from './openai';
+            import { createModelGatewayClient } from '@forklaunch/core/http';
+        "#;
+        assert_eq!(
+            direct_ai_providers(sources),
+            vec![
+                "@ai-sdk/anthropic",
+                "@aws-sdk/client-bedrock-runtime",
+                "ANTHROPIC_API_KEY",
+                "openai"
+            ]
+        );
+        assert!(
+            direct_ai_providers(
+                "import { createModelGatewayClient } from '@forklaunch/core/http';"
+            )
+            .is_empty(),
+            "the gateway is not a direct provider"
+        );
+    }
+
+    #[test]
+    fn managed_signals_and_credentials() {
+        let dir = std::env::temp_dir().join("fl-wiring-managed-signal");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(is_managed_instance(&dir, "getEnvVar('INSTANCE_HMAC_KEY')"));
+        assert!(!is_managed_instance(&dir, "getEnvVar('DB_HOST')"));
+        // A relay controller is a signal only when it resolves the instance's
+        // own key, as the one `init relay` installs does.
+        std::fs::create_dir_all(dir.join("api/controllers")).unwrap();
+        std::fs::write(dir.join("api/controllers/relay.controller.ts"), "").unwrap();
+        assert!(!is_managed_instance(&dir, ""));
+        assert!(is_managed_instance(
+            &dir,
+            "const INSTANCE_HMAC_KEY = ci.resolve(tokens.INSTANCE_HMAC_KEY);"
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(
+            provider_credentials_read("TWILIO_AUTH_TOKEN OPENAI_API_KEY DB_HOST"),
+            vec!["OPENAI_API_KEY", "TWILIO_AUTH_TOKEN"]
+        );
+    }
+
+    fn write_phi_project(proj: &std::path::Path, service_source: &str) {
+        std::fs::create_dir_all(proj.join("persistence/entities")).unwrap();
+        std::fs::create_dir_all(proj.join("domain/services")).unwrap();
+        std::fs::write(
+            proj.join("persistence/entities/visit.entity.ts"),
+            r#"
+            export const VisitEntity = defineComplianceEntity({
+              name: 'Visit',
+              properties: {
+                id: fp.uuid().primary().compliance('none'),
+                notes: fp.text().compliance('phi')
+              }
+            });
+            "#,
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "registerEncryptor(x); ComplianceDataService; wrapEmWithTenantContext(em)",
+        )
+        .unwrap();
+        std::fs::write(proj.join("mikro-orm.config.ts"), "export default {};").unwrap();
+        std::fs::write(
+            proj.join("domain/services/summary.service.ts"),
+            service_source,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_phi_service_calling_a_provider_directly_is_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-direct");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_phi_project(
+            &dir.join("clinic"),
+            "import OpenAI from 'openai'; const c = new OpenAI({ apiKey: getEnvVar('OPENAI_API_KEY') });",
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "ai-provider-direct")
+            .unwrap_or_else(|| panic!("expected ai-provider-direct, got {:?}", findings));
+        assert!(matches!(f.severity, Severity::Warning));
+        assert_eq!(f.subject, "OPENAI_API_KEY, openai");
+        // The fix is the models capability.
+        assert!(
+            f.message.contains("forklaunch infra add <service> models"),
+            "{}",
+            f.message
+        );
+        assert!(f.message.contains("ModelGatewayClient"));
+    }
+
+    #[test]
+    fn a_phi_service_using_the_gateway_is_not_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-gateway");
+        let _ = std::fs::remove_dir_all(&dir);
+        write_phi_project(
+            &dir.join("clinic"),
+            "import { createModelGatewayClient } from '@forklaunch/core/http';",
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !findings.iter().any(|f| f.check == "ai-provider-direct"),
+            "{:?}",
+            findings
+        );
+    }
+
+    #[test]
+    fn a_non_phi_service_may_call_a_provider() {
+        let dir = std::env::temp_dir().join("fl-wiring-ai-no-phi");
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence/entities")).unwrap();
+        std::fs::write(
+            proj.join("persistence/entities/note.entity.ts"),
+            "export const N = defineComplianceEntity({ name: 'N', properties: { body: fp.text().compliance('pii') } });",
+        )
+        .unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "import OpenAI from 'openai';",
+        )
+        .unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!findings.iter().any(|f| f.check == "ai-provider-direct"));
+    }
+
+    #[test]
+    fn a_managed_template_reading_provider_credentials_is_flagged() {
+        let dir = std::env::temp_dir().join("fl-wiring-managed-creds");
+        let proj = dir.join("iam");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "const gateway = getEnvVar('PLATFORM_GATEWAY_URL'); const t = getEnvVar('TWILIO_AUTH_TOKEN');",
+        )
+        .unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "managed-provider-credentials")
+            .unwrap_or_else(|| panic!("expected the finding, got {:?}", findings));
+        assert_eq!(f.subject, "TWILIO_AUTH_TOKEN");
+    }
+
+    #[test]
+    fn an_ordinary_app_reading_twilio_is_not_a_managed_finding() {
+        let dir = std::env::temp_dir().join("fl-wiring-unmanaged-creds");
+        let proj = dir.join("messaging");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(
+            proj.join("registrations.ts"),
+            "getEnvVar('TWILIO_AUTH_TOKEN')",
+        )
+        .unwrap();
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.check == "managed-provider-credentials")
+        );
+    }
+}
+
+#[cfg(test)]
+mod payments_tests {
+    use super::*;
+
+    #[test]
+    fn required_or_direct_stripe_keys_are_found_optional_ones_are_not() {
+        let required = "STRIPE_API_KEY: {\n lifetime: Lifetime.Singleton,\n type: string,\n value: getEnvVar('STRIPE_API_KEY') }";
+        assert_eq!(managed_stripe_credentials(required), vec!["STRIPE_API_KEY"]);
+        let optional = "STRIPE_API_KEY: {\n\t\tlifetime: Lifetime.Singleton,\n\t\ttype: optional(string),\n\t\tvalue: getEnvVar(\"STRIPE_API_KEY\") }\n factory: ({ STRIPE_API_KEY }) => createStripeClient({ Stripe, apiKey: STRIPE_API_KEY })";
+        assert!(managed_stripe_credentials(optional).is_empty());
+        assert_eq!(
+            managed_stripe_credentials("const s = new Stripe(process.env['STRIPE_SECRET_KEY']);"),
+            vec!["STRIPE_SECRET_KEY", "new Stripe("]
+        );
+        // The blueprint's managed branch.
+        assert!(
+            managed_stripe_credentials(
+                "isManagedInstance() ? createStripeClient({ Stripe }) : new Stripe(STRIPE_API_KEY!)"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn webhooks_need_a_signature_check() {
+        assert!(stripe_webhook_unverified(
+            "const event = req.body as Stripe.Event; await handle(event);"
+        ));
+        assert!(!stripe_webhook_unverified(
+            "stripe.webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret)"
+        ));
+        assert!(!stripe_webhook_unverified(
+            "case 'checkout.session.completed': …; verifyPlatformEvent({ method, path, headers, body })"
+        ));
+        assert!(!stripe_webhook_unverified(
+            "await stripe.customers.create({ email })"
+        ));
+    }
+
+    #[test]
+    fn deanon_values_inside_stripe_calls_are_found() {
+        let leak = "await this.stripeClient.checkout.sessions.create({\n  mode: 'payment',\n  metadata: { patient: patient.fullName.deanon, visit: visit.id },\n  line_items\n});";
+        assert_eq!(
+            stripe_calls_with_protected_data(leak),
+            vec!["checkout.sessions.create"]
+        );
+        let description = "stripe.paymentIntents.create({ amount, description: `Visit for ${p.diagnosis.deanon}`, currency })";
+        assert_eq!(
+            stripe_calls_with_protected_data(description),
+            vec!["paymentIntents.create"]
+        );
+        // An opaque id is fine, and .deanon elsewhere in the call is not metadata.
+        let fine =
+            "stripe.customers.create({ email: user.email.deanon, metadata: { userId: user.id } })";
+        assert!(stripe_calls_with_protected_data(fine).is_empty());
+        let outside =
+            "const n = p.name.deanon;\nstripe.customers.create({ metadata: { ref: p.id } });";
+        assert!(stripe_calls_with_protected_data(outside).is_empty());
+    }
+
+    fn project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-payments-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let p = dir.join("clinic").join(path);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &std::path::Path) -> Vec<(String, String)> {
+        let out = run_local_checks(dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check.starts_with("payments") || f.check.starts_with("stripe"))
+            .map(|f| (f.check, f.subject))
+            .collect();
+        let _ = std::fs::remove_dir_all(dir);
+        out
+    }
+
+    #[test]
+    fn a_managed_service_with_a_required_stripe_key_is_flagged() {
+        let dir = project(
+            "library-events",
+            &[(
+                "services/webhook.service.ts",
+                "handle(event: Stripe.Event) { switch (event.type) { case 'checkout.session.completed': } }",
+            )],
+        );
+        assert!(
+            found(&dir).is_empty(),
+            "a library is not the webhook receiver"
+        );
+        let dir = project(
+            "unverified-route",
+            &[(
+                "api/controllers/webhook.controller.ts",
+                "const event = req.body as Stripe.Event; await service.handle(event);",
+            )],
+        );
+        assert_eq!(
+            found(&dir),
+            vec![(
+                "stripe-webhook-unverified".to_string(),
+                "webhook".to_string()
+            )]
+        );
+        let dir = project(
+            "managed-key",
+            &[(
+                "registrations.ts",
+                "getEnvVar('INSTANCE_HMAC_KEY'); STRIPE_API_KEY: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('STRIPE_API_KEY') }",
+            )],
+        );
+        assert_eq!(
+            found(&dir),
+            vec![(
+                "payments-stripe-keys-in-managed".to_string(),
+                "STRIPE_API_KEY".to_string()
+            )]
+        );
+        // Not managed: a key is how Stripe is reached.
+        let dir = project(
+            "unmanaged-key",
+            &[(
+                "registrations.ts",
+                "STRIPE_API_KEY: { lifetime: Lifetime.Singleton, type: string, value: getEnvVar('STRIPE_API_KEY') }",
+            )],
+        );
+        assert!(found(&dir).is_empty());
+    }
+
+    #[test]
+    fn protected_data_is_critical_only_when_the_service_holds_phi() {
+        let service = "await stripe.customers.create({ metadata: { dob: patient.dob.deanon } });";
+        let phi = project(
+            "phi",
+            &[
+                ("domain/services/pay.service.ts", service),
+                (
+                    "persistence/entities/patient.entity.ts",
+                    "export const P = defineComplianceEntity({ name: 'P', properties: { dob: fp.string().compliance('phi') } });",
+                ),
+            ],
+        );
+        assert_eq!(
+            found(&phi),
+            vec![(
+                "payments-protected-data".to_string(),
+                "phi: customers.create".to_string()
+            )]
+        );
+        let pii = project("pii", &[("domain/services/pay.service.ts", service)]);
+        assert_eq!(
+            found(&pii),
+            vec![(
+                "payments-protected-data".to_string(),
+                "customers.create".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn a_keyed_stripe_client_outside_managed_mode_is_not_undeclared_payments() {
+        let write = |name: &str, registrations: &str| {
+            let root = std::env::temp_dir().join(format!("fl-payments-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            std::fs::create_dir_all(root.join("src/modules/billing")).unwrap();
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                "app_name = \"demo\"\n\n[[projects]]\nname = \"billing\"\n[projects.resources]\ncache = \"redis\"\n",
+            )
+            .unwrap();
+            std::fs::write(
+                root.join("src/modules/billing/registrations.ts"),
+                registrations,
+            )
+            .unwrap();
+            let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring")
+                .map(|f| f.subject)
+                .collect();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        assert!(
+            write(
+                "plain",
+                "StripeClient: { factory: ({ STRIPE_API_KEY }) => new Stripe(STRIPE_API_KEY) }"
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            write(
+                "managed",
+                "getEnvVar('INSTANCE_HMAC_KEY'); StripeClient: { factory: () => createStripeClient({ Stripe }) }"
+            ),
+            vec!["payments"]
+        );
+    }
+
+    #[test]
+    fn a_rust_crate_is_wired_by_the_factories_infra_add_writes() {
+        let write = |name: &str, files: &[(&str, &str)]| {
+            let root = std::env::temp_dir().join(format!("fl-rust-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            let crate_dir = root.join("src/modules/notes");
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                "app_name = \"demo\"\n\n[[projects]]\nname = \"notes\"\n[projects.resources]\nobject_store = \"s3\"\ncapabilities = [\"models\", \"email\"]\n",
+            )
+            .unwrap();
+            for (path, text) in [
+                ("Cargo.toml", "[package]\nname = \"notes\"\n"),
+                ("lib.rs", "pub mod capabilities;\n"),
+            ]
+            .iter()
+            .chain(files)
+            {
+                std::fs::create_dir_all(crate_dir.join(path).parent().unwrap()).unwrap();
+                std::fs::write(crate_dir.join(path), text).unwrap();
+            }
+            let mut checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring" || f.check == "object-store-wiring")
+                .map(|f| format!("{}:{}", f.check, f.subject))
+                .collect();
+            checks.sort();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let module =
+            "pub fn email_client() -> X { todo!() }\npub fn models_client() -> Y { todo!() }\n";
+        assert!(
+            write(
+                "wired",
+                &[
+                    ("capabilities/mod.rs", module),
+                    ("infrastructure/s3.rs", "")
+                ]
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            write("unwired", &[]),
+            vec![
+                "capability-wiring:email",
+                "capability-wiring:models",
+                "object-store-wiring:registrations.ts"
+            ]
+        );
+    }
+
+    #[test]
+    fn capability_wiring_covers_models() {
+        let write = |name: &str, capabilities: &str, registrations: &str| {
+            let root = std::env::temp_dir().join(format!("fl-models-wiring-{name}"));
+            let _ = std::fs::remove_dir_all(&root);
+            std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+            std::fs::create_dir_all(root.join("src/modules/intake")).unwrap();
+            std::fs::write(
+                root.join(".forklaunch/manifest.toml"),
+                format!("app_name = \"demo\"\n\n[[projects]]\nname = \"intake\"\n[projects.resources]\n{capabilities}"),
+            )
+            .unwrap();
+            std::fs::write(
+                root.join("src/modules/intake/registrations.ts"),
+                registrations,
+            )
+            .unwrap();
+            let checks: Vec<String> = run_local_checks(&root.join("src/modules"))
+                .unwrap()
+                .into_iter()
+                .filter(|f| f.check == "capability-wiring")
+                .map(|f| f.subject)
+                .collect();
+            let _ = std::fs::remove_dir_all(&root);
+            checks
+        };
+        let wired = "getEnvVar('INSTANCE_HMAC_KEY'); ModelGatewayClient: { factory: () => createModelGatewayClient() }";
+        // Declared and wired: nothing to say.
+        assert!(write("ok", "capabilities = [\"models\"]\n", wired).is_empty());
+        // Declared, not wired.
+        assert_eq!(
+            write(
+                "unwired",
+                "capabilities = [\"models\"]\n",
+                "getEnvVar('PORT');"
+            ),
+            vec!["models"]
+        );
+        // A managed template that builds the client by hand is served by the
+        // template's model gateway settings, not a manifest resource.
+        assert!(write("template", "cache = \"redis\"\n", wired).is_empty());
+        // Outside managed mode an undeclared client is not a capability.
+        assert!(
+            write(
+                "plain",
+                "cache = \"redis\"\n",
+                "ModelGatewayClient: { factory: () => createModelGatewayClient() }"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn payments_checks_are_listed() {
+        for id in [
+            "payments-stripe-keys-in-managed",
+            "stripe-webhook-unverified",
+            "payments-protected-data",
+        ] {
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod object_store_tests {
+    use super::*;
+
+    fn app(
+        name: &str,
+        manifest_object_store: bool,
+        registrations: &str,
+        extra: &str,
+    ) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("fl-object-store-{name}"));
+        let _ = std::fs::remove_dir_all(&root);
+        let modules = root.join("src/modules");
+        let service = modules.join("files");
+        std::fs::create_dir_all(root.join(".forklaunch")).unwrap();
+        std::fs::create_dir_all(&service).unwrap();
+        let resources = if manifest_object_store {
+            "[projects.resources]\nobject_store = \"s3\"\n"
+        } else {
+            "[projects.resources]\ndatabase = \"postgresql\"\n"
+        };
+        std::fs::write(
+            root.join(".forklaunch/manifest.toml"),
+            format!("app_name = \"demo\"\n\n[[projects]]\nname = \"files\"\n{resources}"),
+        )
+        .unwrap();
+        std::fs::write(service.join("registrations.ts"), registrations).unwrap();
+        std::fs::write(service.join("uploads.ts"), extra).unwrap();
+        modules
+    }
+
+    const KEYLESS: &str = "import { S3ObjectStore, s3ClientConfig } from '@forklaunch/infrastructure-s3';\n\
+        new S3ObjectStore(otel, { bucket: S3_BUCKET, clientConfig: s3ClientConfig({ url: S3_URL, region: S3_REGION, accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY }) });";
+
+    fn checks(modules: &std::path::Path) -> Vec<String> {
+        run_local_checks(modules)
+            .unwrap()
+            .into_iter()
+            .filter(|f| {
+                f.check.starts_with("object-store") || f.check == "presigned-upload-unbounded"
+            })
+            .map(|f| f.check)
+            .collect()
+    }
+
+    #[test]
+    fn keyless_declared_and_wired_store_is_clean() {
+        let modules = app(
+            "clean",
+            true,
+            KEYLESS,
+            "await store.presignUpload(key, { contentType, maxBytes: 1000 });",
+        );
+        assert!(checks(&modules).is_empty(), "{:?}", checks(&modules));
+    }
+
+    #[test]
+    fn declared_and_wired_must_agree() {
+        let modules = app("undeclared", false, KEYLESS, "");
+        assert_eq!(checks(&modules), vec!["object-store-wiring"]);
+        let modules = app("unwired", true, "export {}", "");
+        assert_eq!(checks(&modules), vec!["object-store-wiring"]);
+    }
+
+    #[test]
+    fn static_keys_are_flagged_unless_behind_s3_client_config() {
+        let old = "import { S3ObjectStore } from '@forklaunch/infrastructure-s3';\n\
+            new S3ObjectStore(otel, { bucket: S3_BUCKET, clientConfig: { credentials: { accessKeyId: S3_ACCESS_KEY_ID, secretAccessKey: S3_SECRET_ACCESS_KEY } } });";
+        let modules = app("static", true, old, "");
+        assert_eq!(checks(&modules), vec!["object-store-static-credentials"]);
+        assert_eq!(
+            static_storage_credentials(
+                "import '@aws-sdk/client-s3'; process.env.AWS_SECRET_ACCESS_KEY"
+            ),
+            vec!["AWS_SECRET_ACCESS_KEY"]
+        );
+    }
+
+    #[test]
+    fn public_access_bucket_admin_and_unbounded_uploads() {
+        let code = "import { PutBucketCorsCommand, PutObjectCommand } from '@aws-sdk/client-s3';\n\
+            await s3.send(new PutObjectCommand({ Bucket, Key, ACL: 'public-read' }));\n\
+            await s3.send(new PutBucketCorsCommand({ CORSConfiguration: { CORSRules: [{ AllowedOrigins: ['*'] }] } }));\n\
+            const url = await getSignedUrl(s3, new PutObjectCommand({ Bucket, Key }), { expiresIn: 3600 });";
+        let modules = app("risky", true, KEYLESS, code);
+        let mut found = checks(&modules);
+        found.sort();
+        assert_eq!(
+            found,
+            vec![
+                "object-store-bucket-managed-in-app",
+                "object-store-public-access",
+                "presigned-upload-unbounded"
+            ]
+        );
+        assert_eq!(
+            public_storage_access(code),
+            vec!["public-read", "AllowedOrigins: ['*']"]
+        );
+        assert_eq!(
+            unbounded_presigned_uploads("createPresignedPost(s3, { Bucket, Key })"),
+            vec!["createPresignedPost without content-length-range"]
+        );
+        assert!(
+            unbounded_presigned_uploads(
+                "createPresignedPost(s3, { Conditions: [['content-length-range', 1, 10]] })"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_key_name_that_is_only_mentioned_is_not_a_read() {
+        for mentioned in [
+            "// the SDK prefers AWS_ACCESS_KEY_ID to the task role",
+            "const DENIED = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];",
+            "if (requirement.name === 'AWS_SECRET_ACCESS_KEY') continue;",
+            "lines.push('{ name: \"AWS_ACCESS_KEY_ID\", value: \"test\" },');",
+            "// Do not use process.env.AWS_ACCESS_KEY_ID here: the task role signs.",
+            "/* const { AWS_ACCESS_KEY_ID } = process.env; */",
+        ] {
+            assert!(
+                static_storage_credentials(mentioned).is_empty(),
+                "{mentioned}"
+            );
+        }
+        for read in [
+            "const id = process.env.AWS_ACCESS_KEY_ID;",
+            "const id = process.env['AWS_ACCESS_KEY_ID'];",
+            "value: getEnvVar('AWS_ACCESS_KEY_ID')",
+            "value: getEnvVar ( 'AWS_ACCESS_KEY_ID' )",
+            "const id = process.env?.AWS_ACCESS_KEY_ID;",
+            "const { AWS_ACCESS_KEY_ID, AWS_REGION } = process.env;",
+            "new S3Client({ credentials: { accessKeyId: config.AWS_ACCESS_KEY_ID } });",
+            "new S3Client({ credentials: { accessKeyId: AWS_ACCESS_KEY_ID } });",
+        ] {
+            assert_eq!(
+                static_storage_credentials(read),
+                vec!["AWS_ACCESS_KEY_ID"],
+                "{read}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_presigned_put_is_bounded_only_when_it_signs_the_length() {
+        let bounded = "const url = await getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLength: bytes, ChecksumSHA256: sum }), { expiresIn: 60 });";
+        assert!(unbounded_presigned_uploads(bounded).is_empty());
+        let by_name = "const command = new PutObjectCommand({ Bucket, Key, ContentLength: bytes });\n\
+            const url = await getSignedUrl(s3, command, { expiresIn: 60 });";
+        assert!(unbounded_presigned_uploads(by_name).is_empty());
+        for unbounded in [
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key }), { expiresIn: 3600 })",
+            // Built first and passed by name.
+            "const command = new PutObjectCommand({ Bucket, Key, ContentType: 'application/gzip' });\nconst url = await getSignedUrl(s3 as Parameters<typeof getSignedUrl>[0], command, { expiresIn: 3600 });",
+            // A bounded grant does not excuse another one.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLength: n }));\ngetSignedUrl(s3, new PutObjectCommand({ Bucket, Key }));",
+            // A comment is not a limit.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key /* ContentLength: n */ }))",
+        ] {
+            assert_eq!(
+                unbounded_presigned_uploads(unbounded),
+                vec!["getSignedUrl(PutObjectCommand)"],
+                "{unbounded}"
+            );
+        }
+        let download =
+            "const command = new GetObjectCommand({ Bucket, Key });\ngetSignedUrl(s3, command);";
+        assert!(unbounded_presigned_uploads(download).is_empty());
+    }
+
+    #[test]
+    fn a_length_signed_on_some_grants_only_does_not_bound_the_others() {
+        // The shape of a release upload: the length is signed only for a
+        // prepared artifact, so every other grant takes a body of any size.
+        let conditional = "const command = new PutObjectCommand({\n  Bucket: bucketName,\n  Key: s3Key,\n  ContentType: 'application/gzip',\n  ...(prepared\n    ? { ChecksumSHA256: sum, ContentLength: prepared.artifact.artifactBytes, IfNoneMatch: '*' }\n    : {})\n});\nconst uploadUrl = await getSignedUrl(s3Client as Parameters<typeof getSignedUrl>[0], command, { expiresIn: 3600 });";
+        assert_eq!(
+            unbounded_presigned_uploads(conditional),
+            vec!["getSignedUrl(PutObjectCommand)"]
+        );
+        let typed = "const command: PutObjectCommand = new PutObjectCommand({ Bucket, Key, ContentType, ContentLength: approval.sourceBytes, ChecksumSHA256: Buffer.from(sum, 'hex').toString('base64') });\nconst url = await getSignedUrl(s3, command, { expiresIn: 900 });";
+        assert!(unbounded_presigned_uploads(typed).is_empty());
+        for unbounded in [
+            // Object metadata is not the signed body length.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, Metadata: { ContentLength: String(n) } }))",
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLengthHint: n }))",
+            // A bracket in a string does not end the call early.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key: '(' }), { expiresIn: 60 });\nconst note = 'ContentLength: n';",
+        ] {
+            assert_eq!(
+                unbounded_presigned_uploads(unbounded),
+                vec!["getSignedUrl(PutObjectCommand)"],
+                "{unbounded}"
+            );
+        }
+        let quoted_brace =
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key: '{', ContentLength: n }))";
+        assert!(unbounded_presigned_uploads(quoted_brace).is_empty());
+        let shorthand = "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLength }))";
+        assert!(unbounded_presigned_uploads(shorthand).is_empty());
+        // The nearest command of that name is the one signed.
+        let reassigned = "let command = new PutObjectCommand({ Bucket, Key, ContentLength: n });\nawait getSignedUrl(s3, command);\ncommand = new PutObjectCommand({ Bucket, Key });\nawait getSignedUrl(s3, command);";
+        assert_eq!(
+            unbounded_presigned_uploads(reassigned),
+            vec!["getSignedUrl(PutObjectCommand)"]
+        );
+    }
+
+    #[test]
+    fn real_static_key_clients_still_fail() {
+        for client in [
+            // A typed env schema, destructured, handed to the client.
+            "const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } = EnvSchema.parse(process.env);\nnew S3Client({ credentials: { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY } });",
+            "new S3Client({ region, credentials: { accessKeyId: process.env.AWS_ACCESS_KEY_ID!, secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY! } });",
+            "AWS_ACCESS_KEY_ID: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar(\"AWS_ACCESS_KEY_ID\") },\nAWS_SECRET_ACCESS_KEY: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar(\"AWS_SECRET_ACCESS_KEY\") },",
+            "const accessKeyId = env.AWS_ACCESS_KEY_ID?.trim();\nconst secretAccessKey = env.AWS_SECRET_ACCESS_KEY?.trim();",
+        ] {
+            assert_eq!(
+                static_storage_credentials(client),
+                vec!["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+                "{client}"
+            );
+        }
+        // Handing keys to a child process is not reading them from this one.
+        let child_env = "spawn(cmd, { env: { AWS_ACCESS_KEY_ID: creds.accessKeyId, AWS_SECRET_ACCESS_KEY: creds.secretAccessKey } });";
+        assert!(static_storage_credentials(child_env).is_empty());
+    }
+
+    #[test]
+    fn object_store_checks_score_through_the_report_card() {
+        for id in [
+            "object-store-wiring",
+            "object-store-static-credentials",
+            "object-store-public-access",
+            "object-store-bucket-managed-in-app",
+            "presigned-upload-unbounded",
+        ] {
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod email_tests {
+    use super::*;
+
+    fn project(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-email-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = dir.join("svc").join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &std::path::Path) -> Vec<(String, String)> {
+        let findings = run_local_checks(dir).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+        findings
+            .into_iter()
+            .filter(|f| f.check.starts_with("email-") || f.check == "managed-provider-credentials")
+            .map(|f| (f.check, f.subject))
+            .collect()
+    }
+
+    const MANAGED: &str = "getEnvVar('INSTANCE_HMAC_KEY');\n";
+
+    #[test]
+    fn a_managed_service_with_its_own_mail_provider_is_flagged_once() {
+        let dir = project(
+            "direct",
+            &[(
+                "registrations.ts",
+                &format!(
+                    "{MANAGED}import nodemailer from 'nodemailer';\nimport {{ SESv2Client }} from '@aws-sdk/client-sesv2';\nconst key = getEnvVar('SENDGRID_API_KEY'); const host = getEnvVar('SMTP_HOST');"
+                ),
+            )],
+        );
+        assert_eq!(
+            found(&dir),
+            vec![(
+                "email-provider-direct-in-managed".to_string(),
+                "@aws-sdk/client-sesv2, SENDGRID_API_KEY, SMTP_HOST, nodemailer".to_string()
+            )],
+            "SENDGRID_API_KEY is reported by the email check, not twice"
+        );
+    }
+
+    #[test]
+    fn email_credentials_leave_other_provider_credentials_to_the_generic_check() {
+        let dir = project(
+            "mixed",
+            &[(
+                "registrations.ts",
+                &format!(
+                    "{MANAGED}getEnvVar('TWILIO_AUTH_TOKEN'); getEnvVar('POSTMARK_SERVER_TOKEN');"
+                ),
+            )],
+        );
+        let mut f = found(&dir);
+        f.sort();
+        assert_eq!(
+            f,
+            vec![
+                (
+                    "email-provider-direct-in-managed".to_string(),
+                    "POSTMARK_SERVER_TOKEN".to_string()
+                ),
+                (
+                    "managed-provider-credentials".to_string(),
+                    "TWILIO_AUTH_TOKEN".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn an_unmanaged_app_or_the_platform_client_is_not_flagged() {
+        let dir = project(
+            "unmanaged",
+            &[(
+                "registrations.ts",
+                "import nodemailer from 'nodemailer'; getEnvVar('SMTP_HOST');",
+            )],
+        );
+        assert!(found(&dir).is_empty());
+        let dir = project(
+            "gateway",
+            &[(
+                "registrations.ts",
+                &format!(
+                    "{MANAGED}import {{ createEmailClient }} from '@forklaunch/core/http'; const smtpish = 'SMTP';"
+                ),
+            )],
+        );
+        assert!(found(&dir).is_empty());
+    }
+
+    #[test]
+    fn deanon_in_an_email_subject_is_flagged_and_critical_with_phi() {
+        let code = "await this.email.send({\n  to: patient.email.deanon,\n  subject: `Results for ${patient.name.deanon}, ready`,\n  text: `Hi ${patient.name.deanon}`\n});";
+        let dir = project(
+            "subject-phi",
+            &[
+                ("services/notify.ts", code),
+                (
+                    "persistence/entities/patient.entity.ts",
+                    "export const P = defineComplianceEntity({ name: 'P', properties: { diagnosis: fp.text().compliance('phi') } });",
+                ),
+            ],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "email-protected-data")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(f.subject, "`Results for ${patient.name.deanon}, ready`");
+        assert!(f.message.starts_with("health data (phi)"));
+    }
+
+    #[test]
+    fn subject_detection_is_conservative() {
+        // Recipient and body may hold the recipient's own data.
+        assert!(
+            protected_data_in_email_subjects(
+                "EmailClient.send({ to: user.email.deanon, subject: 'Welcome', html: body.deanon })"
+            )
+            .is_empty()
+        );
+        // Not an email send.
+        assert!(protected_data_in_email_subjects(
+            "res.status(200).send({ subject: row.subject.deanon }); queue.send({ subject: x.deanon })"
+        )
+        .is_empty());
+        // nodemailer and SES shapes.
+        assert_eq!(
+            protected_data_in_email_subjects(
+                "transporter.sendMail({ from, to, subject: p.ssn.deanon })"
+            ),
+            vec!["p.ssn.deanon"]
+        );
+        assert_eq!(
+            protected_data_in_email_subjects(
+                "new SendEmailCommand({ Content: { Simple: { Subject: { Data: p.name.deanon }, Body } } })"
+            ),
+            vec!["{ Data: p.name.deanon }"]
+        );
+    }
+
+    #[test]
+    fn email_checks_score_through_the_report_card() {
+        for id in ["email-provider-direct-in-managed", "email-protected-data"] {
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod sms_tests {
+    use super::*;
+
+    fn run(name: &str, files: &[(&str, &str)], phi: bool) -> Vec<LocalFinding> {
+        let dir = std::env::temp_dir().join(format!("fl-sms-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let proj = dir.join("notify");
+        for (rel, text) in files {
+            let path = proj.join(rel);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        if phi {
+            let entities = proj.join("persistence/entities");
+            std::fs::create_dir_all(&entities).unwrap();
+            std::fs::write(
+                entities.join("patient.entity.ts"),
+                "export const P = defineComplianceEntity({ name: 'P', properties: { id: fp.uuid().primary().compliance('none'), diagnosis: fp.text().compliance('phi') } });",
+            )
+            .unwrap();
+        }
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        findings
+    }
+
+    #[test]
+    fn a_managed_service_importing_an_sms_sdk_is_flagged_once_per_subject() {
+        let findings = run(
+            "sdk",
+            &[(
+                "registrations.ts",
+                "import twilio from 'twilio';\nimport { PinpointSMSVoiceV2Client } from '@aws-sdk/client-pinpoint-sms-voice-v2';\nconst k = getEnvVar('INSTANCE_HMAC_KEY'); const t = getEnvVar('TWILIO_AUTH_TOKEN');",
+            )],
+            false,
+        );
+        let sdk = findings
+            .iter()
+            .find(|f| f.check == "sms-provider-direct-in-managed")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(sdk.subject, "@aws-sdk/client-pinpoint-sms-voice-v2, twilio");
+        // The key is the credentials check's, not repeated here.
+        let keys = findings
+            .iter()
+            .find(|f| f.check == "managed-provider-credentials")
+            .unwrap();
+        assert_eq!(keys.subject, "TWILIO_AUTH_TOKEN");
+        assert!(!sdk.subject.contains("TWILIO_AUTH_TOKEN"));
+    }
+
+    #[test]
+    fn sdk_imports_outside_managed_mode_and_sns_without_phones_are_fine() {
+        let unmanaged = run(
+            "unmanaged",
+            &[("registrations.ts", "import twilio from 'twilio';")],
+            false,
+        );
+        assert!(
+            !unmanaged
+                .iter()
+                .any(|f| f.check == "sms-provider-direct-in-managed")
+        );
+        assert!(
+            direct_sms_providers(
+                "import { SNSClient } from '@aws-sdk/client-sns'; publish({ TopicArn })"
+            )
+            .is_empty()
+        );
+        assert_eq!(
+            direct_sms_providers(
+                "import { SNSClient } from '@aws-sdk/client-sns'; ({ PhoneNumber })"
+            ),
+            vec!["@aws-sdk/client-sns"]
+        );
+        assert_eq!(
+            provider_credentials_read("VONAGE_API_SECRET MESSAGEBIRD_ACCESS_KEY"),
+            vec!["MESSAGEBIRD_ACCESS_KEY", "VONAGE_API_SECRET"]
+        );
+    }
+
+    #[test]
+    fn deanon_in_an_sms_body_is_flagged_critical_with_phi() {
+        let source = "export async function remind(p: Patient) {\n  const note = `Your result: ${p.diagnosis.deanon}`;\n  await this.smsClient.send({ to: p.phone.deanon, body: note });\n}\n";
+        let findings = run(
+            "phi",
+            &[("domain/services/remind.service.ts", source)],
+            true,
+        );
+        let f = findings
+            .iter()
+            .find(|f| f.check == "sms-protected-data")
+            .unwrap_or_else(|| panic!("{findings:?}"));
+        assert_eq!(
+            f.subject,
+            "domain/services/remind.service.ts: smsClient.send (line 3)"
+        );
+        assert!(f.message.starts_with("health data"));
+        let card = crate::core::report_card::build_local_report_card(
+            "app",
+            1,
+            &findings,
+            &LocalEvidence::everything(),
+            "t".into(),
+        );
+        let json = serde_json::to_string(&card).unwrap();
+        assert!(json.contains("\"severity\":\"critical\""), "{json}");
+
+        let no_phi = run(
+            "nophi",
+            &[("domain/services/remind.service.ts", source)],
+            false,
+        );
+        let f = no_phi
+            .iter()
+            .find(|f| f.check == "sms-protected-data")
+            .unwrap();
+        assert!(!f.message.starts_with("health data"));
+    }
+
+    #[test]
+    fn protected_data_detection_follows_the_body_only() {
+        // The number is rightly plaintext; the text is neutral.
+        assert!(
+            sms_sends_with_protected_data(
+                "await sms.send({ to: user.phone.deanon, body: 'Your visit is confirmed' });"
+            )
+            .is_empty()
+        );
+        // Direct, shorthand and vendor forms.
+        assert_eq!(
+            sms_sends_with_protected_data("sms.send({ to, body: `Hi ${user.name.deanon}` });")
+                .len(),
+            1
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "const body = user.ssn.deanon;\nawait smsClient.send({ to: x, body });"
+            ),
+            vec!["smsClient.send (line 2)"]
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "import twilio from 'twilio';\nconst m = r.notes.deanon; const text = m + '!';\nclient.messages.create({ to, from, body: text });"
+            )
+            .len(),
+            1
+        );
+        assert_eq!(
+            sms_sends_with_protected_data(
+                "new SendTextMessageCommand({ DestinationPhoneNumber: to, MessageBody: r.notes.deanon })"
+            )
+            .len(),
+            1
+        );
+        // Not an SMS: email, or messages.create without twilio.
+        assert!(
+            sms_sends_with_protected_data("mailer.send({ to, body: r.notes.deanon });").is_empty()
+        );
+        assert!(
+            sms_sends_with_protected_data("openai.messages.create({ body: r.notes.deanon });")
+                .is_empty()
+        );
+        assert!(
+            sms_sends_with_protected_data(
+                "new PublishCommand({ TopicArn, Message: r.notes.deanon })"
+            )
+            .is_empty()
+        );
+        // A variable named like a tainted one is not it.
+        assert!(
+            sms_sends_with_protected_data(
+                "const secret = r.notes.deanon; sms.send({ to, body: secretary });"
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn sms_checks_are_listed_and_scored() {
+        for id in ["sms-provider-direct-in-managed", "sms-protected-data"] {
+            assert!(LOCAL_CHECK_IDS.contains(&id));
+        }
+    }
+}
+
+#[cfg(test)]
+mod whatsapp_tests {
+    use super::*;
+
+    fn service(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-whatsapp-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let full = dir.join("svc").join(path);
+            std::fs::create_dir_all(full.parent().unwrap()).unwrap();
+            std::fs::write(full, text).unwrap();
+        }
+        dir
+    }
+
+    const MANAGED: &str =
+        "const g = getEnvVar('PLATFORM_GATEWAY_URL'); const k = getEnvVar('INSTANCE_HMAC_KEY');";
+
+    #[test]
+    fn direct_meta_access_is_flagged_in_a_managed_service() {
+        assert_eq!(
+            direct_whatsapp_access(
+                "fetch(`https://graph.facebook.com/v20.0/${id}/messages`, { headers: { authorization: `Bearer ${process.env.WHATSAPP_TOKEN}` } })"
+            ),
+            vec!["WHATSAPP_TOKEN", "graph.facebook.com"]
+        );
+        assert_eq!(
+            direct_whatsapp_access(
+                "import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging'; const s = getEnvVar('META_ACCESS_TOKEN');"
+            ),
+            vec!["@aws-sdk/client-socialmessaging", "META_ACCESS_TOKEN"]
+        );
+        // The gateway client, and unrelated META_ names, are fine.
+        assert!(
+            direct_whatsapp_access(
+                "createWhatsAppClient(); const m = META_TITLE; const d = SERVICE_METADATA;"
+            )
+            .is_empty()
+        );
+
+        let dir = service(
+            "direct",
+            &[(
+                "registrations.ts",
+                &format!("{MANAGED} const t = getEnvVar('WHATSAPP_ACCESS_TOKEN');"),
+            )],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-provider-direct-in-managed")
+            .unwrap_or_else(|| panic!("expected the finding, got {findings:?}"));
+        assert_eq!(f.subject, "WHATSAPP_ACCESS_TOKEN");
+    }
+
+    #[test]
+    fn an_unmanaged_service_calling_meta_is_not_a_managed_finding() {
+        let dir = service(
+            "unmanaged",
+            &[("registrations.ts", "getEnvVar('WHATSAPP_TOKEN')")],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(
+            !findings
+                .iter()
+                .any(|f| f.check == "whatsapp-provider-direct-in-managed")
+        );
+    }
+
+    #[test]
+    fn deanon_values_reaching_a_whatsapp_send_are_found() {
+        let direct = "const whatsapp = ci.resolve(tokens.WhatsAppClient);\nawait whatsapp.sendText({ to: patient.phone.deanon, body: 'hi' });";
+        assert_eq!(
+            whatsapp_protected_sends(direct),
+            vec!["2: whatsapp.sendText"]
+        );
+
+        let through_variables = "import { createWhatsAppClient } from '@forklaunch/core/http';
+const diagnosis = record.diagnosis.deanon;
+const note = `Your result: ${diagnosis}`;
+await this.whatsappClient.sendTemplate({
+  to,
+  template: 'result_ready',
+  language: 'en_US',
+  components: [{ type: 'body', parameters: [{ type: 'text', text: note }] }]
+});";
+        assert_eq!(
+            whatsapp_protected_sends(through_variables),
+            vec!["4: whatsappClient.sendTemplate"]
+        );
+
+        let sdk = "await client.send(new SendWhatsAppMessageCommand({ originationPhoneNumberId, message: encode(p.name.deanon), metaApiVersion: 'v20.0' }));";
+        assert_eq!(
+            whatsapp_protected_sends(sdk),
+            vec!["1: SendWhatsAppMessageCommand"]
+        );
+    }
+
+    #[test]
+    fn sends_without_plaintext_and_other_channels_are_not_flagged() {
+        // A reminder that carries nothing protected.
+        let clean = "const name = patient.name.deanon;\nlog(name);\nawait whatsapp.sendTemplate({ to: phone, template: 'appointment_reminder', language: 'en_US' });";
+        assert!(whatsapp_protected_sends(clean).is_empty());
+        // Same method name on an SMS client: another feature's check.
+        let sms = "// whatsapp later\nawait sms.sendText({ to: p.phone.deanon, body: 'x' });";
+        assert!(whatsapp_protected_sends(sms).is_empty());
+        // `.name` on another object is not the tainted `name` variable.
+        let property =
+            "const name = p.name.deanon;\nawait whatsapp.sendText({ to, body: user.name });";
+        assert!(whatsapp_protected_sends(property).is_empty());
+    }
+
+    #[test]
+    fn protected_data_is_marked_phi_when_entities_hold_health_data() {
+        let entity = "import { defineComplianceEntity, fp } from '@forklaunch/core/persistence';
+export const PatientEntity = defineComplianceEntity({
+  name: 'Patient',
+  properties: {
+    diagnosis: fp.string().compliance('phi')
+  }
+});";
+        let controller = "await whatsapp.sendText({ to: p.phone, body: p.diagnosis.deanon });";
+        let dir = service(
+            "phi",
+            &[
+                ("persistence/entities/patient.entity.ts", entity),
+                ("api/controllers/notify.controller.ts", controller),
+            ],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-protected-data")
+            .unwrap_or_else(|| panic!("expected the finding, got {findings:?}"));
+        assert_eq!(
+            f.subject,
+            "api/controllers/notify.controller.ts:1: whatsapp.sendText"
+        );
+        assert!(f.message.starts_with(WHATSAPP_PHI_MARKER), "{}", f.message);
+
+        let dir = service(
+            "nophi",
+            &[("api/controllers/notify.controller.ts", controller)],
+        );
+        let findings = run_local_checks(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        let f = findings
+            .iter()
+            .find(|f| f.check == "whatsapp-protected-data")
+            .unwrap();
+        assert!(!f.message.contains(WHATSAPP_PHI_MARKER));
+    }
+
+    #[test]
+    fn whatsapp_checks_are_listed() {
+        for id in [
+            "whatsapp-provider-direct-in-managed",
+            "whatsapp-protected-data",
+        ] {
+            assert!(
+                LOCAL_CHECK_IDS.contains(&id),
+                "{id} missing from LOCAL_CHECK_IDS"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod rust_service_tests {
+    use super::*;
+
+    const CONTROLLER: &str = r#"
+#[forklaunch_core::contract::api]
+pub mod contract {
+    #[access(Authenticated)]
+    pub fn create_note() -> Endpoint<JsonBody<NoteInput>, JsonBody<Note>> {
+        Endpoint::new("Create Note", "Create a note", HttpMethod::Post, "/notes", 201).unwrap()
+    }
+    pub fn health() -> Endpoint<NoBody, JsonBody<Health>> {
+        Endpoint::new("Get Health", "Reports health", HttpMethod::Get, "/health", 200).unwrap()
+    }
+    pub fn export() -> Endpoint<NoBody, TextBody> {
+        Endpoint::new("Export", "Export", HttpMethod::Get, "/export", 200).unwrap().with_access(AccessLevel::Protected)
+    }
+}
+"#;
+    const ROUTES: &str = r#"
+use crate::api::controllers::notes::contract::{Bindings, CreateNote, Export, Health};
+pub fn mount(router: ContractRouter<AppState>, auth: &BearerSession) -> Result<ContractRouter<AppState>, String> {
+    Bindings {
+        create_note: CreateNote::bind_authorized(auth.clone(), create_note),
+        health: Health::bind(health),
+        export: Export::bind(export),
+    }
+    .mount(router)
+}
+"#;
+    const ENTITIES: &str = r#"
+#[derive(Debug, ComplianceMetadata)]
+#[compliance(entity = "Note", persisted)]
+pub struct StoredNote {
+    #[compliance(level = "none")]
+    pub id: Uuid,
+    #[compliance(level = "none")]
+    pub email: String,
+    #[compliance(level = "pii", purpose = "note-title-v1")]
+    pub title_ciphertext: ProtectedField,
+}
+#[derive(ComplianceMetadata)]
+#[compliance(entity = "SealedEvent")]
+struct QueueEnvelope {
+    #[compliance(level = "none")]
+    channel: String,
+    #[compliance(level = "phi")]
+    ciphertext: String,
+}
+"#;
+
+    fn workspace(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("fl-rust-service-checks-{name}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = dir.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        dir
+    }
+
+    fn found(dir: &Path) -> Vec<(String, String)> {
+        let mut findings: Vec<_> = run_local_checks(dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| (f.check, f.subject))
+            .collect();
+        findings.sort();
+        findings
+    }
+
+    #[test]
+    fn a_forklaunch_rust_service_is_read_for_routes_and_classifications() {
+        let dir = workspace(
+            "framework",
+            &[
+                ("notes/Cargo.toml", "[package]\nname = \"notes\"\n"),
+                ("notes/lib.rs", "pub mod api;\npub mod capabilities;\n"),
+                ("notes/capabilities/mod.rs", ""),
+                ("notes/api/controllers/notes.rs", CONTROLLER),
+                ("notes/api/routes/notes.rs", ROUTES),
+                ("notes/persistence/entities/stored_note.rs", ENTITIES),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            (
+                evidence.routes,
+                evidence.rust_routes,
+                evidence.rust_contract_routes
+            ),
+            (3, 3, 3)
+        );
+        assert_eq!((evidence.entities, evidence.rust_entities), (2, 2));
+        assert_eq!(evidence.projects, 1);
+        assert_eq!(
+            evidence.rust_unbound,
+            vec!["SealedEvent.ciphertext (notes/persistence/entities/stored_note.rs:14)"],
+            "a classified type with no protected binding is undecided, and named"
+        );
+        assert_eq!(
+            found(&dir),
+            vec![
+                (
+                    "possible-misclassification".to_string(),
+                    "Note.email".to_string()
+                ),
+                (
+                    "route-auth-missing".to_string(),
+                    "GET /export (api/controllers/notes.rs:11)".to_string()
+                ),
+            ],
+            "the authenticated route bound with a policy and the public health route pass; \
+             the protected route mounted with the public bind does not"
+        );
+        // Health data in a Rust entity counts as health data for the app.
+        let texting = workspace(
+            "phi",
+            &[
+                ("notes/persistence/entities/stored_note.rs", ENTITIES),
+                (
+                    "web/notify.ts",
+                    "await sms.send({ to, body: `Result: ${record.result.deanon}` });",
+                ),
+            ],
+        );
+        let sms = run_local_checks(&texting)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.check == "sms-protected-data")
+            .expect("the TypeScript check still runs");
+        assert!(
+            sms.message.starts_with("health data (phi)"),
+            "{}",
+            sms.message
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&texting);
+    }
+
+    #[test]
+    fn raw_axum_routes_are_outside_the_framework_and_broken_files_are_reported() {
+        let dir = workspace(
+            "axum",
+            &[
+                (
+                    "backend/api/src/main.rs",
+                    "fn app() -> Router { Router::new().route(\"/api/healthz\", get(health)).route(\"/api/users\", get(list).post(create)) }",
+                ),
+                (
+                    "backend/api/src/broken.rs",
+                    "fn app() -> Router { Router::new().route(\"/x\", ",
+                ),
+                (
+                    "backend/api/src/wrapped.rs",
+                    "fn plan() -> RouteContract { secure(RouteContract::put(\"Plan\", \"Plan\", \"/plan\")) }",
+                ),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            (
+                evidence.routes,
+                evidence.rust_routes,
+                evidence.rust_contract_routes
+            ),
+            (3, 3, 0)
+        );
+        assert_eq!((evidence.entities, evidence.projects), (0, 0));
+        assert_eq!(
+            found(&dir),
+            vec![
+                (
+                    "route-outside-framework".to_string(),
+                    "GET /api/healthz (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-outside-framework".to_string(),
+                    "GET /api/users (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-outside-framework".to_string(),
+                    "POST /api/users (api/src/main.rs:1)".to_string()
+                ),
+                (
+                    "route-scan-incomplete".to_string(),
+                    "api/src/broken.rs".to_string()
+                ),
+                (
+                    "route-scan-incomplete".to_string(),
+                    "api/src/wrapped.rs".to_string()
+                ),
+            ]
+        );
+        let undecided = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.subject == "api/src/wrapped.rs")
+            .unwrap();
+        assert!(
+            undecided
+                .message
+                .contains("PUT /plan (api/src/wrapped.rs:1)")
+                && undecided.message.contains("could not decide"),
+            "{}",
+            undecided.message
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_typescript_workspace_counts_no_rust_evidence() {
+        let dir = workspace(
+            "typescript",
+            &[
+                ("svc/registrations.ts", ""),
+                (
+                    "svc/api/controllers/a.controller.ts",
+                    "export const a = handlers.get(schemaValidator, '/a', { name: 'A', access: 'public', responses: {} }, async () => {});",
+                ),
+            ],
+        );
+        let evidence = local_evidence(&dir);
+        assert_eq!(
+            evidence,
+            LocalEvidence {
+                routes: 1,
+                projects: 1,
+                ..LocalEvidence::default()
+            }
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_unverified_stripe_webhook_is_found_in_rust_sources() {
+        let handler = "async fn stripe(headers: HeaderMap, body: Bytes) -> Response { let signature = headers.get(\"stripe-signature\"); apply(body).await }";
+        let unverified = workspace("stripe-unverified", &[("billing/api/webhook.rs", handler)]);
+        assert!(
+            found(&unverified)
+                .iter()
+                .any(|(check, _)| check == "stripe-webhook-unverified")
+        );
+        let verified = workspace(
+            "stripe-verified",
+            &[
+                ("billing/api/webhook.rs", handler),
+                (
+                    "billing/api/state.rs",
+                    "struct Backend { webhook: Option<StripeWebhookVerifier> }",
+                ),
+            ],
+        );
+        assert!(
+            found(&verified)
+                .iter()
+                .all(|(check, _)| check != "stripe-webhook-unverified")
+        );
+        assert!(!rust_stripe_webhook_unverified("fn health() {}"));
+        let _ = std::fs::remove_dir_all(&unverified);
+        let _ = std::fs::remove_dir_all(&verified);
+    }
+}
+
+#[cfg(test)]
+mod tenant_entrypoint_tests {
+    use super::*;
+
+    /// A module with a persistence directory, the given container files and
+    /// project files, and the tenant-isolation findings it yields (subject:
+    /// entrypoint).
+    fn tenant_findings(name: &str, files: &[(&str, &str)]) -> Vec<String> {
+        let dir = std::env::temp_dir().join(format!("fl-tenant-entry-{name}"));
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence")).unwrap();
+        for (path, text) in files {
+            let path = proj.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let mut found: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check == "tenant-isolation-wiring")
+            .map(|f| f.subject)
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        found.dedup();
+        found
+    }
+
+    const REGISTRATIONS: &str = "
+const runtimeDependencies = environmentConfig.chain({
+  Orm: {
+    lifetime: Lifetime.Singleton,
+    type: MikroORM,
+    factory: () => new MikroORM(mikroOrmOptionsConfig)
+  },
+  EntityMgr: {
+    lifetime: Lifetime.Scoped,
+    type: EntityManager,
+    factory: ({ Orm }, context) => Orm.em.fork(context?.entityManagerOptions)
+  },
+  OtelCollector: {
+    lifetime: Lifetime.Singleton,
+    type: OpenTelemetryCollector,
+    factory: ({ OTEL_SERVICE_NAME }) => new OpenTelemetryCollector(OTEL_SERVICE_NAME)
+  },
+  BuildReporter: {
+    lifetime: Lifetime.Singleton,
+    type: BuildReporter,
+    factory: ({ SERVICE_URL, HMAC_SECRET_KEY, OtelCollector }) =>
+      new BuildReporter(SERVICE_URL, HMAC_SECRET_KEY, OtelCollector)
+  },
+  ReportRepository: {
+    lifetime: Lifetime.Scoped,
+    type: ReportRepository,
+    factory: ({ EntityMgr }) => new ReportRepository(EntityMgr)
+  },
+  ReportService: {
+    lifetime: Lifetime.Scoped,
+    type: ReportService,
+    factory: ({ ReportRepository, OtelCollector }) => new ReportService(ReportRepository, OtelCollector)
+  },
+  WorkerConsumer: {
+    lifetime: Lifetime.Scoped,
+    type: function_([], type<DatabaseWorkerConsumer>()),
+    factory: ({ EntityMgr, WorkerOptions }) => (process, fail) =>
+      new DatabaseWorkerConsumer(EventRecord, EntityMgr, WorkerOptions, process, fail)
+  }
+});";
+
+    const GATED_SERVER: &str = "import { ci, tokens } from './bootstrapper';\nconst orm = ci.resolve(tokens.Orm);\nsetupTenantFilter(orm);\nsetupRls(orm);";
+
+    #[test]
+    fn a_worker_that_calls_the_service_over_http_needs_no_gates() {
+        // The managed-apps shape: the worker resolves HTTP reporters only and
+        // imports a local client; the ORM is registered but never resolved.
+        let found = tenant_findings(
+            "http-worker",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                (
+                    "bootstrapper.ts",
+                    "import { createDependencyContainer } from './registrations';\nexport const { ci, tokens } = createDependencyContainer();",
+                ),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "// tenant isolation (setupTenantFilter) lives in server.ts; this worker never\n// calls ci.resolve(tokens.Orm) or opens mikro-orm.config.\n\
+                     import { ci, tokens } from './bootstrapper';\n\
+                     import type { Sdk } from './sdk';\n\
+                     import type { EntityManager } from '@mikro-orm/core';\n\
+                     import { InternalClient } from './domain/internal.client';\n\
+                     const otel = ci.resolve(tokens.OtelCollector);\n\
+                     const reporter = ci.resolve(tokens.BuildReporter);\n\
+                     const client = new InternalClient(ci.resolve(tokens.SERVICE_URL));",
+                ),
+                (
+                    "domain/internal.client.ts",
+                    "export class InternalClient { constructor(readonly url: string) {} }",
+                ),
+                ("sdk.ts", "const em = ci.resolve(tokens.EntityMgr);"),
+            ],
+        );
+        assert!(found.is_empty(), "{found:?}");
+    }
+
+    #[test]
+    fn a_worker_resolving_the_orm_or_a_database_registration_needs_gates() {
+        for (name, worker) in [
+            ("orm", "const orm = ci.resolve(tokens.Orm);"),
+            ("em", "const em = ci.scopedResolver(tokens.EntityMgr)();"),
+            // The generated database worker: the consumer is built from EntityMgr.
+            (
+                "consumer",
+                "await ci.resolve(tokens.WorkerConsumer)(processEvents, processErrors).start();",
+            ),
+            // A service two registrations away from the entity manager.
+            (
+                "service",
+                "const service = ci.resolve(tokens.ReportService);",
+            ),
+            ("mikro-init", "const orm = await MikroORM.init(config);"),
+        ] {
+            let found = tenant_findings(
+                &format!("db-worker-{name}"),
+                &[
+                    ("registrations.ts", REGISTRATIONS),
+                    ("server.ts", GATED_SERVER),
+                    (
+                        "worker.ts",
+                        &format!("import {{ ci, tokens }} from './bootstrapper';\n{worker}"),
+                    ),
+                ],
+            );
+            assert_eq!(found, vec!["worker.ts"], "{name}");
+        }
+    }
+
+    #[test]
+    fn a_worker_opening_the_orm_through_an_imported_module_needs_gates() {
+        // The studio-orchestrator shape: the worker skips the container and a
+        // bootstrap module it imports initializes the module's own ORM config.
+        let files = [
+            ("server.ts", GATED_SERVER),
+            (
+                "worker.ts",
+                "import { openRuntime } from './domain/services/runtime/bootstrap';\nconst runtime = await openRuntime();",
+            ),
+            (
+                "domain/services/runtime/bootstrap.ts",
+                "import { MikroORM } from '@mikro-orm/postgresql';\nimport { helper } from './helper.js';\nexport async function openRuntime() {\n  const { default: database } = await import('../../../mikro-orm.config');\n  return MikroORM.init(database);\n}",
+            ),
+            (
+                "domain/services/runtime/helper.ts",
+                "export const helper = 1;",
+            ),
+        ];
+        assert_eq!(tenant_findings("imported-open", &files), vec!["worker.ts"]);
+
+        let dir = std::env::temp_dir().join("fl-tenant-entry-evidence");
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            std::fs::create_dir_all(dir.join(path).parent().unwrap()).unwrap();
+            std::fs::write(dir.join(path), text).unwrap();
+        }
+        assert_eq!(
+            entrypoint_database_access(&dir, &dir.join("worker.ts")).as_deref(),
+            Some("domain/services/runtime/bootstrap.ts: mikro-orm.config")
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A worker importing a bootstrap module (through a middle module) that
+    /// opens the ORM with the given body after `MikroORM.init(..)`.
+    fn imported_bootstrap(bootstrap_tail: &str) -> Vec<(&'static str, String)> {
+        vec![
+            ("server.ts", GATED_SERVER.to_string()),
+            (
+                "worker.ts",
+                "import { start } from './domain/runtime';\nawait start();".to_string(),
+            ),
+            (
+                "domain/runtime.ts",
+                "import { bootstrap } from './services/bootstrap';\nexport const start = () => bootstrap();".to_string(),
+            ),
+            (
+                "domain/services/bootstrap.ts",
+                format!(
+                    "import {{ MikroORM }} from '@mikro-orm/postgresql';\n\
+                     export async function bootstrap() {{\n\
+                       const {{ default: database }} = await import('../../mikro-orm.config');\n\
+                       const orm = await MikroORM.init(database);\n\
+                       {bootstrap_tail}\n\
+                       return orm;\n\
+                     }}"
+                ),
+            ),
+        ]
+    }
+
+    fn findings_for(name: &str, files: &[(&'static str, String)]) -> Vec<String> {
+        let files: Vec<(&str, &str)> = files.iter().map(|(p, t)| (*p, t.as_str())).collect();
+        tenant_findings(name, &files)
+    }
+
+    #[test]
+    fn gates_in_the_imported_module_that_opens_the_orm_count() {
+        // The studio-orchestrator shape: package-library-bootstrap.ts opens
+        // the ORM and gates it right away; worker.ts never touches it.
+        let found = findings_for(
+            "bootstrap-gated",
+            &imported_bootstrap(
+                "setupTenantFilter(orm, { exempt: [] });\nexcludePlatformTenantFromRowFilter(orm);\nawait setupRls(orm, { schema });",
+            ),
+        );
+        assert!(found.is_empty(), "{found:?}");
+
+        // Gates split between the entrypoint and the opener also count.
+        let mut files = imported_bootstrap("await setupRls(orm, { schema });");
+        files[1].1.push_str("\nsetupTenantFilter(orm);");
+        assert!(findings_for("bootstrap-split", &files).is_empty());
+    }
+
+    #[test]
+    fn an_imported_module_that_opens_the_orm_without_gates_still_fails() {
+        assert_eq!(
+            findings_for("bootstrap-ungated", &imported_bootstrap("")),
+            vec!["worker.ts"]
+        );
+        // Only one gate wired: the other is still reported.
+        let dir = std::env::temp_dir().join("fl-tenant-entry-bootstrap-half");
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(proj.join("persistence")).unwrap();
+        for (path, text) in imported_bootstrap("setupTenantFilter(orm);") {
+            std::fs::create_dir_all(proj.join(path).parent().unwrap()).unwrap();
+            std::fs::write(proj.join(path), text).unwrap();
+        }
+        let messages: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .filter(|f| f.check == "tenant-isolation-wiring")
+            .map(|f| f.message)
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(messages.len(), 1, "{messages:?}");
+        assert!(
+            messages[0].contains("does not call setupRls"),
+            "{messages:?}"
+        );
+        assert!(
+            messages[0].contains("domain/services/bootstrap.ts: mikro-orm.config"),
+            "{messages:?}"
+        );
+    }
+
+    #[test]
+    fn gates_only_in_comments_do_not_count() {
+        for (name, tail) in [
+            ("line", "// setupTenantFilter(orm); setupRls(orm);"),
+            (
+                "block",
+                "/* TODO: setupTenantFilter(orm);\n   setupRls(orm); */",
+            ),
+        ] {
+            assert_eq!(
+                findings_for(
+                    &format!("bootstrap-comment-{name}"),
+                    &imported_bootstrap(tail)
+                ),
+                vec!["worker.ts"],
+                "{name}"
+            );
+        }
+        // Same for an entrypoint that opens the ORM itself.
+        let found = tenant_findings(
+            "entry-comment",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "const orm = ci.resolve(tokens.Orm);\n// setupTenantFilter(orm);\n/* setupRls(orm); */",
+                ),
+            ],
+        );
+        assert_eq!(found, vec!["worker.ts"]);
+    }
+
+    #[test]
+    fn gates_in_a_sibling_import_off_the_opening_chain_do_not_count() {
+        // A module the worker imports that never leads to the ORM is not
+        // where this runtime gates its database.
+        let mut files = imported_bootstrap("");
+        files[1].1 = format!("import './unrelated';\n{}", files[1].1);
+        files.push((
+            "unrelated.ts",
+            "export const x = (orm) => { setupTenantFilter(orm); setupRls(orm); };".to_string(),
+        ));
+        assert_eq!(findings_for("bootstrap-sibling", &files), vec!["worker.ts"]);
+    }
+
+    #[test]
+    fn gated_entrypoints_and_type_only_imports_are_clean() {
+        let found = tenant_findings(
+            "gated",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                ("server.ts", GATED_SERVER),
+                (
+                    "worker.ts",
+                    "import { ci, tokens } from './bootstrapper';\nimport type { Db } from './db';\nconst orm = ci.resolve(tokens.Orm);\nsetupTenantFilter(orm);\nsetupRls(orm);",
+                ),
+                ("db.ts", "export const orm = await MikroORM.init(config);"),
+            ],
+        );
+        assert!(found.is_empty(), "{found:?}");
+        // A server whose routes reach a database-backed service is still checked.
+        let found = tenant_findings(
+            "ungated-server",
+            &[
+                ("registrations.ts", REGISTRATIONS),
+                (
+                    "server.ts",
+                    "import { reportRouter } from './api/routes/report.routes';\napp.use(reportRouter);",
+                ),
+                (
+                    "api/routes/report.routes.ts",
+                    "export { reportRouter } from '../controllers/report.controller';",
+                ),
+                (
+                    "api/controllers/report.controller.ts",
+                    "const serviceFactory = ci.scopedResolver(tokens.ReportService);",
+                ),
+            ],
+        );
+        assert_eq!(found, vec!["server.ts"]);
+    }
+}
+
+#[cfg(test)]
+mod managed_detection_tests {
+    use super::*;
+
+    const MANAGED_CHECKS: &[&str] = &[
+        "managed-provider-credentials",
+        "email-provider-direct-in-managed",
+        "sms-provider-direct-in-managed",
+        "whatsapp-provider-direct-in-managed",
+        "voice-provider-direct-in-managed",
+    ];
+
+    /// Vendor access every managed check fires on: a Twilio key, SES, a
+    /// Pinpoint SMS client, AWS Social Messaging and Connect.
+    const VENDORS: &str = "import { SESv2Client } from '@aws-sdk/client-sesv2';\n\
+        import { PinpointSMSVoiceV2Client } from '@aws-sdk/client-pinpoint-sms-voice-v2';\n\
+        import { SocialMessagingClient } from '@aws-sdk/client-socialmessaging';\n\
+        import { ConnectClient } from '@aws-sdk/client-connect';\n\
+        const token = getEnvVar('TWILIO_AUTH_TOKEN');\n\
+        const connectInstance = getEnvVar('CONNECT_INSTANCE_ID');\n";
+
+    fn managed_checks(name: &str, files: &[(&str, &str)]) -> Vec<String> {
+        let dir = std::env::temp_dir().join(format!("fl-managed-detect-{name}"));
+        let proj = dir.join("svc");
+        let _ = std::fs::remove_dir_all(&dir);
+        for (path, text) in files {
+            let path = proj.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, text).unwrap();
+        }
+        let mut found: Vec<String> = run_local_checks(&dir)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.check)
+            .filter(|c| MANAGED_CHECKS.contains(&c.as_str()))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        found.sort();
+        found.dedup();
+        found
+    }
+
+    fn all_managed_checks() -> Vec<String> {
+        let mut all: Vec<String> = MANAGED_CHECKS.iter().map(|c| c.to_string()).collect();
+        all.sort();
+        all
+    }
+
+    #[test]
+    fn a_managed_customer_app_still_triggers_every_managed_check() {
+        // The gateway contract as `forklaunch infra add` writes it.
+        let registrations = "const environmentConfig = configInjector.chain({\n\
+              PLATFORM_GATEWAY_URL: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('PLATFORM_GATEWAY_URL') ?? undefined },\n\
+              INSTANCE_ID: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('INSTANCE_ID') ?? undefined },\n\
+              INSTANCE_HMAC_KEY: { lifetime: Lifetime.Singleton, type: optional(string), value: getEnvVar('INSTANCE_HMAC_KEY') ?? undefined }\n\
+            });";
+        assert_eq!(
+            managed_checks(
+                "customer",
+                &[
+                    ("registrations.ts", registrations),
+                    ("domain/vendors.ts", VENDORS)
+                ],
+            ),
+            all_managed_checks()
+        );
+        // A raw environment read is the same signal.
+        assert_eq!(
+            managed_checks(
+                "customer-env",
+                &[(
+                    "domain/vendors.ts",
+                    &format!("const key = process.env.INSTANCE_HMAC_KEY;\n{VENDORS}")
+                )],
+            ),
+            all_managed_checks()
+        );
+        // So is the relay `init relay` installs, which resolves the instance key.
+        assert_eq!(
+            managed_checks(
+                "customer-relay",
+                &[
+                    (
+                        "api/controllers/relay.controller.ts",
+                        "const INSTANCE_HMAC_KEY = ci.resolve(tokens.INSTANCE_HMAC_KEY);"
+                    ),
+                    ("domain/vendors.ts", VENDORS),
+                ],
+            ),
+            all_managed_checks()
+        );
+    }
+
+    #[test]
+    fn the_platform_gateway_that_issues_the_contract_is_not_a_managed_instance() {
+        // The gateway issues the keys, documents them and runs the product
+        // relay; it names the contract but never reads it as its own config.
+        let provisioner = "/** The deploy hands the app PLATFORM_GATEWAY_URL + INSTANCE_ID + INSTANCE_HMAC_KEY. */\n\
+            // getEnvVar('INSTANCE_HMAC_KEY') is what the instance calls.\n\
+            export const GATEWAY_CONTRACT = ['PLATFORM_GATEWAY_URL', 'INSTANCE_ID', 'INSTANCE_HMAC_KEY'] as const;\n\
+            export function instanceEnv(principal: { url: string; hmacKey: string }) {\n\
+              return [\n\
+                { key: 'INSTANCE_HMAC_KEY', value: principal.hmacKey },\n\
+                { key: 'PLATFORM_GATEWAY_URL', value: principal.url }\n\
+              ];\n\
+            }\n\
+            const answer = { PLATFORM_GATEWAY_URL: url, INSTANCE_HMAC_KEY: key };\n\
+            const prompt = `authenticate with the instance's \\`INSTANCE_HMAC_KEY\\`; no provider key`;\n";
+        assert!(
+            managed_checks(
+                "gateway",
+                &[
+                    (
+                        "registrations.ts",
+                        "const HMAC_SECRET_KEY = getEnvVar('HMAC_SECRET_KEY');"
+                    ),
+                    ("domain/provisioner.ts", provisioner),
+                    (
+                        "api/controllers/relay.controller.ts",
+                        "const relay = ci.scopedResolver(tokens.RelayService);"
+                    ),
+                    ("domain/vendors.ts", VENDORS),
+                ],
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn gateway_contract_reads_are_recognized_in_every_form() {
+        let dir = std::env::temp_dir();
+        for read in [
+            "getEnvVar('INSTANCE_HMAC_KEY')",
+            "getEnvVar(\"PLATFORM_GATEWAY_URL\")",
+            "process.env.PLATFORM_GATEWAY_URL",
+            "process.env['INSTANCE_HMAC_KEY']",
+            "Bun.env.INSTANCE_HMAC_KEY",
+            "const { INSTANCE_ID, INSTANCE_HMAC_KEY } = process.env;",
+            "ci.resolve(tokens.PLATFORM_GATEWAY_URL)",
+        ] {
+            assert!(is_managed_instance(&dir, read), "{read}");
+        }
+        for mention in [
+            "// getEnvVar('INSTANCE_HMAC_KEY')",
+            "/* process.env.PLATFORM_GATEWAY_URL */",
+            "{ key: 'INSTANCE_HMAC_KEY', value }",
+            "const names = ['PLATFORM_GATEWAY_URL'];",
+            "getEnvVar('FORKLAUNCH_INSTANCE_HMAC_KEY')",
+            "process.env.MY_INSTANCE_HMAC_KEY",
+        ] {
+            assert!(!is_managed_instance(&dir, mention), "{mention}");
+        }
     }
 }

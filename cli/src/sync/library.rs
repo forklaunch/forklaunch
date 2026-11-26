@@ -21,6 +21,7 @@ use crate::{
             resolvers::resolve_description,
         },
     },
+    init::rust_project::{self, RustProjectKind},
     prompt::{ArrayCompleter, prompt_for_confirmation},
 };
 
@@ -51,7 +52,10 @@ pub(crate) fn sync_library_with_cache(
             .iter()
             .find(|p| p.name == library_name)
         {
-            log_warn!(stdout, "Library directory not found, but exists in manifest");
+            log_warn!(
+                stdout,
+                "Library directory not found, but exists in manifest"
+            );
 
             let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
             let should_cleanup = prompt_for_confirmation(
@@ -87,7 +91,11 @@ pub(crate) fn sync_library_with_cache(
             log_ok!(stdout, "Removed orphaned library '{}'", library_name);
             return Ok(());
         } else {
-            log_error!(stdout, "Library directory not found: {}", library_path.display());
+            log_error!(
+                stdout,
+                "Library directory not found: {}",
+                library_path.display()
+            );
             bail!("Library directory not found: {}", library_path.display());
         }
     }
@@ -135,7 +143,11 @@ pub(crate) fn sync_library_with_cache(
 impl CliCommand for LibrarySyncCommand {
     fn command(&self) -> clap::Command {
         use clap::Arg;
-        command("library", "Sync a specific library to application artifacts").arg(
+        command(
+            "library",
+            "Sync a specific library to application artifacts",
+        )
+        .arg(
             Arg::new("name")
                 .help("The name of the library")
                 .required(true),
@@ -166,6 +178,20 @@ impl CliCommand for LibrarySyncCommand {
             };
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
+        if crate::core::storefront::registered(&app_root_path, library_name)? {
+            crate::core::storefront::change(&app_root_path, library_name, None, None, true)?;
+            return Ok(());
+        }
+        if rust_project::is_rust_project(&app_root_path, library_name)? {
+            let mut stdout = StandardStream::stdout(ColorChoice::Always);
+            rust_project::sync_rust_project(
+                &app_root_path,
+                RustProjectKind::Library,
+                library_name,
+            )?;
+            log_ok!(stdout, "Library '{}' synced successfully", library_name);
+            return Ok(());
+        }
 
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
         let mut rendered_templates_cache = RenderedTemplatesCache::new();

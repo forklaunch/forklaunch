@@ -1,0 +1,6 @@
+# Preserve exact reviewed patch/source and upstream Unicode bytes for provenance.
+provenance/bounded-engine.patch -whitespace
+provenance/unicode16.patch -whitespace
+src/unicode.rs whitespace=-blank-at-eof
+unicode-16.0.0/PropertyValueAliases.txt whitespace=-blank-at-eol
+unicode-16.0.0/emoji/emoji-data.txt whitespace=-blank-at-eol

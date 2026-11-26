@@ -74,7 +74,7 @@ A minimal library will have the following structure:
 
 ```bash
 .
-├── eslint.config.mjs -> ../eslint.config.mjs # symlinked from parent for consistency
+├── .oxlint.config.json -> ../.oxlint.config.json # symlinked from parent for consistency
 ├── index.ts
 ├── lib.ts # the library logic
 ├── package.json

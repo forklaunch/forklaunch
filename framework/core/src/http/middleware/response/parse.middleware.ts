@@ -15,6 +15,11 @@ import {
 } from '../../types/apiDefinition.types';
 import { ParamsDictionary } from '../../types/contractDetails.types';
 
+// Sending the diagnostic response re-enters enriched send. Do not validate
+// that framework-generated diagnostic against the failed application headers.
+// Weak membership is per response and cleared even when the sender throws.
+const sendingValidationError = new WeakSet<object>();
+
 /**
  * Middleware to parse and validate the response according to the provided schema.
  *
@@ -70,6 +75,10 @@ export function parse<
   >,
   next?: ForklaunchNextFunction
 ) {
+  if (sendingValidationError.has(res)) {
+    next?.();
+    return;
+  }
   let headers;
   let responses;
 
@@ -126,18 +135,49 @@ export function parse<
 
   const statusCode = Number(res.statusCode);
 
-  const parsedResponse = schemaValidator.parse(
-    [400, 401, 404, 403, 500].includes(statusCode)
-      ? schemaValidator.union([schemaValidator.string, responses?.[statusCode]])
-      : responses?.[statusCode],
-    res.bodyData
-  );
+  const defaultErrorStatus = [400, 401, 404, 403, 500].includes(statusCode);
+  const missingResponseSchema =
+    !defaultErrorStatus &&
+    !Object.prototype.hasOwnProperty.call(responses, statusCode);
+  // A missing declaration is a contract diagnostic, not a schema to compile.
+  // Preserve final-error redaction in error mode; warning mode must still send.
+  if (missingResponseSchema && collapsedOptions !== 'warning') {
+    throw new Error(`Undocumented response status ${statusCode}`);
+  }
+  // A default error status may carry its declared body or the framework's
+  // string message. TypeBox cannot put a compiled schema in a union (building
+  // one throws), so for a declared schema the two are tried in turn instead.
+  const declaredResponse = responses?.[statusCode];
+  const defaultErrorResponse = () => {
+    try {
+      return schemaValidator.parse(
+        schemaValidator.union([schemaValidator.string, declaredResponse]),
+        res.bodyData
+      );
+    } catch (error) {
+      if (declaredResponse === undefined) throw error;
+      const declared = schemaValidator.parse(declaredResponse, res.bodyData);
+      if (declared.ok) return declared;
+      const message = schemaValidator.parse(
+        schemaValidator.string,
+        res.bodyData
+      );
+      return message.ok ? message : declared;
+    }
+  };
+  const parsedResponse = missingResponseSchema
+    ? { ok: true as const }
+    : defaultErrorStatus
+      ? defaultErrorResponse()
+      : schemaValidator.parse(declaredResponse, res.bodyData);
 
   const parsedHeaders = schemaValidator.parse(
     headers ?? schemaValidator.unknown,
     res.getHeaders()
   );
-  const parseErrors: string[] = [];
+  const parseErrors: string[] = missingResponseSchema
+    ? [`Response: Undocumented response status ${statusCode}`]
+    : [];
   if (!parsedHeaders.ok) {
     const headerErrors = prettyPrintParseErrors(parsedHeaders.errors, 'Header');
     if (headerErrors) {
@@ -156,20 +196,25 @@ export function parse<
   }
 
   if (parseErrors.length > 0) {
-    switch (req.contractDetails.options?.responseValidation) {
+    switch (collapsedOptions) {
       default:
       case undefined:
       case 'error':
         res.type('text/plain');
         res.status(500);
         if (hasSend(res)) {
-          res.send(
-            `Invalid response:\n${parseErrors.join(
-              '\n\n'
-            )}\n\nCorrelation id: ${
-              req.context.correlationId ?? 'No correlation ID'
-            }`
-          );
+          sendingValidationError.add(res);
+          try {
+            res.send(
+              `Invalid response:\n${parseErrors.join(
+                '\n\n'
+              )}\n\nCorrelation id: ${
+                req.context.correlationId ?? 'No correlation ID'
+              }`
+            );
+          } finally {
+            sendingValidationError.delete(res);
+          }
         } else {
           next?.(new Error('Response is not sendable.'));
         }
@@ -178,8 +223,6 @@ export function parse<
         req.openTelemetryCollector?.warn(
           `Invalid response:\n${parseErrors.join('\n\n')}`
         );
-        break;
-      case 'none':
         break;
     }
   }

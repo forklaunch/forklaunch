@@ -28,7 +28,7 @@ RUST_BACKTRACE=1 $FL init application app \
   -o modules \
   -d postgresql \
   -f prettier \
-  -l eslint \
+  -l oxlint \
   -v zod \
   -F express \
   -r node \

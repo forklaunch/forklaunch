@@ -8,6 +8,7 @@ use serde_json::to_string_pretty;
 use termcolor::{ColorChoice, StandardStream, WriteColor};
 use toml::from_str;
 
+use super::rust_project;
 use crate::{
     CliCommand,
     constants::{
@@ -81,9 +82,15 @@ fn generate_basic_library(
         dryrun,
     )?;
     rendered_templates.push(generate_library_package_json(manifest_data, &output_path)?);
-    rendered_templates.extend(
-        generate_project_tsconfig(&output_path, None).with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
-    );
+    if !rendered_templates
+        .iter()
+        .any(|template| template.path == output_path.join("tsconfig.json"))
+    {
+        rendered_templates.extend(
+            generate_project_tsconfig(&output_path, None)
+                .with_context(|| ERROR_FAILED_TO_CREATE_TSCONFIG)?,
+        );
+    }
     rendered_templates.extend(
         generate_gitignore(&output_path).with_context(|| ERROR_FAILED_TO_CREATE_GITIGNORE)?,
     );
@@ -191,7 +198,8 @@ fn generate_library_package_json(
         keywords: Some(vec![]),
         license: Some(manifest_data.license.clone()),
         author: Some(manifest_data.author.clone()),
-        types: None,
+        main: Some("lib/index.js".to_string()),
+        types: Some("lib/index.d.ts".to_string()),
         scripts: Some(ProjectScripts {
             build: Some(PROJECT_BUILD_SCRIPT.to_string()),
             clean: Some(project_clean_script(&manifest_data.runtime.parse()?)),
@@ -236,6 +244,19 @@ impl CliCommand for LibraryCommand {
                     .help("The application path to initialize the library in"),
             )
             .arg(
+                Arg::new("language")
+                    .long("language")
+                    .help("Project language to generate")
+                    .value_parser(rust_project::PROJECT_LANGUAGE_VARIANTS)
+                    .default_value("typescript"),
+            )
+            .arg(
+                Arg::new("sdk-services")
+                    .long("sdk-services")
+                    .num_args(1..)
+                    .help("Generate a Rust Cargo SDK consumer from registered native services"),
+            )
+            .arg(
                 Arg::new("description")
                     .short('D')
                     .long("description")
@@ -252,11 +273,19 @@ impl CliCommand for LibraryCommand {
 
     // pass token in from parent and perform get token above?
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
+        if matches.contains_id("sdk-services") && !rust_project::uses_rust_generation(matches) {
+            anyhow::bail!("--sdk-services is available for Rust generation only");
+        }
+        if rust_project::uses_rust_generation(matches) {
+            return rust_project::generate_rust_library(matches);
+        }
+
         let mut line_editor = Editor::<ArrayCompleter, DefaultHistory>::new()?;
         let mut stdout = StandardStream::stdout(ColorChoice::Always);
 
         let (app_root_path, _) = find_app_root_path(matches, RequiredLocation::Application)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+        crate::init::rust_project::preflight_mixed_images(&app_root_path)?;
 
         let existing_manifest_data = from_str::<ApplicationManifestData>(
             &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -305,6 +334,13 @@ impl CliCommand for LibraryCommand {
 
         let mut manifest_data: LibraryManifestData = LibraryManifestData {
             // Common fields from ApplicationManifestData
+            language: manifest_data.language.clone(),
+            application_language: manifest_data.application_language.clone(),
+            sdk_targets: manifest_data.sdk_targets.clone(),
+            cargo_workspace: manifest_data.cargo_workspace.clone(),
+            contract_artifact_path: manifest_data.contract_artifact_path.clone(),
+            openapi_path: manifest_data.openapi_path.clone(),
+            asyncapi_path: manifest_data.asyncapi_path.clone(),
             id: manifest_data.id.clone(),
             app_name: manifest_data.app_name.clone(),
             modules_path: manifest_data.modules_path.clone(),
@@ -341,6 +377,7 @@ impl CliCommand for LibraryCommand {
             is_jest: manifest_data.is_jest,
             platform_application_id: manifest_data.platform_application_id.clone(),
             platform_organization_id: manifest_data.platform_organization_id.clone(),
+            framework: manifest_data.framework.clone(),
             compliance: manifest_data.compliance.clone(),
 
             // Library-specific fields
@@ -363,6 +400,7 @@ impl CliCommand for LibraryCommand {
         .with_context(|| "Failed to create library")?;
 
         if !dryrun {
+            crate::init::rust_project::refresh_mixed_images(&app_root_path)?;
             log_ok!(stdout, "{} initialized successfully!", library_name);
             format_code(&base_path, &manifest_data.runtime.parse()?);
         }

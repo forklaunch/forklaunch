@@ -20,7 +20,8 @@ import { createClient, RedisClientOptions } from 'redis';
 type RedisCommandRawReply =
   string | number | Buffer | null | undefined | Array<RedisCommandRawReply>;
 
-const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:'] as const;
+// v4 is the randomized, stamped envelope native (Rust) writers produce.
+const ENCRYPTED_PREFIXES = ['v1:', 'v2:', 'v3:', 'v4:'] as const;
 
 function isEncrypted(value: string): boolean {
   return ENCRYPTED_PREFIXES.some((p) => value.startsWith(p));
@@ -153,6 +154,27 @@ export class RedisTtlCache implements TtlCache {
       this.encryptValue(safeStringify(value), compliance),
       { PX: ttlMilliseconds }
     );
+  }
+
+  /**
+   * Atomic set-if-absent with expiry (`SET key value NX PX ttl`). Answers
+   * `true` only for the first writer of the key.
+   */
+  async putRecordIfAbsent<T>(
+    { key, value, ttlMilliseconds = this.ttlMilliseconds }: TtlCacheRecord<T>,
+    compliance?: ComplianceContext
+  ): Promise<boolean> {
+    if (this.telemetryOptions.enabled.logging) {
+      this.openTelemetryCollector.info(
+        `Putting record into cache if absent: ${key}`
+      );
+    }
+    const result = await this.client.set(
+      key,
+      this.encryptValue(safeStringify(value), compliance),
+      { PX: ttlMilliseconds, NX: true }
+    );
+    return result === 'OK';
   }
 
   async putBatchRecords<T>(

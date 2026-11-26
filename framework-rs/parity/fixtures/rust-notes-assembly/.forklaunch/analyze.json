@@ -1,0 +1,13 @@
+{
+  "formatVersion": "forklaunch.analysis.policy.v1",
+  "rawRoutes": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "source": "src/notes/application.rs",
+      "owner": "notes",
+      "reason": "Public process readiness endpoint; exposes no application data or business operation.",
+      "expires": "2099-01-01"
+    }
+  ]
+}

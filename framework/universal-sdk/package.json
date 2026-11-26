@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/universal-sdk",
-  "version": "1.2.27",
+  "version": "1.4.1",
   "description": "Cross runtime fetch library for forklaunch router sdks",
   "keywords": [
     "fetch",
@@ -14,7 +14,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Rohin Bhargava",
@@ -36,7 +36,6 @@
   "scripts": {
     "build": "tsc --noEmit && tsup index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean && tsc -p tsconfig.build.json --emitDeclarationOnly",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -46,18 +45,18 @@
   },
   "dependencies": {
     "@forklaunch/common": "workspace:^",
+    "@types/qs": "^6.15.1",
     "ajv": "^8.20.0",
-    "ajv-formats": "^3.0.1"
+    "ajv-draft-04": "^1.0.0",
+    "ajv-formats": "^3.0.1",
+    "qs": "^6.17.1"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.6",
     "fetch-mock": "^12.6.0",
-    "jest": "^30.5.1",
-    "openapi3-ts": "^4.6.1",
-    "prettier": "^3.9.6",
-    "ts-jest": "^29.4.12",
-    "tsup": "^8.5.1",
-    "typedoc": "^0.28.20",
+    "openapi3-ts": "^4.6.2",
+    "prettier": "^3.10.1",
+    "tsup": "^9.0.0",
     "typescript": "^7.0.2"
   }
 }

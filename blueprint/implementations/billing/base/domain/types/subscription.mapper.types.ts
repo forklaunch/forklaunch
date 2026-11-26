@@ -5,13 +5,12 @@ import { BaseSubscriptionEntities } from './baseBillingEntity.types';
 export type SubscriptionMappers<
   PartyType,
   BillingProviderType,
-  MapperEntities extends BaseSubscriptionEntities<
-    PartyType,
-    BillingProviderType
-  >,
+  MapperEntities extends BaseSubscriptionEntities,
   MapperDomains extends BaseSubscriptionDtos<PartyType, BillingProviderType>
 > = {
   SubscriptionMapper: {
+    /** Trusted persisted party discriminators for local subscription lookups. */
+    partyTypes?: Readonly<{ user: string; organization: string }>;
     entity: MapperEntities['SubscriptionMapper'];
     toDto: (
       entity: InferEntity<MapperEntities['SubscriptionMapper']>

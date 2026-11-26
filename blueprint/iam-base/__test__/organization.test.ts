@@ -15,7 +15,7 @@ describe('Organization Routes E2E Tests with PostgreSQL Container', () => {
   beforeAll(async () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm });
@@ -26,7 +26,7 @@ describe('Organization Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /organization - createOrganization', () => {
     it('should create an organization successfully', async () => {

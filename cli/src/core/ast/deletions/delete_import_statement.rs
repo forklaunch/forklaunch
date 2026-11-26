@@ -8,7 +8,7 @@ pub(crate) fn delete_import_statement<'a>(
     app_program_ast: &mut Program<'a>,
     import_source_identifier: &str,
 ) -> Result<String> {
-    let mut new_body = Vec::new_in(allocator);
+    let mut new_body = Vec::new_in(&allocator);
     app_program_ast.body.iter().for_each(|stmt| {
         let import = match stmt {
             Statement::ImportDeclaration(import) => import,
@@ -18,7 +18,7 @@ pub(crate) fn delete_import_statement<'a>(
             }
         };
 
-        if import.source.value.as_str() != import_source_identifier {
+        if import.source.value != import_source_identifier {
             new_body.push(stmt.clone_in(allocator));
         }
     });
@@ -37,7 +37,7 @@ pub(crate) fn delete_import_statements_with_prefix<'a>(
     app_program_ast: &mut Program<'a>,
     import_source_prefix: &str,
 ) -> Result<String> {
-    let mut new_body = Vec::new_in(allocator);
+    let mut new_body = Vec::new_in(&allocator);
     app_program_ast.body.iter().for_each(|stmt| {
         let import = match stmt {
             Statement::ImportDeclaration(import) => import,
@@ -47,7 +47,7 @@ pub(crate) fn delete_import_statements_with_prefix<'a>(
             }
         };
 
-        if !import.source.value.as_str().starts_with(import_source_prefix) {
+        if !import.source.value.starts_with(import_source_prefix) {
             new_body.push(stmt.clone_in(allocator));
         }
     });
@@ -67,7 +67,7 @@ pub(crate) fn delete_import_specifier<'a>(
     import_specifier: &str,
     import_source_identifier: &str,
 ) -> Result<String> {
-    let mut new_body = Vec::new_in(allocator);
+    let mut new_body = Vec::new_in(&allocator);
     sdk_program_ast.body.iter_mut().for_each(|stmt| {
         let import = match stmt {
             Statement::ImportDeclaration(import) => import,
@@ -77,13 +77,13 @@ pub(crate) fn delete_import_specifier<'a>(
             }
         };
 
-        if import.source.value.as_str() == import_source_identifier {
+        if import.source.value == import_source_identifier {
             let mut new_specifiers = None;
             if let Some(specifiers) = &import.specifiers {
                 if specifiers.len() == 1 && specifiers[0].name() == import_specifier {
                     new_specifiers = None;
                 } else {
-                    let mut specifier_vec = Vec::new_in(allocator);
+                    let mut specifier_vec = Vec::new_in(&allocator);
                     for specifier in specifiers {
                         if specifier.name() != import_specifier {
                             specifier_vec.push(specifier.clone_in(allocator));

@@ -257,9 +257,7 @@ mod tests {
     /// would send a PATCH with nothing in it on every plain `app hosting`.
     #[test]
     fn no_flags_means_read() {
-        let matches = hosting_cmd()
-            .try_get_matches_from(vec!["hosting"])
-            .unwrap();
+        let matches = hosting_cmd().try_get_matches_from(vec!["hosting"]).unwrap();
         assert!(matches.get_one::<String>("cluster_type").is_none());
         assert!(matches.get_many::<String>("compliance_framework").is_none());
     }

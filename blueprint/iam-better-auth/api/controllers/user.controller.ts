@@ -1,79 +1,69 @@
-import {
-  array,
-  handlers,
-  IdSchema,
-  schemaValidator,
-  string
-} from '@forklaunch/blueprint-core';
+import { bindRuntimeAuth } from '@forklaunch/blueprint-core';
+import { userContract } from '../contracts/user.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 import { ci, tokens } from '../../bootstrapper';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
 const serviceFactory = ci.scopedResolver(tokens.SurfacingService);
 
+// User-only endpoints cannot choose a session or organization securely.
+// Retained for fail-closed old clients; upgraded helpers use scoped endpoints.
+
 export const surfaceRoles = handlers.get(
   schemaValidator,
-  '/:id/surface-roles',
-  {
-    name: 'Surface User Roles',
-    access: 'internal',
-    summary:
-      'Surfaces the org-scoped roles for a user in their active organization',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: array({ name: string }),
-      500: string
-    },
-    params: IdSchema
-  },
+  userContract.surfaceRoles.path,
+  bindRuntimeAuth(userContract.surfaceRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Surfacing user roles', req.params);
-    const { id } = req.params;
 
-    const role = await serviceFactory().surfaceRole(id);
-
-    if (!role) {
-      res.status(200).json([]);
-      return;
-    }
-
-    res.status(200).json([{ name: role }]);
+    res.status(200).json([]);
   }
 );
 
 export const surfacePermissions = handlers.get(
   schemaValidator,
-  '/:id/surface-permissions',
-  {
-    name: 'Surface User Permissions',
-    access: 'internal',
-    summary:
-      'Surfaces the org-scoped permissions for a user in their active organization',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: array({ slug: string }),
-      500: string
-    },
-    params: IdSchema
-  },
+  userContract.surfacePermissions.path,
+  bindRuntimeAuth(userContract.surfacePermissions.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Surfacing user permissions', req.params);
-    const { id } = req.params;
 
-    const permissions = await serviceFactory().surfacePermissions(id);
+    res.status(200).json([]);
+  }
+);
 
+export const surfaceScopedRoles = handlers.get(
+  schemaValidator,
+  userContract.surfaceScopedRoles.path,
+  bindRuntimeAuth(userContract.surfaceScopedRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
+  async (req, res) => {
+    const role = await serviceFactory().surfaceRole({
+      userId: req.params.id,
+      organizationId: req.params.organizationId,
+      sessionId: req.params.sessionId
+    });
+    res.status(200).json(role ? [{ name: role }] : []);
+  }
+);
+
+export const surfaceScopedPermissions = handlers.get(
+  schemaValidator,
+  userContract.surfaceScopedPermissions.path,
+  bindRuntimeAuth(userContract.surfaceScopedPermissions.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
+  async (req, res) => {
+    const permissions = await serviceFactory().surfacePermissions({
+      userId: req.params.id,
+      organizationId: req.params.organizationId,
+      sessionId: req.params.sessionId
+    });
     res.status(200).json(permissions.map((slug) => ({ slug })));
   }
 );

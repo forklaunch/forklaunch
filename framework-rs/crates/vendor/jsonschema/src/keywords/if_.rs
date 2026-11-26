@@ -1,0 +1,371 @@
+use crate::{
+    compiler,
+    evaluation::ChildList,
+    keywords::CompilationResult,
+    node::SchemaNode,
+    paths::{LazyLocation, Location, RefTracker},
+    validator::{EvaluationResult, Validate, ValidationContext},
+    Json, SerdeJson, ValidationError,
+};
+use serde_json::{Map, Value};
+
+pub(crate) struct IfThenValidator<F: Json> {
+    schema: SchemaNode<F>,
+    then_schema: SchemaNode<F>,
+}
+
+impl IfThenValidator<SerdeJson> {
+    #[inline]
+    pub(crate) fn compile<'a, F: Json>(
+        ctx: &compiler::Context<F>,
+        schema: &'a Value,
+        then_schema: &'a Value,
+    ) -> CompilationResult<'a, F> {
+        Ok(Box::new(IfThenValidator {
+            schema: {
+                let ctx = ctx.new_at_location("if");
+                compiler::compile(&ctx, ctx.as_resource_ref(schema))?
+            },
+            then_schema: {
+                let ctx = ctx.new_at_location("then");
+                compiler::compile(&ctx, ctx.as_resource_ref(then_schema))?
+            },
+        }))
+    }
+}
+
+impl<F: Json> Validate<F> for IfThenValidator<F> {
+    fn is_valid(&self, instance: &F::Node<'_>, ctx: &mut ValidationContext) -> bool {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema.is_valid(instance, ctx)
+        } else {
+            true
+        }
+    }
+
+    fn validate<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> Result<(), ValidationError<'i>> {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema.validate(instance, location, tracker, ctx)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn collect_errors<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+        errors: &mut Vec<ValidationError<'i>>,
+    ) {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema
+                .collect_errors(instance, location, tracker, ctx, errors);
+        }
+    }
+
+    fn evaluate(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        self.evaluate_with_location(instance, location, &location.into(), tracker, ctx)
+    }
+
+    fn evaluate_with_location(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        instance_location: &Location,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        let if_node =
+            self.schema
+                .evaluate_instance_at(instance, location, instance_location, tracker, ctx);
+        if if_node.valid {
+            let then_node = self.then_schema.evaluate_instance_at(
+                instance,
+                location,
+                instance_location,
+                tracker,
+                ctx,
+            );
+            let mut children = ChildList::default();
+            children.push(&mut ctx.arena, if_node);
+            children.push(&mut ctx.arena, then_node);
+            EvaluationResult::from_children(children)
+        } else {
+            EvaluationResult::valid_empty()
+        }
+    }
+}
+
+pub(crate) struct IfElseValidator<F: Json> {
+    schema: SchemaNode<F>,
+    else_schema: SchemaNode<F>,
+}
+
+impl IfElseValidator<SerdeJson> {
+    #[inline]
+    pub(crate) fn compile<'a, F: Json>(
+        ctx: &compiler::Context<F>,
+        schema: &'a Value,
+        else_schema: &'a Value,
+    ) -> CompilationResult<'a, F> {
+        Ok(Box::new(IfElseValidator {
+            schema: {
+                let ctx = ctx.new_at_location("if");
+                compiler::compile(&ctx, ctx.as_resource_ref(schema))?
+            },
+            else_schema: {
+                let ctx = ctx.new_at_location("else");
+                compiler::compile(&ctx, ctx.as_resource_ref(else_schema))?
+            },
+        }))
+    }
+}
+
+impl<F: Json> Validate<F> for IfElseValidator<F> {
+    fn is_valid(&self, instance: &F::Node<'_>, ctx: &mut ValidationContext) -> bool {
+        if self.schema.is_valid(instance, ctx) {
+            true
+        } else {
+            self.else_schema.is_valid(instance, ctx)
+        }
+    }
+
+    fn validate<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> Result<(), ValidationError<'i>> {
+        if self.schema.is_valid(instance, ctx) {
+            Ok(())
+        } else {
+            self.else_schema.validate(instance, location, tracker, ctx)
+        }
+    }
+
+    fn collect_errors<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+        errors: &mut Vec<ValidationError<'i>>,
+    ) {
+        if !self.schema.is_valid(instance, ctx) {
+            self.else_schema
+                .collect_errors(instance, location, tracker, ctx, errors);
+        }
+    }
+
+    fn evaluate(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        self.evaluate_with_location(instance, location, &location.into(), tracker, ctx)
+    }
+
+    fn evaluate_with_location(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        instance_location: &Location,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        let if_node =
+            self.schema
+                .evaluate_instance_at(instance, location, instance_location, tracker, ctx);
+        if if_node.valid {
+            EvaluationResult::from_children(ChildList::of(&mut ctx.arena, if_node))
+        } else {
+            let else_node = self.else_schema.evaluate_instance_at(
+                instance,
+                location,
+                instance_location,
+                tracker,
+                ctx,
+            );
+            EvaluationResult::from_children(ChildList::of(&mut ctx.arena, else_node))
+        }
+    }
+}
+
+pub(crate) struct IfThenElseValidator<F: Json> {
+    schema: SchemaNode<F>,
+    then_schema: SchemaNode<F>,
+    else_schema: SchemaNode<F>,
+}
+
+impl IfThenElseValidator<SerdeJson> {
+    #[inline]
+    pub(crate) fn compile<'a, F: Json>(
+        ctx: &compiler::Context<F>,
+        schema: &'a Value,
+        then_schema: &'a Value,
+        else_schema: &'a Value,
+    ) -> CompilationResult<'a, F> {
+        Ok(Box::new(IfThenElseValidator {
+            schema: {
+                let ctx = ctx.new_at_location("if");
+                compiler::compile(&ctx, ctx.as_resource_ref(schema))?
+            },
+            then_schema: {
+                let ctx = ctx.new_at_location("then");
+                compiler::compile(&ctx, ctx.as_resource_ref(then_schema))?
+            },
+            else_schema: {
+                let ctx = ctx.new_at_location("else");
+                compiler::compile(&ctx, ctx.as_resource_ref(else_schema))?
+            },
+        }))
+    }
+}
+
+impl<F: Json> Validate<F> for IfThenElseValidator<F> {
+    fn is_valid(&self, instance: &F::Node<'_>, ctx: &mut ValidationContext) -> bool {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema.is_valid(instance, ctx)
+        } else {
+            self.else_schema.is_valid(instance, ctx)
+        }
+    }
+
+    fn validate<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> Result<(), ValidationError<'i>> {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema.validate(instance, location, tracker, ctx)
+        } else {
+            self.else_schema.validate(instance, location, tracker, ctx)
+        }
+    }
+
+    fn collect_errors<'i>(
+        &self,
+        instance: &F::Node<'i>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+        errors: &mut Vec<ValidationError<'i>>,
+    ) {
+        if self.schema.is_valid(instance, ctx) {
+            self.then_schema
+                .collect_errors(instance, location, tracker, ctx, errors);
+        } else {
+            self.else_schema
+                .collect_errors(instance, location, tracker, ctx, errors);
+        }
+    }
+
+    fn evaluate(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        self.evaluate_with_location(instance, location, &location.into(), tracker, ctx)
+    }
+
+    fn evaluate_with_location(
+        &self,
+        instance: &F::Node<'_>,
+        location: &LazyLocation,
+        instance_location: &Location,
+        tracker: Option<&RefTracker>,
+        ctx: &mut ValidationContext,
+    ) -> EvaluationResult {
+        let if_node =
+            self.schema
+                .evaluate_instance_at(instance, location, instance_location, tracker, ctx);
+        if if_node.valid {
+            let then_node = self.then_schema.evaluate_instance_at(
+                instance,
+                location,
+                instance_location,
+                tracker,
+                ctx,
+            );
+            let mut children = ChildList::default();
+            children.push(&mut ctx.arena, if_node);
+            children.push(&mut ctx.arena, then_node);
+            EvaluationResult::from_children(children)
+        } else {
+            let else_node = self.else_schema.evaluate_instance_at(
+                instance,
+                location,
+                instance_location,
+                tracker,
+                ctx,
+            );
+            EvaluationResult::from_children(ChildList::of(&mut ctx.arena, else_node))
+        }
+    }
+}
+
+#[inline]
+pub(crate) fn compile<'a, F: Json>(
+    ctx: &compiler::Context<F>,
+    parent: &'a Map<String, Value>,
+    schema: &'a Value,
+) -> Option<CompilationResult<'a, F>> {
+    let then = parent.get("then");
+    let else_ = parent.get("else");
+    match (then, else_) {
+        (Some(then_schema), Some(else_schema)) => Some(IfThenElseValidator::compile(
+            ctx,
+            schema,
+            then_schema,
+            else_schema,
+        )),
+        (None, Some(else_schema)) => Some(IfElseValidator::compile(ctx, schema, else_schema)),
+        (Some(then_schema), None) => Some(IfThenValidator::compile(ctx, schema, then_schema)),
+        (None, None) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::tests_util;
+    use serde_json::{json, Value};
+    use test_case::test_case;
+
+    #[test_case(&json!({"if": {"minimum": 0}, "else": {"multipleOf": 2}}), &json!(-1), "/else/multipleOf")]
+    #[test_case(&json!({"if": {"minimum": 0}, "then": {"multipleOf": 2}}), &json!(3), "/then/multipleOf")]
+    #[test_case(&json!({"if": {"minimum": 0}, "then": {"multipleOf": 2}, "else": {"multipleOf": 2}}), &json!(-1), "/else/multipleOf")]
+    #[test_case(&json!({"if": {"minimum": 0}, "then": {"multipleOf": 2}, "else": {"multipleOf": 2}}), &json!(3), "/then/multipleOf")]
+    fn location(schema: &Value, instance: &Value, expected: &str) {
+        tests_util::assert_schema_location(schema, instance, expected);
+    }
+
+    #[test]
+    fn malformed() {
+        tests_util::assert_compile_error(
+            &json!({"if": 5, "then": {}}),
+            "5 is not of types \"boolean\", \"object\"",
+            "/if",
+        );
+    }
+}

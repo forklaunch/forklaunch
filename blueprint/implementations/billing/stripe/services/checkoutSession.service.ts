@@ -23,21 +23,19 @@ import { StripeCheckoutSessionEntities } from '../domain/types/stripe.entity.typ
 export class StripeCheckoutSessionService<
   SchemaValidator extends AnySchemaValidator,
   StatusEnum,
-  MapperEntities extends StripeCheckoutSessionEntities<StatusEnum>,
-  Dto extends
-    StripeCheckoutSessionDtos<StatusEnum> = StripeCheckoutSessionDtos<StatusEnum>
-> implements
-    CheckoutSessionService<
-      typeof PaymentMethodEnum,
-      typeof CurrencyEnum,
-      StatusEnum,
-      {
-        CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
-        CheckoutSessionDto: Dto['CheckoutSessionMapper'];
-        IdDto: IdDto;
-      }
-    >
-{
+  MapperEntities extends StripeCheckoutSessionEntities,
+  Dto extends StripeCheckoutSessionDtos<StatusEnum> =
+    StripeCheckoutSessionDtos<StatusEnum>
+> implements CheckoutSessionService<
+  typeof PaymentMethodEnum,
+  typeof CurrencyEnum,
+  StatusEnum,
+  {
+    CreateCheckoutSessionDto: Dto['CreateCheckoutSessionMapper'];
+    CheckoutSessionDto: Dto['CheckoutSessionMapper'];
+    IdDto: IdDto;
+  }
+> {
   baseCheckoutSessionService: BaseCheckoutSessionService<
     SchemaValidator,
     PaymentMethodEnum,
@@ -95,6 +93,8 @@ export class StripeCheckoutSessionService<
     checkoutSessionDto: StripeCreateCheckoutSessionDto<StatusEnum>,
     ...args: unknown[]
   ): Promise<Dto['CheckoutSessionMapper']> {
+    await this.mappers.CreateCheckoutSessionMapper.validateCreate?.(checkoutSessionDto);
+
     const session = await this.stripeClient.checkout.sessions.create({
       ...checkoutSessionDto.stripeFields,
       mode: 'subscription',
@@ -103,6 +103,8 @@ export class StripeCheckoutSessionService<
       success_url: checkoutSessionDto.successRedirectUri,
       cancel_url: checkoutSessionDto.cancelRedirectUri
     });
+
+    await this.mappers.CreateCheckoutSessionMapper.validateProviderCreate?.(session);
 
     return await this.baseCheckoutSessionService.createCheckoutSession(
       {
@@ -121,6 +123,17 @@ export class StripeCheckoutSessionService<
   async getCheckoutSession(
     idDto: IdDto
   ): Promise<Dto['CheckoutSessionMapper']> {
+    const readCachedDto = this.mappers.CheckoutSessionMapper.readCachedDto;
+    if (readCachedDto) {
+      const existing =
+        await this.baseCheckoutSessionService.getCheckoutSession(idDto);
+      if (existing.id !== idDto.id) {
+        throw new Error('Cached checkout identity does not match');
+      }
+      return readCachedDto(existing, (providerId) =>
+        this.stripeClient.checkout.sessions.retrieve(providerId)
+      );
+    }
     const session = await this.stripeClient.checkout.sessions.retrieve(
       idDto.id
     );
@@ -132,26 +145,56 @@ export class StripeCheckoutSessionService<
     return databaseCheckoutSession;
   }
 
+  /**
+   * The Stripe id (`cs_...`) stored with a checkout session when it was
+   * created. Public ids are local; Stripe only knows its own id. The stored
+   * provider object's id wins; a record without one is still usable when its
+   * own id is a Stripe id. Anything else fails here rather than sending Stripe
+   * a local id.
+   */
+  protected async stripeCheckoutSessionId(id: string): Promise<string> {
+    const checkoutSession =
+      await this.baseCheckoutSessionService.getCheckoutSession({ id });
+    const stored = (
+      checkoutSession?.stripeFields as { id?: unknown } | undefined
+    )?.id;
+    const stripeId = stored === undefined ? checkoutSession?.id : stored;
+    if (typeof stripeId !== 'string' || !/^cs_[A-Za-z0-9_]+$/.test(stripeId)) {
+      throw new Error(
+        `Checkout session ${id} has no stored Stripe checkout session id`
+      );
+    }
+    return stripeId;
+  }
+
   async expireCheckoutSession({ id }: IdDto): Promise<void> {
-    await this.stripeClient.checkout.sessions.expire(id);
+    await this.stripeClient.checkout.sessions.expire(
+      await this.stripeCheckoutSessionId(id)
+    );
     await this.baseCheckoutSessionService.expireCheckoutSession({ id });
   }
 
   async handleCheckoutSuccess({ id }: IdDto): Promise<void> {
-    await this.stripeClient.checkout.sessions.update(id, {
-      metadata: {
-        status: 'SUCCESS'
+    await this.stripeClient.checkout.sessions.update(
+      await this.stripeCheckoutSessionId(id),
+      {
+        metadata: {
+          status: 'SUCCESS'
+        }
       }
-    });
+    );
     await this.baseCheckoutSessionService.handleCheckoutSuccess({ id });
   }
 
   async handleCheckoutFailure({ id }: IdDto): Promise<void> {
-    await this.stripeClient.checkout.sessions.update(id, {
-      metadata: {
-        status: 'FAILED'
+    await this.stripeClient.checkout.sessions.update(
+      await this.stripeCheckoutSessionId(id),
+      {
+        metadata: {
+          status: 'FAILED'
+        }
       }
-    });
+    );
     await this.baseCheckoutSessionService.handleCheckoutFailure({ id });
   }
 }

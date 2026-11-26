@@ -19,7 +19,7 @@ describe('Subscription Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -30,7 +30,7 @@ describe('Subscription Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('POST /subscription - createSubscription', () => {
     it('should create a subscription successfully', async () => {

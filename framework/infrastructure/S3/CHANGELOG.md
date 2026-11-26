@@ -1,5 +1,121 @@
 # @forklaunch/infrastructure-s3
 
+## 1.5.5
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+
+## 1.5.4
+
+### Patch Changes
+
+- 49e1bb2: Read `v4` field envelopes. Native (Rust) cache and object-store writers seal records as randomized, stamped `v4` envelopes; the TypeScript readers only recognized `v1`–`v3` and returned the ciphertext as the value.
+
+## 1.5.3
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+
+## 1.5.2
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies [e36cfd2]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/core@3.1.0
+  - @forklaunch/common@1.2.31
+
+## 1.5.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/core@3.0.1
+
+## 1.5.0
+
+### Minor Changes
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+
+## 1.4.17
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/core@2.1.1
+
+## 1.4.15
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/common@1.2.27
+
 ## 1.4.14
 
 ### Patch Changes

@@ -1,0 +1,19 @@
+[package]
+name = "{{{name}}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "{{{description}}}"
+
+[dependencies]
+serde_json = {}
+axum = {}
+tokio = { features = ["macros", "rt-multi-thread", "net", "signal"] }
+forklaunch-core = {path = "../../.forklaunch/framework-rs/crates/core", features = ["openapi", "auth", "encryption", "otlp", "postgres", "remote-jwks", "domain", "provider-http"] }
+forklaunch-axum = { path = "../../.forklaunch/framework-rs/crates/axum", features = ["remote-jwks", "mcp"] }
+forklaunch-billing-interface = { path = "../../.forklaunch/blueprint-rs/crates/interfaces/billing-interface" }
+forklaunch-billing-base = { path = "../../.forklaunch/blueprint-rs/crates/implementations/billing/billing-base", features = ["postgres"] }
+forklaunch-billing-stripe = { path = "../../.forklaunch/blueprint-rs/crates/implementations/billing/billing-stripe", features = ["bound-checkout"{{#stripe}}, "typescript-routing"{{/stripe}}] }
+jsonwebtoken = {}
+sqlx = { default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }

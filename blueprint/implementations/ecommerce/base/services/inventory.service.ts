@@ -22,8 +22,7 @@ export class BaseInventoryService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseInventoryEntities,
   MapperDomains extends BaseInventoryDtos = BaseInventoryDtos
-> implements InventoryService
-{
+> implements InventoryService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -70,7 +69,7 @@ export class BaseInventoryService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(inventory);
+      innerEm.persist(inventory);
     });
     return this.mappers.InventoryMapper.toDto(inventory);
   }

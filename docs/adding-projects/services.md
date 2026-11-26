@@ -124,7 +124,7 @@ service-name/
 ├── package.json       # Dependencies and scripts
 ├── mikro-orm.config.ts # Database ORM configuration
 ├── tsconfig.json      # TypeScript configuration
-├── eslint.config.mjs  # ESLint configuration
+├── .oxlint.config.json # oxlint configuration
 └── .gitignore         # Git ignore rules
 ```
 

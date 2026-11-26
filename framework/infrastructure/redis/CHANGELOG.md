@@ -1,5 +1,111 @@
 # @forklaunch/infrastructure-redis
 
+## 1.5.0
+
+### Minor Changes
+
+- d612dd6: BREAKING: an HMAC-signed request (`auth: { hmac }`, internal service-to-service routes) is now accepted only once. Its timestamp must be within 5 minutes of the server clock in either direction, its signature is compared in constant time, and its nonce cannot be reused inside that window; a missing or malformed timestamp is a 401 and an unknown key id a 403. Who is affected: callers whose clock is more than 5 minutes off, and hand-written signers that reuse a nonce or cache the `authorization` header across requests (the framework signers, `generateHmacAuthHeaders` and `universalSdk({ hmac })`, already sign every request freshly). Fix: sync clocks, and sign every request, including retries, with a new timestamp and nonce; the window is configurable with `hmac: { secretKeys, maxSkewMs }`. Multi-instance apps must act: used nonces are remembered in process memory by default, which protects a single process only, so an app running several copies needs a shared store, `hmac: { secretKeys, nonceStore: redisTtlCache }`. `TtlCache` gains an optional atomic `putRecordIfAbsent`, implemented by `RedisTtlCache` with `SET NX PX`, and the nonce store uses it; a cache without it still works but falls back to a non-atomic check followed by a write. A custom store can implement `HmacNonceStore` (`claim(key, ttlMs)`). `maxSkewMs` and `nonceStore` are also accepted by `bindRuntimeAuth`. The HMAC failure debug log no longer contains the expected signature or the request body.
+
+### Patch Changes
+
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [d612dd6]
+- Updated dependencies [e9d7bdd]
+  - @forklaunch/core@4.0.0
+
+## 1.4.22
+
+### Patch Changes
+
+- 49e1bb2: Read `v4` field envelopes. Native (Rust) cache and object-store writers seal records as randomized, stamped `v4` envelopes; the TypeScript readers only recognized `v1`–`v3` and returned the ciphertext as the value.
+
+## 1.4.21
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies [de09443]
+- Updated dependencies [ec6f0f5]
+- Updated dependencies
+- Updated dependencies [7c27cfb]
+  - @forklaunch/core@3.2.0
+  - @forklaunch/common@1.2.32
+
+## 1.4.20
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies [e36cfd2]
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+  - @forklaunch/core@3.1.0
+  - @forklaunch/common@1.2.31
+
+## 1.4.19
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/core@3.0.1
+
+## 1.4.18
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies
+- Updated dependencies [f2b6357]
+  - @forklaunch/core@3.0.0
+  - @forklaunch/common@1.2.29
+
+## 1.4.17
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/core@2.1.1
+
+## 1.4.15
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/core@1.6.2
+  - @forklaunch/common@1.2.27
+
 ## 1.4.14
 
 ### Patch Changes

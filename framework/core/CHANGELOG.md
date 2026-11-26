@@ -1,5 +1,362 @@
 # @forklaunch/core
 
+## 4.1.0
+
+### Minor Changes
+
+- 8dc54d6: The `cors` application option accepts `'environment'`, which states that the application takes its allowed origins from `CORS_ORIGINS` (the same behaviour as leaving the option out). Creating an application with no `cors` option is now marked `@deprecated`, so a linter with a no-deprecated rule (`typescript/no-deprecated` in oxlint, `@typescript-eslint/no-deprecated`) points at every application that has not said how it answers cross-origin browser requests since the 4.0 default changed. To clear it, pass `cors: 'environment'` or `cors: { origin: [...] }`. Nothing changes at runtime.
+
+## 4.0.0
+
+### Major Changes
+
+- d612dd6: BREAKING: cross-origin browser access is now denied unless the application names its origins. An application created without a `cors` option used to answer every origin with `Access-Control-Allow-Origin: *`; it now allows only the origins in the comma separated `CORS_ORIGINS` environment variable, and when that is unset it allows no origin when `NODE_ENV=production` and only `localhost` / `127.0.0.1` / `[::1]` otherwise (one startup warning explains this). Who is affected: any service with a browser frontend on a different origin that passes no `cors` option and has no `CORS_ORIGINS` set. Fix: set `CORS_ORIGINS=https://your-ui` (several: `CORS_ORIGINS=https://app.example.com,https://admin.example.com`), or pass `cors: { origin: ['https://your-ui'] }` in the application options. Server-to-server, curl and same-origin callers are unaffected. An explicit `cors` option is still used exactly as given, which means an object without `origin`, including an empty `cors: {}`, still allows every origin; a startup warning now says so. `Access-Control-Allow-Credentials: true` is never sent together with a wildcard origin (browsers already rejected that pair): name the origins to use credentials.
+- d612dd6: BREAKING: an HMAC-signed request (`auth: { hmac }`, internal service-to-service routes) is now accepted only once. Its timestamp must be within 5 minutes of the server clock in either direction, its signature is compared in constant time, and its nonce cannot be reused inside that window; a missing or malformed timestamp is a 401 and an unknown key id a 403. Who is affected: callers whose clock is more than 5 minutes off, and hand-written signers that reuse a nonce or cache the `authorization` header across requests (the framework signers, `generateHmacAuthHeaders` and `universalSdk({ hmac })`, already sign every request freshly). Fix: sync clocks, and sign every request, including retries, with a new timestamp and nonce; the window is configurable with `hmac: { secretKeys, maxSkewMs }`. Multi-instance apps must act: used nonces are remembered in process memory by default, which protects a single process only, so an app running several copies needs a shared store, `hmac: { secretKeys, nonceStore: redisTtlCache }`. `TtlCache` gains an optional atomic `putRecordIfAbsent`, implemented by `RedisTtlCache` with `SET NX PX`, and the nonce store uses it; a cache without it still works but falls back to a non-atomic check followed by a write. A custom store can implement `HmacNonceStore` (`claim(key, ttlMs)`). `maxSkewMs` and `nonceStore` are also accepted by `bindRuntimeAuth`. The HMAC failure debug log no longer contains the expected signature or the request body.
+- d612dd6: BREAKING: JWT verification always pins the signature algorithm. `jwt: { signatureKey }` accepts `HS256` only; `jwt: { jwksPublicKey }` and `jwt: { jwksPublicKeyUrl }` accept only the asymmetric algorithms that fit each key (RS*/PS* for RSA, ES256/384/512 by curve, EdDSA for Ed25519, or the key's own `alg`), never an HMAC algorithm and never `none`. Who is affected: services whose tokens are signed with `HS384` or `HS512`, and services that passed a symmetric (`kty: 'oct'`) JWK as `jwksPublicKey`. Fix: add the algorithm to the auth config, for example `jwt: { signatureKey, algorithms: ['HS512'] }`, and move a shared secret to `signatureKey`. New optional settings on every `jwt` config, also accepted by `bindRuntimeAuth`: `algorithms` (narrows the list), `issuer` and `audience` (checked only when set; an empty value rejects tokens instead of switching the check off).
+
+### Patch Changes
+
+- e9d7bdd: Moves `@forklaunch/opentelemetry-instrumentation-hyper-express` to 0.0.6, which no longer depends on `@opentelemetry/core` 1.x (GHSA-8988-4f7v-96qf, unbounded memory allocation in W3C Baggage propagation).
+
+## 3.5.0
+
+### Minor Changes
+
+- f047dec: Serve MCP at `/mcp` (or `mcp.path`) on the application port, the way Rust services do, instead of a second listener on `MCP_PORT` / `PORT + 2000`. A separate listener is still used when `mcp.port`, `MCP_PORT` or `MCP_LISTENER=separate` is set; set `MCP_LISTENER=separate` to keep MCP clients that point at `PORT + 2000` working. Sessions are stateless by default so any worker or task can answer; `mcp.sessions: 'stateful'` keeps in-memory sessions (single worker only) that close after `sessionIdleTimeoutMs` (default 15 minutes) idle. A failed `authenticate` returns 401 with `WWW-Authenticate: Bearer`, and hyper-express now applies `authenticate`. Tools forward the caller's `Authorization`, `x-correlation-id` and trace headers to the routes they call; a header the tool supplies wins.
+
+### Patch Changes
+
+- eb7c292: Pass the OpenTelemetry metric reader through `metricReaders`, which replaces the removed `metricReader` option
+
+## 3.4.0
+
+### Minor Changes
+
+- ba5099d: Add `@forklaunch/core/agent`: the runtime behind `forklaunch init agent`. Tools in the MCP shape (`toolFactory`, `localTools`), app services as tools from their OpenAPI documents (`serviceTools`), external MCP servers over streamable HTTP (`mcpServer`), a tool-calling loop over the model gateway with streaming events, and stateless approvals for tools that are not read-only (AES-GCM sealed continuations).
+- ee4ac9e: Add a server-side local model client that uses a desktop relay or the CLI's selected account to obtain app-scoped credentials. Explicit ForkLaunch API keys take precedence; credentials stay in memory. Add bounded text streaming to the preview client, with interruption detection and cancellation.
+
+### Patch Changes
+
+- d0d3049: Payments: `createPaymentsClient()` gains `payouts({ limit })` (the connected account's balance, recent payouts, bank and payout schedule; read-only, empty before onboarding) and `dashboardLink()` (Stripe's own page for changing the bank and getting tax forms; 409 before onboarding), with the `PaymentsPayouts`, `PaymentsPayout` and `PaymentsMoney` types. The gateway mock serves both routes.
+
+## 3.3.0
+
+### Minor Changes
+
+- d2319b3: Contract, documentation and validation fixes:
+
+  - New exports from `@forklaunch/core/http`: `bindRuntimeAuth` (binds JWT or HMAC credentials to a portable auth policy and rejects bindings that try to override the policy) and `registerDelegatedSurface` (registers provider-owned routes, such as Better Auth's, and keeps them out of generated endpoint SDKs).
+  - OpenAPI: path parameters are marked `required`; security requirements name the scheme that is declared (the auth header name, or `basic`) with an empty scope list; `undefined`/`void` responses have no `content`; a request body is optional when its schema is optional (through the validator's new `openapiRequestBody`).
+  - Response validation: in `error` mode, a status code the contract does not declare is a 500 (`Undocumented response status`) instead of being validated against a missing schema; `warning` mode still sends and logs it. Framework diagnostics are no longer re-validated against the failing route.
+  - Request validation errors (400) are sent as `text/plain`, matching their body.
+  - MCP tools: versioned routes pick the version by position, keep response schemas for bodyless routes, send JSON bodies with `JSON.stringify` (JSON strings included), stop double-encoding URLs, and omit `Content-Type` when there is no body.
+  - AsyncAPI: plain JSON Schema payloads are normalized to object-form schemas, non-Draft-7 dialects are wrapped in a Multi Format Schema Object, channel and message `$ref`s are JSON-pointer escaped, and empty channel addresses or ones containing `?`/`#` are rejected.
+  - WebSocket schema parsing treats only an `undefined` schema as "no schema".
+
+- d2319b3: HMAC request verification now accepts signatures over the full wire path: the request URL without its query string, router mount included, e.g. `POST /payment-link`. That is the path the Rust verifiers and the new `@forklaunch/universal-sdk` signers sign. Express routers used to verify only the router-relative `req.path` (`/`). That form is still accepted, so existing callers keep working, but it is deprecated because a relative path is not bound to its mount; the first time a request uses it, the server logs a warning. Set `HMAC_ACCEPT_MOUNT_RELATIVE_PATHS=false` to reject it once every caller signs the full path.
+
+### Patch Changes
+
+- d2319b3: `stripeGatewayFetch` keeps Bun's `fetch.preconnect` (pointed at the gateway origin) when the runtime has it, so the Stripe SDK works on Bun. The `forklaunch-gateway-mock` binary adds the scoped payments context routes (`POST /payments/context`, `/payments/context/checkout-read`, `/payments/context/payment-link-read`, `/payments/context/paused-subscription-read`) that managed billing uses for verified checkout, payment-link and paused-subscription reads.
+- cf365df: `@forklaunch/testing`:
+
+  - `startTestJwtIssuer()` starts a local RS256 issuer that serves its JWKS over HTTP (default path `/api/auth/jwks`, as IAM serves it) and mints tokens with `sub`, `tenant_id`, `roles` and `permissions` claims, mirroring the Rust IAM's session tokens. `BlueprintTestHarness` takes `jwt: true` (or issuer options) to start one, point `JWKS_PUBLIC_KEY_URL` at it and return it as `setup.jwt`. `surfaceFromTestClaims` gives routers `surfaceRoles` / `surfacePermissions` that read those claims. Previously `JWKS_PUBLIC_KEY_URL` always pointed at `localhost:3000`, which nothing serves in a generated app, so JWT-protected routes could not be exercised in tests.
+  - The harness starts the containers a test needs (database, Redis, Kafka, S3) concurrently instead of one after another.
+  - Postgres and Redis containers wait for their "ready" log line rather than the default port check. The port check runs `docker exec`, which never settles under the Bun runtime, so every Redis-backed test hook in a Bun app hung until it timed out. Postgres also no longer reports ready during its init-time restart.
+  - The Kafka container advertises the host port clients actually reach (a free port bound up front) and waits for the broker to start, so producers in tests can connect; the KRaft cluster id default is now a valid one.
+
+  `@forklaunch/core`:
+
+  - Local SDK calls with `executeMiddlewares: true` run the middleware chain the way a server does: a middleware that answers the request itself (an auth 401/403) ends it before the controller runs, async hyper-express middlewares that take no `next` continue when they resolve, and the stand-in request/response carry what the express and hyper-express adapters read (`getHeaders`, `locals`, hyper-express's status/header fields and body readers). Before, every middleware ran even after one had responded, the controller then overwrote the response, and the express and hyper-express response enrichment crashed on the stand-in response.
+  - Response validation for a default error status (400/401/403/404/500) no longer crashes with TypeBox when the route declares that status: a compiled TypeBox schema cannot be a union member, so the declared schema and the string message are tried in turn. Zod output is unchanged.
+
+- f868861: - The managed gateway clients (`createModelGatewayClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createStripeClient`, and the shared `instanceGatewaySettings`) no longer say they are only for managed instances. Their refusal names the managed gateway settings (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`), which the platform sets for a managed instance and, at deploy, for a component of a regular app that declares the capability (`forklaunch infra add <service> <capability>`). Code that matched the old message text ("managed mode", "not a managed instance") should match on the error's settings names instead.
+- Updated dependencies [d2319b3]
+  - @forklaunch/validator@1.3.0
+
+## 3.2.0
+
+### Minor Changes
+
+- de09443: **Behaviour change:** a compliant field (pii/phi/pci) now decrypts under the tenant it was loaded under, not whatever tenant is bound when `.deanon` runs. The field records the tenant bound when the row was hydrated (with `wrapEmWithTenantContext`, the entity manager's tenant), or when a plain value was assigned to it, and uses that key for every later read and write. So `.deanon` works after `await em.find(...)` returns, with nothing bound, and you can remove `withEncryptionContext(tenantId, …)` wrappers that exist only to build DTOs from loaded entities. A read with a _different_ tenant bound now throws the new `TenantMismatchError` instead of decrypting, as does flushing a value assigned under one tenant through another tenant's entity manager. Rows loaded with no tenant bound (a raw `orm.em.fork()`) behave as before: reading them needs a tenant bound at read time. A write with no tenant anywhere still throws `UnboundTenantError`.
+
+  Also fixed: `em.assign(entity, { week: 29 })` (and `wrap(entity).assign`) on an existing row threw MikroORM's "Trying to set X.week of type 'string' to 29 of type 'number'" for every encrypted field that is not a string (integer, number, boolean, date, json, array). Compliant properties now report their in-memory type (`CompliantField`) to MikroORM instead of `string`, so assigned values reach the property setter and are wrapped as with `em.create`.
+
+- ec6f0f5: - **Default audit trail.** Every request handled through ForkLaunch appends one audit record (`log.type: audit`) when its response finishes: user, tenant, method, route, status, duration and a SHA-256 of the body (never the body itself). Refused requests are recorded as `auth_failure` (401), `rbac_deny` (403) or `rate_limit` (429). Every `.deanon` read of a compliant field adds a `data_access` record (field, level, tenant), and every create, update or delete of a record holding pii, phi or pci fields adds a `data_change` record (entity and id, action, sensitive field names, tenant). Entities defined with `defineComplianceEntity` get the change hooks automatically. Set `FORKLAUNCH_AUDIT=off` to turn it off.
+  - `onComplianceChange(listener)` reports changes to sensitive records, for apps that want their own audit sink.
+- 7c27cfb: `createEmailClient().send` takes an optional `listUnsubscribe: { url?, mailto?, oneClick? }`. The platform adds `List-Unsubscribe` (RFC 2369) and, with `oneClick`, `List-Unsubscribe-Post: List-Unsubscribe=One-Click` (RFC 8058) to the message, which Gmail and Yahoo require of bulk senders. These are targets, not header text: `url` must be https (printable ASCII, up to 512 characters, no `< > , " \`), `mailto` a plain mailbox, at least one is required, and `oneClick` needs `url` (also enforced by the `EmailListUnsubscribe` type). The client, the platform gateway and the local gateway mock apply the same rules; the mock records the option and the headers it implies on `GET /__mock/email/messages`. `validateListUnsubscribe` and `EMAIL_LIMITS.maxUnsubscribeUrlLength` are exported.
+
+  Needs a platform whose email gateway accepts `listUnsubscribe`; an older gateway ignores the field.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+  - @forklaunch/validator@1.2.33
+
+## 3.1.0
+
+### Minor Changes
+
+- e36cfd2: Add `createPreviewModelGatewayClient` for the desktop's isolated local model relay. Its validated `GatewayPreviewModels` catalog contains model IDs and short-lived preview ceilings, without inventing managed monthly usage or BAA metadata. The existing managed `createModelGatewayClient` and `GatewayModels` contract are unchanged.
+
+  The additive `GatewayPreviewChatCompletion` type makes a provider timestamp optional; managed completion types retain their existing required `created` field.
+
+- `createStripeClient`: an explicit `apiKey` now wins over a managed contract detected in the environment (`PLATFORM_GATEWAY_URL`, `INSTANCE_ID`, `INSTANCE_HMAC_KEY`). Only explicit gateway options outrank it. Before, a service that held both its own Stripe key and the gateway variables (for example, a regular app that added managed email) silently sent Stripe calls to the platform gateway. Behaviour fix: a managed service that passes `apiKey` now uses that key.
+
+### Patch Changes
+
+- Managed email is available to regular app deployments as well as managed instances: `createEmailClient`'s error no longer says it is managed-instance only. The local gateway mock (`forklaunch-gateway-mock`) delivers each event to every address in `MOCK_EVENTS_URL_<FEATURE>` (comma-separated), so a service and a worker that both hold email each receive their events.
+- Updated dependencies
+  - @forklaunch/common@1.2.31
+  - @forklaunch/validator@1.2.32
+
+## 3.0.1
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+  - @forklaunch/validator@1.2.31
+
+## 3.0.0
+
+### Major Changes
+
+- **Breaking:** pii, phi and pci entity properties load as `CompliantField`. Read the value with `.deanon` (plaintext, audited through `onComplianceAccess`) or `.anon` (de-identified); there is no `toString`/`toJSON`/inspect overload, so a raw field cannot leak into a log, a response or a vendor call by accident.
+
+  - Plain values still work in `em.create`/`em.assign` and, for `queryable` fields, in `where` (blind index in `<column>_idx`).
+  - New `v4:` random-IV envelope; `reencryptEncryptedColumns` upgrades existing rows.
+  - `deanon(entity)` for spreads.
+  - Migrate with `npx -p @forklaunch/core forklaunch-migrate-compliant-fields [tsconfig.json]`, which now runs on TypeScript 7's API (`typescript/unstable/sync`); TypeScript 5 is no longer needed.
+
+### Minor Changes
+
+- Managed-instance integrations through the ForkLaunch instance gateway. No vendor key lives in the app: calls are signed with the instance's HMAC key and vendor events come back signed.
+
+  - `createInstanceGatewayTransport`, `verifyPlatformEvent` / `signPlatformEvent`, `isManagedInstance`.
+  - Clients: `createModelGatewayClient`, `createEmailClient`, `createSmsClient`, `createWhatsAppClient`, `createVoiceClient`, `createPaymentsClient`, and `createStripeClient` (the real Stripe SDK routed through the gateway; `stripe` is an optional peer dependency).
+  - `forklaunch-gateway-mock`: a local gateway and vendor mock with one route file per feature, signed event delivery and test control endpoints. `forklaunch-model-gateway-mock` remains as an alias.
+
+- f2b6357: Object store: real files, browser uploads and download links, keyless on ForkLaunch.
+
+  - `ObjectStore` gains `putFile(key, body, { contentType, filename?, metadata? })`,
+    `presignUpload(key, { contentType, maxBytes, expiresIn? })` (a presigned POST that
+    enforces size and content type) and `presignDownload(key, { expiresIn?, filename? })`.
+    Custom `ObjectStore` implementations must add them.
+  - `S3ObjectStore` takes `prefix` (confines every key), `presignLimits` (lifetime caps,
+    from `S3_PRESIGN_MAX_UPLOAD_SECONDS` / `S3_PRESIGN_MAX_DOWNLOAD_SECONDS`) and
+    `createBucketIfMissing`, which now defaults to true only when a custom endpoint
+    (MinIO) is configured: deployed buckets are provisioned by the platform.
+  - `s3ClientConfig({ url, region, accessKeyId, secretAccessKey })` passes keys only when
+    both are set, so deployed services use their task role.
+
+### Patch Changes
+
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+  - @forklaunch/validator@1.2.30
+
+## 2.1.1
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+  - @forklaunch/validator@1.2.29
+
+## 2.1.0
+
+### Minor Changes
+
+- **Compliance walks can be tenant-scoped, and failures are reported rather
+  than swallowed.**
+
+  `ComplianceDataService.erase/export` and `RetentionService.enforce` walked
+  every PII-bearing entity through `orm.em.fork()` — unbound. Every one of
+  those columns is encrypted under its row's tenant, and a WHERE value on an
+  encrypted column is encrypted under the CURRENT tenant before it is
+  compared, so an unbound walk searched with a key nothing was written with.
+  It matched nothing, everywhere.
+
+  For this service that is the worst possible failure: an erase that finds
+  nothing is indistinguishable from an erase with nothing to do, and it
+  reported success. A subject could be told their data was deleted while all
+  of it remained.
+
+  - `erase(userId, { tenantIds })` and `export(userId, { tenantIds })` run the
+    walk once per tenant and merge the results. An export appends per tenant
+    rather than overwriting, so a subject with rows under two organizations
+    gets both.
+  - `EnforcementOptions.tenantIds` does the same for retention.
+  - `EraseResult.failures` and `ExportResult.failures` are new. An entity the
+    walk could not read used to be logged and forgotten, leaving a clean
+    result; it is now reported. **A non-empty `failures` means the request is
+    incomplete** — the rows that could be processed still were, but the caller
+    must not treat it as done.
+
+  Omitting `tenantIds` keeps the previous single unbound pass, which is
+  correct only for a schema whose PII-bearing entities carry no encrypted
+  column. Since 2.0.0 that pass fails loudly instead of silently.
+
+## 2.0.0
+
+### Major Changes
+
+- **The empty tenant is not a tenant.** `''` is rejected wherever a tenant is
+  bound, and an encrypted column touched with no tenant bound throws instead of
+  falling back to the empty key.
+
+  `''` used to mean "the global tenant", so a deliberate global row and a tenant
+  nobody resolved shared ONE KEY. A path that simply forgot to bind wrote rows
+  that looked fine; the mistake surfaced later and elsewhere, as the owning
+  tenant's "Failed to decrypt encrypted column value", blaming the reader for the
+  writer's bug. The query path was quieter still: a WHERE value on an encrypted
+  column is encrypted before it is compared, so an unbound lookup produced
+  ciphertext under `''` that matched nothing — an empty result set, no error.
+
+  - `wrapEmWithTenantContext(em, '')`, `withEncryptionContext('')` and
+    `setEncryptionTenantId('')` throw `EmptyTenantError`, which names an explicit
+    constant as the replacement.
+  - Reading or writing an encrypted column with nothing bound throws
+    `UnboundTenantError`, naming the operation and how to bind one.
+  - `getBoundTenantId()` returns `string | undefined` — the distinction
+    `getCurrentTenantId()` cannot make. The latter is deprecated: the `''` it
+    answers when nothing is bound IS the bug.
+
+  `undefined` still means "do not wrap", so a lookup that has not resolved a
+  tenant and reads no encrypted column is unaffected.
+
+  **Upgrading.** An application holding rows encrypted under `''` must re-tenant
+  them before taking this, or those rows stop being readable. Pick a constant no
+  organization can collide with (`'_internal'` is what forklaunch-platform uses)
+  and migrate: snapshot each encrypted column's raw bytes first, decrypt under
+  `''`, rewrite under the row's canonical tenant.
+
+## 1.6.7
+
+### Patch Changes
+
+- A tenant-bound entity manager leaves `fork()` unbound again. 1.6.6 returned a proxy on
+  the parent's tenant from `fork()`, which made `getSuperAdminContext(em).fork()` inside an
+  explicit `withEncryptionContext(other, …)` lose to the parent's tenant; that idiom is how
+  a service steps out of the tenant on purpose. The fluent-return fix stays: `persist()` and
+  friends return the proxy, so `em.persist(row).flush()` runs inside the tenant.
+
+## 1.6.6
+
+### Patch Changes
+
+- **A tenant-bound entity manager stays bound through chained calls and forks.**
+
+  `wrapEmWithTenantContext` runs each method inside `withEncryptionContext(tenantId, …)`,
+  but a method that returns the entity manager itself (`persist`, `remove`, the other fluent
+  methods) handed back the _raw_ manager, so `em.persist(row).flush()` ran `flush` outside the
+  context and encrypted the row under whatever tenant the caller happened to be in. An
+  operator promote wrote an organization's subscription under the empty key this way; the
+  row then refused to decrypt under the organization's key.
+
+  A method that returns the manager now returns the proxy, and `fork()` returns a new proxy
+  on the same tenant. Tests cover the chained `persist().flush()` and the fork.
+
+## 1.6.5
+
+### Patch Changes
+
+- `ResolvedRelation` no longer special-cases `any`. A conditional type on `any` takes every
+  branch, so an `any` field resolves to a union no concrete value satisfies; the 1.6.4 guard
+  hid that instead of surfacing it. Shape entities that stand in for an app-defined enum
+  should declare the column as `fp.enum<string[]>()` (a string column with unknown members)
+  rather than `fp.enum()`, which infers `any`. The type test now uses that form and fails on
+  the untyped one.
+
+## 1.6.4
+
+### Patch Changes
+
+- `ResolvedRelation` passes `any` through instead of treating it as an entity. A shape
+  entity that declares `fp.enum()` without naming the enum infers the field as `any`, and
+  `keyof any` contains every symbol, so the previous check saw an entity there and produced
+  an index-signature type the app's real enum could not satisfy.
+
+## 1.6.3
+
+### Patch Changes
+
+- **`ResolvedEntity` now resolves relation targets, so module entity constraints keep working on mikro-orm 7.2.**
+
+  mikro-orm 7.2 declares its `defineEntity` property builders invariant (`in out`). The
+  builder record an inferred entity carries in its `IndexHints` slot therefore no longer
+  unifies between two definitions of "the same" entity: a module's minimal `Permission`
+  (`id`, `slug`) and an application's real one (`id` generated `onCreate`, timestamps,
+  `.unique()` on `slug`). `ResolvedEntity` already dropped that slot on the entity being
+  compared, but not on the entities behind its relations, so any constraint that crossed a
+  `Collection<Permission>` or a `manyToOne(Organization)` failed to compile
+  (`Type 'RoleMapperTypes' does not satisfy the constraint 'RoleEntities'` in the IAM
+  module).
+
+  `ResolvedEntity<T>` now maps `Collection<E>` to `Collection<ResolvedEntity<E>>`,
+  `Reference<E>` to `Reference<ResolvedEntity<E>>`, and a bare related entity to
+  `ResolvedEntity<E>`; scalars, dates, enums and `null`/`undefined` pass through. The new
+  `ResolvedRelation<V>` helper is exported for the per-field case. Type tests cover a
+  to-many, a nullable to-one, and the negative case.
+
+## 1.6.2
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/validator@1.2.28
+  - @forklaunch/common@1.2.27
+
+## 1.6.1
+
+### Patch Changes
+
+- **`wrapEmWithTenantContext(em, '')` now binds the empty tenant, and never leaks a tenant into the caller.**
+
+  Global rows (a billing plan, a trial, a template) are encrypted under the
+  empty tenant. Two defects together made reading or writing them depend on
+  what had run earlier on the same worker:
+
+  - `''` was treated like `undefined` ("do not wrap"), so a caller asking for
+    the no-tenant key got an entity manager bound to nothing.
+  - The wrapper called `setEncryptionTenantId`, whose `enterWith` mutates the
+    calling async resource. After one org-scoped EM was created on a request,
+    a later "no-tenant" EM silently read and wrote under that org's key.
+
+  The visible symptom was intermittent `Failed to decrypt encrypted column
+value` on rows that were encrypted correctly. Now `''` returns a Proxy that
+  runs every EM call inside `withEncryptionContext('', …)`, only `undefined`
+  skips wrapping, the tenant filter is set only for a real tenant id, and the
+  wrapper no longer touches the caller's context. Tests cover all four cases.
+
 ## 1.6.0
 
 ### Minor Changes

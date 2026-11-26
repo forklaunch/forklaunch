@@ -51,7 +51,7 @@ pub(crate) fn replace_registration_in_config_injector<'a>(
                             _ => continue,
                         };
 
-                        let mut new_object_properties = Vec::new_in(allocator);
+                        let mut new_object_properties = Vec::new_in(&allocator);
                         for object_property in object_expr.properties.iter_mut() {
                             let mut found = false;
                             let property = match object_property {

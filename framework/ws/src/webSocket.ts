@@ -7,7 +7,8 @@ import {
   decodeSchemaValue,
   encodeSchemaValue,
   EventSchema,
-  normalizeEncodedValue
+  normalizeEncodedValue,
+  parseSchemaValue
 } from '@forklaunch/core/ws';
 import {
   AnySchemaValidator,
@@ -16,6 +17,7 @@ import {
   SchemaValidator
 } from '@forklaunch/validator';
 import { ClientRequest, IncomingMessage } from 'http';
+import { clearTimeout, setTimeout } from 'node:timers';
 import { WebSocket } from 'ws';
 
 /**
@@ -112,6 +114,8 @@ export class ForklaunchWebSocket<
 > extends WebSocket {
   private eventSchemas: ES;
   private schemas;
+  private automaticPongEnabled: boolean;
+  private protocolReplyFailed?: boolean;
   private schemaValidator: SV;
 
   /**
@@ -137,7 +141,22 @@ export class ForklaunchWebSocket<
     eventSchemas: ES,
     ...websocketParams: ConstructorParameters<typeof WebSocket>
   ) {
-    super(...websocketParams);
+    const [address, protocols, options] = websocketParams;
+    // ws also accepts an options object in its second argument at runtime.
+    const optionsOnly =
+      typeof protocols === 'object' &&
+      !Array.isArray(protocols) &&
+      protocols !== null;
+    const clientOptions = optionsOnly
+      ? (protocols as WebSocket.ClientOptions)
+      : options;
+    super(address, optionsOnly ? undefined : protocols, {
+      ...clientOptions,
+      autoPong: false
+    });
+    this.automaticPongEnabled =
+      (clientOptions as WebSocket.ClientOptions | undefined)?.autoPong !==
+      false;
     this.schemaValidator = schemaValidator;
     this.eventSchemas = eventSchemas;
     this.schemas = createWebSocketSchemas<SV, ES>(
@@ -210,6 +229,25 @@ export class ForklaunchWebSocket<
     return normalizeEncodedValue(encoded, context, allowUndefined);
   }
 
+  private validateEncodedControl(
+    data: Buffer,
+    schema: IdiomaticSchema<SV> | undefined,
+    context: string
+  ): Buffer {
+    try {
+      parseSchemaValue(
+        this.schemaValidator as SchemaValidator,
+        data,
+        schema,
+        context
+      );
+    } catch {
+      this.decodeAndValidate(data, schema);
+    }
+    // Automatic protocol replies echo the original bytes, including whitespace.
+    return data;
+  }
+
   /**
    * Transforms incoming event arguments by decoding and validating them.
    *
@@ -235,12 +273,14 @@ export class ForklaunchWebSocket<
       const data = args[0];
 
       const serverSchema = this.schemas.serverMessagesSchema;
-      if (serverSchema) {
+      if (serverSchema !== undefined) {
         const validated = this.decodeAndValidate(data, serverSchema);
         transformedArgs = [validated, false, ...args.slice(2)];
       }
     } else if (event === 'close' && args.length >= 2) {
       const code = args[0];
+      if (code === 1006)
+        throw new Error('WebSocket closed without a handshake');
       const reason = args[1];
       const validated = this.decodeAndValidate(
         reason,
@@ -285,6 +325,7 @@ export class ForklaunchWebSocket<
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     return superMethod(event, function (this: WebSocket, ...args: never[]) {
+      if (event === 'close' && self.protocolReplyFailed) return;
       try {
         const transformedArgs = self.transformIncomingArgs(event, args);
         return listener.call(this, ...transformedArgs);
@@ -765,8 +806,9 @@ export class ForklaunchWebSocket<
   /**
    * Emits an event on the WebSocket.
    *
-   * This method passes through to the underlying EventEmitter without
-   * transforming data. The ws library uses emit() internally to dispatch
+   * This method dispatches incoming data through the underlying EventEmitter.
+   * Ping frames first receive a validated automatic pong unless disabled.
+   * The ws library uses emit() internally to dispatch
    * incoming events (message, close, ping, pong), so encoding here would
    * incorrectly process incoming data as outgoing data.
    *
@@ -780,7 +822,39 @@ export class ForklaunchWebSocket<
     event: K,
     ...args: OutgoingEventMap<SV, ES>[K]
   ): boolean {
+    if (
+      event === 'ping' &&
+      this.automaticPongEnabled &&
+      Buffer.isBuffer(args[0])
+    ) {
+      try {
+        const data = args[0] as Buffer;
+        this.decodeAndValidate(data, this.schemas.pingSchema);
+        const reply = this.validateEncodedControl(
+          data,
+          this.schemas.pongSchema,
+          'web socket pong'
+        );
+        super.pong(reply, undefined, (error) => {
+          if (error) this.failProtocolReply(error);
+        });
+      } catch (error) {
+        this.failProtocolReply(error);
+        return false;
+      }
+    }
     return super.emit(event, ...(args as unknown[]));
+  }
+
+  private failProtocolReply(error: unknown): void {
+    if (this.protocolReplyFailed) return;
+    this.protocolReplyFailed = true;
+    // Protocol failures bypass application close schemas and have a bounded handshake.
+    const timer = setTimeout(() => this.terminate(), 5000);
+    timer.unref();
+    WebSocket.prototype.on.call(this, 'close', () => clearTimeout(timer));
+    WebSocket.prototype.close.call(this, 1008, 'invalid payload');
+    WebSocket.prototype.emit.call(this, 'error', error);
   }
 
   /**
@@ -893,6 +967,24 @@ export class ForklaunchWebSocket<
     code?: number,
     reason?: Schema<ExtractSchemaFromRecord<SV, ES['closeReason']>, SV>
   ): void {
+    if (Buffer.isBuffer(reason)) {
+      let encoded: Buffer;
+      try {
+        encoded = this.validateEncodedControl(
+          reason,
+          this.schemas.closeReasonSchema,
+          'web socket close'
+        );
+      } catch (error) {
+        // ws marks a received close frame before calling our override to reply.
+        const received = (this as unknown as { _closeFrameReceived?: boolean })
+          ._closeFrameReceived;
+        if (!received) throw error;
+        this.failProtocolReply(error);
+        return;
+      }
+      return super.close(code, encoded);
+    }
     if (reason) {
       const encoded = this.validateAndEncode(
         reason,
@@ -973,6 +1065,18 @@ export class ForklaunchWebSocket<
     mask?: boolean,
     cb?: (err: Error) => void
   ): void {
+    if (Buffer.isBuffer(data)) {
+      super.pong(
+        this.validateEncodedControl(
+          data,
+          this.schemas.pongSchema,
+          'web socket pong'
+        ),
+        mask,
+        cb
+      );
+      return;
+    }
     if (data !== undefined) {
       const encoded = this.validateAndEncode(
         data,

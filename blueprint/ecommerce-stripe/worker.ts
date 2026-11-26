@@ -104,7 +104,7 @@ const processFailures: WorkerFailureHandler<OrderEventRecord> = async (
 const orderEventConsumerFactory = ci.resolve(tokens.OrderEventConsumer);
 const consumer = orderEventConsumerFactory(processOrderEvents, processFailures);
 
-consumer.start();
+void consumer.start();
 openTelemetryCollector.info(
   'Ecommerce worker started, consuming order-events queue'
 );

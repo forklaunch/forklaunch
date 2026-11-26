@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use crate::{
     constants::{Database, Formatter, Linter, Runtime, TestFramework},
@@ -13,35 +13,37 @@ pub(crate) const ESLINT_VERSION: &str = "^10.0.1";
 // @types/jest
 pub(crate) const JEST_TYPES_VERSION: &str = "^30.0.0";
 // @types/node
-pub(crate) const TYPES_NODE_VERSION: &str = "^26.4.0";
+pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.6";
 // jest
-pub(crate) const JEST_VERSION: &str = "^30.5.0";
+pub(crate) const JEST_VERSION: &str = "^30.5.2";
 // oxlint
-pub(crate) const OXLINT_VERSION: &str = "^0.16.6";
+pub(crate) const OXLINT_VERSION: &str = "^1.89.0";
+// oxlint-tsgolint
+pub(crate) const OXLINT_TSGOLINT_VERSION: &str = "^7.0.2004";
 // prettier
-pub(crate) const PRETTIER_VERSION: &str = "^3.9.6";
+pub(crate) const PRETTIER_VERSION: &str = "^3.10.1";
 // ts-jest
-pub(crate) const TS_JEST_VERSION: &str = "^29.4.12";
-// ts-nodef
+pub(crate) const TS_JEST_VERSION: &str = "^29.4.15";
+// ts-node
 pub(crate) const TS_NODE_VERSION: &str = "^10.9.2";
 // typescript-eslint
-pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.68.0";
+pub(crate) const TYPESCRIPT_ESLINT_VERSION: &str = "^8.73.0";
 // vitest
-pub(crate) const VITEST_VERSION: &str = "^4.1.11";
+pub(crate) const VITEST_VERSION: &str = "^5.1.1";
 
 // Application package.json dependencies constants
 // globals
-pub(crate) const GLOBALS_VERSION: &str = "^17.11.0";
+pub(crate) const GLOBALS_VERSION: &str = "^17.14.0";
 // husky
 pub(crate) const HUSKY_VERSION: &str = "^9.1.7";
 // lint-staged
 pub(crate) const LINT_STAGED_VERSION: &str = "^15.4.3";
 // node-gyp
-pub(crate) const NODE_GYP_VERSION: &str = "^13.0.2";
+pub(crate) const NODE_GYP_VERSION: &str = "^13.1.0";
 // sort-package-json
 pub(crate) const SORT_PACKAGE_JSON_VERSION: &str = "^3.0.0";
 // tsx
-pub(crate) const TSX_VERSION: &str = "^4.23.13";
+pub(crate) const TSX_VERSION: &str = "^4.23.15";
 // typescript
 pub(crate) const TYPESCRIPT_VERSION: &str = "^7.0.2";
 
@@ -123,35 +125,85 @@ fn get_db_init(databases: &HashSet<Database>) -> Option<String> {
     }
 }
 
+/// The `docker compose up ...` prefix of a generated database script.
+///
+/// Every generated database service carries a compose healthcheck, so `--wait`
+/// blocks until it accepts connections instead of guessing with a fixed sleep
+/// (which lost the race on slow hosts and failed migrate:init with "Connection
+/// terminated unexpectedly"). One-shot initializers (`*-init`, e.g. MongoDB's
+/// replica-set setup) exit when done, which `--wait` reports as a failure, so
+/// they run attached afterwards and the next command starts once they finish.
+pub(crate) fn compose_up_command<S: AsRef<str>>(services: &[S]) -> String {
+    let mut ready = BTreeSet::new();
+    let mut initializers = BTreeSet::new();
+    for service in services {
+        let service = service.as_ref();
+        if service.ends_with("-init") {
+            initializers.insert(service);
+        } else {
+            ready.insert(service);
+        }
+    }
+    let mut commands = Vec::new();
+    if !ready.is_empty() {
+        commands.push(format!(
+            "docker compose up -d --wait {}",
+            ready.into_iter().collect::<Vec<_>>().join(" ")
+        ));
+    }
+    commands.extend(
+        initializers
+            .into_iter()
+            .map(|init| format!("docker compose up {init}")),
+    );
+    if commands.is_empty() {
+        commands.push("docker compose up".to_string());
+    }
+    commands.join(" && ")
+}
+
+/// Split a generated database script into the compose services its prefix
+/// starts and the command that follows. Understands the current
+/// [`compose_up_command`] shape and the older `docker compose up -d a -d b &&
+/// sleep 5 && ...` one, so existing applications are rewritten in place.
+pub(crate) fn split_compose_up_command(script: &str) -> (Vec<String>, String) {
+    let mut services = Vec::new();
+    let mut segments = script.split("&&").map(str::trim).peekable();
+    while let Some(segment) = segments.peek() {
+        if let Some(arguments) = segment.strip_prefix("docker compose up") {
+            services.extend(
+                arguments
+                    .split_whitespace()
+                    .filter(|argument| !argument.starts_with('-'))
+                    .map(str::to_string),
+            );
+        } else if !segment.starts_with("sleep ") {
+            break;
+        }
+        segments.next();
+    }
+    (services, segments.collect::<Vec<_>>().join(" && "))
+}
+
+fn compose_services(databases: &HashSet<Database>) -> Vec<String> {
+    let mut services = databases
+        .iter()
+        .filter(|db| !is_in_memory_database(db))
+        .map(|db| db.to_string())
+        .collect::<Vec<String>>();
+    services.extend(get_db_init(databases));
+    services
+}
+
 pub(crate) fn application_migrate_script<'a>(
     runtime: &Runtime,
     databases: &HashSet<Database>,
     migration_suffix: &'a str,
 ) -> String {
-    let package_manager = get_package_manager(runtime);
-    let db_init = get_db_init(databases);
-
-    let sleep = if migration_suffix == "init" {
-        "sleep 5 && "
-    } else {
-        ""
-    };
-
-    let mut databases = databases
-        .iter()
-        .filter(|db| !is_in_memory_database(db))
-        .map(|db| db.to_string())
-        .collect::<Vec<String>>();
-    if let Some(db_init) = db_init {
-        databases.push(db_init);
-    }
-
     format!(
-        "docker compose up{}{} && {}{} run migrate:{}",
-        if databases.len() > 0 { " -d " } else { "" },
-        databases.join(" -d "),
-        sleep,
-        package_manager,
+        "{} && {} run migrate:{}",
+        compose_up_command(&compose_services(databases)),
+        get_package_manager(runtime),
         migration_suffix
     )
 }
@@ -160,46 +212,74 @@ pub(crate) fn application_seed_script<'a>(
     runtime: &Runtime,
     databases: &HashSet<Database>,
 ) -> String {
-    let package_manager = get_package_manager(runtime);
-    let db_init = get_db_init(databases);
-
-    let mut databases = databases
-        .iter()
-        .map(|db| db.to_string())
-        .collect::<Vec<String>>();
-    if let Some(db_init) = db_init {
-        databases.push(db_init);
-    }
-
     format!(
-        "docker compose up -d {} && {} run seed",
-        databases.join(" -d "),
-        package_manager
+        "{} && {} run seed",
+        compose_up_command(&compose_services(databases)),
+        get_package_manager(runtime)
     )
 }
 
 pub(crate) fn application_setup_script(runtime: &Runtime) -> String {
     match runtime {
-        Runtime::Bun => {
-            String::from("bun run build && bun run migrate:init && bun run migrate:up && bun run seed")
-        }
+        Runtime::Bun => String::from(
+            "bun run build && bun run migrate:init && bun run migrate:up && bun run seed",
+        ),
         Runtime::Node => {
             String::from("pnpm build && pnpm migrate:init && pnpm migrate:up && pnpm seed")
         }
     }
 }
 
-pub(crate) fn application_test_script<'a>(
-    _runtime: &Runtime,
+pub(crate) fn application_test_script(
+    runtime: &Runtime,
     test_framework: &Option<TestFramework>,
 ) -> Option<String> {
-    match test_framework {
-        Some(test_framework_definition) => match test_framework_definition {
-            TestFramework::Jest => Some("pnpm jest --passWithNoTests".to_string()),
-            TestFramework::Vitest => Some("pnpm vitest --passWithNoTests".to_string()),
-        },
-        None => None,
-    }
+    let runner = match test_framework.as_ref()? {
+        TestFramework::Jest => "jest",
+        TestFramework::Vitest => "vitest",
+    };
+    let command = match runtime {
+        Runtime::Bun => "bun run --bun",
+        Runtime::Node => "pnpm",
+    };
+    // vitest starts its default "forks" pool through `child.channel.unref()`,
+    // which Bun's child processes do not have (vitest 5.1.1 fails every test
+    // file with "child.channel?.unref is not a function"). Worker threads run
+    // under Bun on every vitest 5 release.
+    let pool = match (runtime, test_framework.as_ref()?) {
+        (Runtime::Bun, TestFramework::Vitest) => " --pool=threads",
+        _ => "",
+    };
+    Some(format!("{command} {runner}{pool} --passWithNoTests"))
+}
+
+/// The test script earlier CLI versions wrote, before the Bun vitest pool was
+/// set. Changing an application's runtime still has to recognise it.
+pub(crate) fn legacy_application_test_script(
+    runtime: &Runtime,
+    test_framework: &Option<TestFramework>,
+) -> Option<String> {
+    let runner = match test_framework.as_ref()? {
+        TestFramework::Jest => "jest",
+        TestFramework::Vitest => "vitest",
+    };
+    let command = match runtime {
+        Runtime::Bun => "bun run --bun",
+        Runtime::Node => "pnpm",
+    };
+    Some(format!("{command} {runner} --passWithNoTests"))
+}
+
+/// Whether `script` is a test script this CLI generated for the runtime,
+/// in its current or earlier form.
+pub(crate) fn is_generated_test_script(
+    script: &Option<String>,
+    runtime: &Runtime,
+    test_framework: &Option<TestFramework>,
+) -> bool {
+    script.is_some()
+        && (*script == application_test_script(runtime, test_framework)
+            || *script == legacy_application_test_script(runtime, test_framework))
 }
 
 pub(crate) fn application_up_packages_script(runtime: &Runtime) -> String {
@@ -218,7 +298,7 @@ pub(crate) fn project_up_latest_script(runtime: &Runtime) -> Option<String> {
 
 // Project package.json dependencies constants
 // @forklaunch/better-auth-mikro-orm-fork
-pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.5.9";
+pub(crate) const BETTER_AUTH_MIKRO_ORM_VERSION: &str = "~0.5.12";
 // @forklaunch/blueprint-core
 pub(crate) const APP_CORE_VERSION: &str = "workspace:*";
 // @forklaunch/blueprint-billing
@@ -228,106 +308,112 @@ pub(crate) const APP_IAM_VERSION: &str = "workspace:*";
 // @forklaunch/blueprint-monitoring
 pub(crate) const APP_MONITORING_VERSION: &str = "workspace:*";
 // @forklaunch/bunrun
-pub(crate) const BUNRUN_VERSION: &str = "~0.0.2";
+pub(crate) const BUNRUN_VERSION: &str = "~1.2.25";
 // @forklaunch/common
-pub(crate) const COMMON_VERSION: &str = "~1.2.26";
+pub(crate) const COMMON_VERSION: &str = "~1.2.32";
 // @forklaunch/core
-pub(crate) const CORE_VERSION: &str = "~1.6.0";
+pub(crate) const CORE_VERSION: &str = "~4.1.0";
 // @forklaunch/express
-pub(crate) const EXPRESS_VERSION: &str = "~1.2.43";
+pub(crate) const EXPRESS_VERSION: &str = "~2.2.0";
 // @forklaunch/hyper-express
-pub(crate) const HYPER_EXPRESS_VERSION: &str = "~1.2.43";
+pub(crate) const HYPER_EXPRESS_VERSION: &str = "~2.2.0";
 // uWebSockets.js — a peer of @forklaunch/hyper-express rather than one of its
 // dependencies, so generated projects must declare it themselves. pnpm 11
 // blocks git-resolved SUBdependencies (ERR_PNPM_EXOTIC_SUBDEP); a direct one is
 // fine, and uWebSockets.js ships only from GitHub.
 pub(crate) const UWEBSOCKETS_VERSION: &str = "github:uNetworking/uWebSockets.js#v20.52.0";
 // @forklaunch/implementation-billing-base
-pub(crate) const BILLING_BASE_VERSION: &str = "~1.0.35";
+pub(crate) const BILLING_BASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-billing-stripe
-pub(crate) const BILLING_STRIPE_VERSION: &str = "~1.2.5";
+pub(crate) const BILLING_STRIPE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-ecommerce-base
-pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~1.0.8";
+pub(crate) const ECOMMERCE_BASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-ecommerce-paypal
-pub(crate) const ECOMMERCE_PAYPAL_VERSION: &str = "~1.0.3";
+pub(crate) const ECOMMERCE_PAYPAL_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-ecommerce-stripe
-pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~1.0.3";
+pub(crate) const ECOMMERCE_STRIPE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-iam-base
-pub(crate) const IAM_BASE_VERSION: &str = "~1.0.35";
+pub(crate) const IAM_BASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-messaging-base
-pub(crate) const MESSAGING_BASE_VERSION: &str = "~1.1.2";
+pub(crate) const MESSAGING_BASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-messaging-twilio
-pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~1.1.2";
+pub(crate) const MESSAGING_TWILIO_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-cac-base
-pub(crate) const CAC_BASE_VERSION: &str = "~0.2.2";
+pub(crate) const CAC_BASE_VERSION: &str = "~0.3.1";
+// @forklaunch/implementation-mlse-base
+pub(crate) const MLSE_BASE_VERSION: &str = "~0.1.0";
 // @forklaunch/implementation-worker-bullmq
-pub(crate) const WORKER_BULLMQ_VERSION: &str = "~1.0.33";
+pub(crate) const WORKER_BULLMQ_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-worker-redis
-pub(crate) const WORKER_REDIS_VERSION: &str = "~1.0.33";
+pub(crate) const WORKER_REDIS_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-worker-database
-pub(crate) const WORKER_DATABASE_VERSION: &str = "~1.0.35";
+pub(crate) const WORKER_DATABASE_VERSION: &str = "~2.0.0";
 // @forklaunch/implementation-worker-kafka
-pub(crate) const WORKER_KAFKA_VERSION: &str = "~1.0.33";
+pub(crate) const WORKER_KAFKA_VERSION: &str = "~2.0.0";
 // @forklaunch/infrastructure-redis
-pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.4.14";
+pub(crate) const INFRASTRUCTURE_REDIS_VERSION: &str = "~1.5.0";
 // @forklaunch/infrastructure-s3
-pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.4.14";
+pub(crate) const INFRASTRUCTURE_S3_VERSION: &str = "~1.5.5";
 // @forklaunch/interfaces-billing
-pub(crate) const BILLING_INTERFACES_VERSION: &str = "~1.0.34";
+pub(crate) const BILLING_INTERFACES_VERSION: &str = "~2.0.0";
 // @forklaunch/interfaces-ecommerce
-pub(crate) const ECOMMERCE_INTERFACES_VERSION: &str = "~1.0.8";
+pub(crate) const ECOMMERCE_INTERFACES_VERSION: &str = "~2.0.0";
 // @forklaunch/interfaces-iam
-pub(crate) const IAM_INTERFACES_VERSION: &str = "~1.0.33";
+pub(crate) const IAM_INTERFACES_VERSION: &str = "~2.0.0";
 // @forklaunch/interfaces-messaging
-pub(crate) const MESSAGING_INTERFACES_VERSION: &str = "~1.1.2";
+pub(crate) const MESSAGING_INTERFACES_VERSION: &str = "~2.0.0";
 // @forklaunch/interfaces-cac
-pub(crate) const CAC_INTERFACES_VERSION: &str = "~0.2.2";
+pub(crate) const CAC_INTERFACES_VERSION: &str = "~0.3.0";
+// @forklaunch/interfaces-mlse
+pub(crate) const MLSE_INTERFACES_VERSION: &str = "~0.1.0";
 // @forklaunch/interfaces-worker
-pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.31";
+pub(crate) const WORKER_INTERFACES_VERSION: &str = "~1.0.37";
 // @forklaunch/internal
-pub(crate) const INTERNAL_VERSION: &str = "~1.2.29";
+pub(crate) const INTERNAL_VERSION: &str = "~1.2.37";
 // @forklaunch/testing
-pub(crate) const TESTING_VERSION: &str = "~1.2.31";
+pub(crate) const TESTING_VERSION: &str = "~1.3.2";
 // @forklaunch/universal-sdk
-pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.2.27";
+pub(crate) const UNIVERSAL_SDK_VERSION: &str = "~1.4.1";
 // @forklaunch/validator
-pub(crate) const VALIDATOR_VERSION: &str = "~1.2.27";
+pub(crate) const VALIDATOR_VERSION: &str = "~1.3.0";
 // @mikro-orm/core
-pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.1.15";
+pub(crate) const MIKRO_ORM_CORE_VERSION: &str = "7.2.10";
 // @mikro-orm/migrations
-pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "7.1.15";
+pub(crate) const MIKRO_ORM_MIGRATIONS_VERSION: &str = "7.2.10";
 // @mikro-orm/postgresql,@mikro-orm/mongodb,@mikro-orm/mysql,@mikro-orm/sqlite,@mikro-orm/mariadb,@mikro-orm/libsql,@mikro-orm/mssql
-pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "7.1.15";
+pub(crate) const MIKRO_ORM_DATABASE_VERSION: &str = "7.2.10";
 // @mikro-orm/seeder
-pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "7.1.15";
+pub(crate) const MIKRO_ORM_SEEDER_VERSION: &str = "7.2.10";
 // @opentelemetry/api
-pub(crate) const OPENTELEMETRY_API_VERSION: &str = "^1.9.1";
+pub(crate) const OPENTELEMETRY_API_VERSION: &str = "^1.10.0";
 // @sinclair/typebox
 pub(crate) const TYPEBOX_VERSION: &str = "^0.34.52";
 // ajv
 pub(crate) const AJV_VERSION: &str = "^8.20.0";
 // better-auth
-pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.2";
+pub(crate) const BETTER_AUTH_VERSION: &str = "^1.7.26";
 // bullmq
-pub(crate) const BULLMQ_VERSION: &str = "^6.3.2";
+pub(crate) const BULLMQ_VERSION: &str = "^6.7.8";
 // better-sqlite3
-pub(crate) const BETTER_SQLITE3_VERSION: &str = "^13.0.3";
+pub(crate) const BETTER_SQLITE3_VERSION: &str = "^13.2.0";
 // dotenv
-pub(crate) const DOTENV_VERSION: &str = "^17.4.2";
+pub(crate) const DOTENV_VERSION: &str = "^18.0.10";
 // jose
-pub(crate) const JOSE_VERSION: &str = "^6.2.10";
+pub(crate) const JOSE_VERSION: &str = "^6.2.18";
 // sqlite3
 pub(crate) const SQLITE3_VERSION: &str = "^6.0.1";
+// @anthropic-ai/sdk
+pub(crate) const ANTHROPIC_SDK_VERSION: &str = "^0.128.0";
 // stripe
-pub(crate) const STRIPE_VERSION: &str = "^22.6.0";
+pub(crate) const STRIPE_VERSION: &str = "^22.6.2";
 // uuid
-pub(crate) const UUID_VERSION: &str = "^14.0.2";
+pub(crate) const UUID_VERSION: &str = "^14.0.3";
 // zod
-pub(crate) const ZOD_VERSION: &str = "^4.5.4";
+pub(crate) const ZOD_VERSION: &str = "^4.6.7";
 
 // Project package.json devDependencies constants
 // @mikro-orm/cli
-pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "7.1.15";
+pub(crate) const MIKRO_ORM_CLI_VERSION: &str = "7.2.10";
 // @types/express
 pub(crate) const TYPES_EXPRESS_VERSION: &str = "^5.0.6";
 // @types/express-serve-static-core
@@ -339,7 +425,7 @@ pub(crate) const TYPES_UUID_VERSION: &str = "^11.0.0";
 // @types/qs
 pub(crate) const TYPES_QS_VERSION: &str = "^6.15.1";
 // pino
-pub(crate) const PINO_VERSION: &str = "^10.3.1";
+pub(crate) const PINO_VERSION: &str = "^10.4.0";
 // ioredis
 pub(crate) const IOREDIS_VERSION: &str = "^6.0.0";
 // typedoc
@@ -351,13 +437,45 @@ pub(crate) const PROJECT_DOCS_SCRIPT: &str = "typedoc --out docs *";
 // Guarded for the same reason as migrate:init and migrate:up: the seeder boots
 // the ORM, which rejects an empty entity set outright rather than treating it
 // as nothing to seed.
-pub(crate) const PROJECT_SEED_SCRIPT: &str = "if ls persistence/entities/*.entity.ts >/dev/null 2>&1; then [ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run; fi";
+pub(crate) const PROJECT_SEED_SCRIPT: &str = "if ls persistence/entities/*.entity.ts >/dev/null 2>&1; then [ -z \"$DOTENV_FILE_PATH\" ] && [ -f .env.local ] && export DOTENV_FILE_PATH=.env.local; NODE_OPTIONS='--import=tsx' mikro-orm seeder:run; fi";
+
+// The cac module's code-set loader (ICD-10-CM, HCPCS, an organization's own
+// CPT feed): without it a scaffolded cac app has empty reference tables and
+// every diagnosis is denied as unrecognized.
+pub(crate) fn project_cac_refresh_code_sets_script(runtime: &Runtime) -> String {
+    String::from(match runtime {
+        Runtime::Bun => "bun run scripts/refresh-code-sets.ts",
+        Runtime::Node => "pnpm tsx scripts/refresh-code-sets.ts",
+    })
+}
 
 pub(crate) fn project_retention_enforce_script(runtime: &Runtime) -> String {
     String::from(match runtime {
         Runtime::Bun => "bun run scripts/enforce-retention.ts",
         Runtime::Node => "pnpm tsx scripts/enforce-retention.ts",
     })
+}
+
+// MLSE corpus maintenance, run from the service directory. The worker drains
+// what corpus:refresh queues; mesh:load reads NLM's annual descriptor file.
+pub(crate) fn project_mlse_scripts(runtime: &Runtime) -> Vec<(String, String)> {
+    let run = match runtime {
+        Runtime::Bun => "bun run",
+        Runtime::Node => "pnpm tsx",
+    };
+    [
+        ("corpus:refresh", "scripts/refresh-corpus.ts"),
+        ("mesh:load", "scripts/load-mesh.ts"),
+        ("eval:run", "scripts/run-eval.ts"),
+    ]
+    .into_iter()
+    .map(|(name, file)| {
+        (
+            name.to_string(),
+            format!("DOTENV_FILE_PATH=.env.local {run} {file}"),
+        )
+    })
+    .collect()
 }
 
 pub(crate) fn project_format_script(formatter: &Formatter) -> String {
@@ -436,20 +554,16 @@ pub(crate) fn project_test_script(
     runtime: &Runtime,
     test_framework: &Option<TestFramework>,
 ) -> Option<String> {
-    match runtime {
-        Runtime::Bun => None,
-        Runtime::Node => match test_framework {
-            Some(test_framework_definition) => match test_framework_definition {
-                TestFramework::Jest => Some("pnpm jest --passWithNoTests".to_string()),
-                TestFramework::Vitest => Some("pnpm vitest --passWithNoTests".to_string()),
-            },
-            None => None,
-        },
-    }
+    application_test_script(runtime, test_framework)
 }
 
 pub(crate) fn project_migrate_script(command: &str) -> String {
-    let env = "[ -z $DOTENV_FILE_PATH ] && export DOTENV_FILE_PATH=.env.local;";
+    // Default to the developer's .env.local only when one exists. In a
+    // container there is none: the values come from the process environment,
+    // and pointing DOTENV_FILE_PATH at a missing file made every startup log
+    // and validation error talk about ".env.local" in production.
+    let env =
+        "[ -z \"$DOTENV_FILE_PATH\" ] && [ -f .env.local ] && export DOTENV_FILE_PATH=.env.local;";
     let orm = "NODE_OPTIONS='--import=tsx' mikro-orm";
     let base = format!("{} {} migration:", env, orm);
     match command {
@@ -482,46 +596,36 @@ pub(crate) fn project_migrate_script(command: &str) -> String {
     }
 }
 
+/// The container entrypoint. `.env.prod` is honoured when the image ships
+/// one; otherwise the process environment is the configuration. The
+/// migration and the server are joined with `&&` throughout: the previous
+/// shape ended the migration clause with `;`, so a failed migration still
+/// started the server against a schema it had not migrated.
 pub(crate) fn project_start_server_script(runtime: &Runtime, database: Option<Database>) -> String {
-    format!(
-        "{}[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} dist/server.js",
-        if database.is_some_and(|db| db != Database::MongoDB) {
-            format!(
-                "[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} migrate:up && ",
-                if runtime == &Runtime::Node {
-                    "pnpm"
-                } else {
-                    "bun"
-                }
-            )
-        } else {
-            "".to_string()
-        },
-        match runtime {
-            Runtime::Bun => "bun",
-            Runtime::Node => "node --import=tsx",
-        }
-    )
+    project_start_script(runtime, database, "dist/server.js")
 }
 pub(crate) fn project_start_worker_script(runtime: &Runtime, database: Option<Database>) -> String {
+    project_start_script(runtime, database, "dist/worker.js")
+}
+
+/// Shared by the service and worker entrypoints; see `project_start_server_script`.
+fn project_start_script(runtime: &Runtime, database: Option<Database>, entry: &str) -> String {
+    let package_manager = match runtime {
+        Runtime::Bun => "bun",
+        Runtime::Node => "pnpm",
+    };
+    let migrate = if database.is_some_and(|db| db != Database::MongoDB) {
+        format!("{} migrate:up && ", package_manager)
+    } else {
+        String::new()
+    };
+    let run = match runtime {
+        Runtime::Bun => "bun",
+        Runtime::Node => "node --import=tsx",
+    };
     format!(
-        "{}[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} dist/worker.js",
-        if database.is_some_and(|db| db != Database::MongoDB) {
-            format!(
-                "[ -f .env.prod ] && export DOTENV_FILE_PATH=.env.prod; {} migrate:up && ",
-                if runtime == &Runtime::Node {
-                    "pnpm"
-                } else {
-                    "bun"
-                }
-            )
-        } else {
-            "".to_string()
-        },
-        match runtime {
-            Runtime::Bun => "bun",
-            Runtime::Node => "node --import=tsx",
-        }
+        "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && {}{} {}",
+        migrate, run, entry
     )
 }
 
@@ -560,3 +664,129 @@ pub(crate) const SQLITE_POSTINSTALL_SCRIPT: &str =
     "cd node_modules/sqlite3 && node-gyp configure && node-gyp build";
 pub(crate) const BETTER_SQLITE_POSTINSTALL_SCRIPT: &str =
     "cd node_modules/better-sqlite3 && node-gyp configure && node-gyp build";
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn migrate_scripts_wait_for_database_health_instead_of_sleeping() {
+        let postgres = HashSet::from([Database::PostgreSQL]);
+        assert_eq!(
+            application_migrate_script(&Runtime::Bun, &postgres, "init"),
+            "docker compose up -d --wait postgresql && bun --filter='*' run migrate:init"
+        );
+        assert_eq!(
+            application_migrate_script(&Runtime::Node, &postgres, "up"),
+            "docker compose up -d --wait postgresql && pnpm -r --no-bail run migrate:up"
+        );
+        let mongo = HashSet::from([Database::MongoDB]);
+        assert_eq!(
+            application_migrate_script(&Runtime::Bun, &mongo, "init"),
+            "docker compose up -d --wait mongodb && docker compose up mongo-init && bun --filter='*' run migrate:init"
+        );
+        for databases in [&postgres, &mongo] {
+            assert!(
+                !application_migrate_script(&Runtime::Node, databases, "init").contains("sleep")
+            );
+        }
+        assert_eq!(
+            application_seed_script(&Runtime::Node, &postgres),
+            "docker compose up -d --wait postgresql && pnpm -r --no-bail run seed"
+        );
+    }
+
+    #[test]
+    fn compose_prefixes_round_trip_and_upgrade_the_sleep_form() {
+        let current = "docker compose up -d --wait mongodb postgresql && docker compose up mongo-init && bun --filter='*' run migrate:init";
+        let (services, rest) = split_compose_up_command(current);
+        assert_eq!(services, ["mongodb", "postgresql", "mongo-init"]);
+        assert_eq!(rest, "bun --filter='*' run migrate:init");
+        assert_eq!(
+            format!("{} && {rest}", compose_up_command(&services)),
+            current
+        );
+
+        let legacy = "docker compose up -d postgresql -d mongodb -d mongo-init && sleep 5 && pnpm -r --no-bail run migrate:init";
+        let (services, rest) = split_compose_up_command(legacy);
+        assert_eq!(services, ["postgresql", "mongodb", "mongo-init"]);
+        assert_eq!(rest, "pnpm -r --no-bail run migrate:init");
+        assert_eq!(
+            compose_up_command(&services),
+            "docker compose up -d --wait mongodb postgresql && docker compose up mongo-init"
+        );
+        assert_eq!(compose_up_command::<&str>(&[]), "docker compose up");
+    }
+
+    #[test]
+    fn test_scripts_use_selected_runtime_and_runner_at_every_level() {
+        for (framework, runner) in [
+            (TestFramework::Vitest, "vitest"),
+            (TestFramework::Jest, "jest"),
+        ] {
+            for (runtime, command) in [(Runtime::Bun, "bun run --bun"), (Runtime::Node, "pnpm")] {
+                let pool = match (&runtime, &framework) {
+                    (Runtime::Bun, TestFramework::Vitest) => " --pool=threads",
+                    _ => "",
+                };
+                let expected = Some(format!("{command} {runner}{pool} --passWithNoTests"));
+                let legacy = Some(format!("{command} {runner} --passWithNoTests"));
+                assert!(is_generated_test_script(
+                    &legacy,
+                    &runtime,
+                    &Some(framework.clone())
+                ));
+                assert!(is_generated_test_script(
+                    &expected,
+                    &runtime,
+                    &Some(framework.clone())
+                ));
+                assert!(!is_generated_test_script(
+                    &Some(String::from("my-own-test-command")),
+                    &runtime,
+                    &Some(framework.clone())
+                ));
+                assert_eq!(
+                    application_test_script(&runtime, &Some(framework.clone())),
+                    expected
+                );
+                assert_eq!(
+                    project_test_script(&runtime, &Some(framework.clone())),
+                    expected
+                );
+            }
+        }
+        assert_eq!(project_test_script(&Runtime::Bun, &None), None);
+    }
+    use super::*;
+
+    /// The container has no `.env.local`; the defaults must not point at one,
+    /// and a failed migration must stop the server from starting.
+    #[test]
+    fn start_scripts_chain_migration_and_only_use_env_files_that_exist() {
+        let server = project_start_server_script(&Runtime::Node, Some(Database::PostgreSQL));
+        assert_eq!(
+            server,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && pnpm migrate:up && node --import=tsx dist/server.js"
+        );
+        assert!(
+            !server.contains("; node"),
+            "a `;` before the server would ignore a failed migration"
+        );
+
+        let worker = project_start_worker_script(&Runtime::Bun, Some(Database::PostgreSQL));
+        assert_eq!(
+            worker,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && bun migrate:up && bun dist/worker.js"
+        );
+
+        let no_db = project_start_server_script(&Runtime::Node, None);
+        assert_eq!(
+            no_db,
+            "if [ -f .env.prod ]; then export DOTENV_FILE_PATH=.env.prod; fi && node --import=tsx dist/server.js"
+        );
+
+        let migrate = project_migrate_script("up");
+        assert!(migrate.contains("[ -f .env.local ] && export DOTENV_FILE_PATH=.env.local"));
+        assert!(
+            PROJECT_SEED_SCRIPT.contains("[ -f .env.local ] && export DOTENV_FILE_PATH=.env.local")
+        );
+    }
+}

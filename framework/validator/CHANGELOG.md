@@ -1,5 +1,87 @@
 # @forklaunch/validator
 
+## 1.3.0
+
+### Minor Changes
+
+- d2319b3: Schema export additions and fixes, used by the OpenAPI generator and by Rust and SDK consumers:
+
+  - New optional `SchemaValidator` members: `openapiRequestBody(schema)` (root projection that says whether a request body is required, without running defaults or refinements), `openapi2020(schema, options)` (explicit JSON Schema 2020-12 input export with opt-in `pureInput`, `zodChecks`, `zodRegex` and `zodDiagnostics` profiles), and `undefined`/`void` markers. Zod and TypeBox implement `openapiRequestBody`; Zod implements `openapi2020`, also exported as a static helper from `@forklaunch/validator/zod`.
+  - The Zod OpenAPI exporter keeps more of what the schema enforces: length, numeric and array bounds, finite record keys, tuples, overlapping unions and enums, string formats (email, UUID, URI, date, time, datetime, duration, IP/CIDR, JWT, emoji, base64) and literal patterns.
+  - The `email` and `uri` factory schemas export the grammar Zod actually accepts (WHATWG URLs for `uri`) instead of a hand-written `pattern`/`format`.
+  - `any` and `unknown` no longer export `type: 'object'` (Zod and TypeBox), so documented schemas accept the same values as runtime parsing.
+
+## 1.2.33
+
+### Patch Changes
+
+- Dependency refresh: every third-party dependency moved to its latest version at least a day old.
+- Updated dependencies
+  - @forklaunch/common@1.2.32
+
+## 1.2.32
+
+### Patch Changes
+
+- Dependency refresh: MikroORM 7.2.5, OpenTelemetry 0.223 / 2.12, AWS SDK 3.1152 and other minor updates.
+- Updated dependencies
+  - @forklaunch/common@1.2.31
+
+## 1.2.31
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions, including @mikro-orm 7.2.3, so apps resolve a single copy of MikroORM with core.
+- Updated dependencies
+  - @forklaunch/common@1.2.30
+
+## 1.2.30
+
+### Patch Changes
+
+- Refresh dependencies to their latest versions (`pnpm up:packages`).
+- Updated dependencies
+  - @forklaunch/common@1.2.29
+
+## 1.2.29
+
+### Patch Changes
+
+- Refresh every framework dependency to its current release.
+
+  A routine sweep (`pnpm run up:packages`), taken as one wave rather than a
+  package at a time. `workspace:^` is frozen into a concrete range at publish,
+  so a package published ahead of its siblings pins the PREVIOUS version of
+  them and consumers resolve two copies — which is the whole class of bug
+  #311 and #331 existed to clear. Releasing the set together is what keeps
+  that from coming back.
+
+  `@mikro-orm/*` is deliberately NOT moved: framework and blueprint are both
+  on 7.2.1 exactly, and they only stay that way if they move together.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.28
+
+## 1.2.28
+
+### Patch Changes
+
+- Refresh dependencies to their latest published versions.
+
+  `@mikro-orm/*` moves from 7.1.15 to 7.2.1 in every package that pins it,
+  as one step: the framework, the blueprint and the CLI's scaffold constants
+  all agree on a single MikroORM version, so a freshly generated app resolves
+  exactly one copy (the duplicate-package type errors from mixed pins are the
+  reason it is pinned exactly). `@aws-sdk/client-s3` 3.1131 → 3.1136 in
+  infrastructure-s3. The rest is devDependency movement; `@types/node` 26.6
+  added `Socket.server`, which the Bun socket shim in express now declares.
+
+  Packages with only devDependency changes release too, so the whole
+  framework carries one MikroORM version on npm.
+
+- Updated dependencies
+  - @forklaunch/common@1.2.27
+
 ## 1.2.27
 
 ### Patch Changes

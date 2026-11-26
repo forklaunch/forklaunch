@@ -48,7 +48,6 @@ struct SubscriptionInfo {
     status: Option<String>,
 }
 
-
 impl CliCommand for WhoAmICommand {
     fn command(&self) -> Command {
         command("whoami", "Get the current user")
@@ -67,10 +66,7 @@ impl CliCommand for WhoAmICommand {
             .with_context(|| "Failed to reach platform API")?;
 
         if !response.status().is_success() {
-            anyhow::bail!(
-                "Failed to fetch user info (HTTP {})",
-                response.status()
-            );
+            anyhow::bail!("Failed to fetch user info (HTTP {})", response.status());
         }
 
         let me: MeResponse = response
@@ -78,6 +74,15 @@ impl CliCommand for WhoAmICommand {
             .with_context(|| "Failed to parse user info response")?;
 
         writeln!(stdout)?;
+
+        // Account (which login on this machine answered, and why)
+        let selection = crate::core::accounts::selection()?;
+        if let Some(account) = &selection.name {
+            stdout.set_color(ColorSpec::new().set_bold(true))?;
+            write!(stdout, "  Account:      ")?;
+            stdout.reset()?;
+            writeln!(stdout, "{} ({})", account, selection.source.describe())?;
+        }
 
         // Name
         if let Some(name) = &me.name {

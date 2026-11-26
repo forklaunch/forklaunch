@@ -8,6 +8,8 @@ export interface TestEnvConfig {
   kafka?: StartedTestContainer;
   s3?: StartedTestContainer;
   hmacSecret?: string;
+  /** Defaults to `http://localhost:3000/.well-known/jwks.json`. */
+  jwksPublicKeyUrl?: string;
   customVars?: Record<string, string>;
 }
 
@@ -46,6 +48,7 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
     kafka,
     s3,
     hmacSecret = 'test-secret-key',
+    jwksPublicKeyUrl = 'http://localhost:3000/.well-known/jwks.json',
     customVars = {}
   } = config;
 
@@ -89,8 +92,7 @@ export function setupTestEnvironment(config: TestEnvConfig): void {
   }
 
   process.env.HMAC_SECRET_KEY = hmacSecret;
-  process.env.JWKS_PUBLIC_KEY_URL =
-    'http://localhost:3000/.well-known/jwks.json';
+  process.env.JWKS_PUBLIC_KEY_URL = jwksPublicKeyUrl;
   process.env.OTEL_SERVICE_NAME = 'test-service';
   process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
   process.env.HOST = 'localhost';

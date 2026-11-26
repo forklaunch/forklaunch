@@ -1,4 +1,7 @@
-import { BasePaymentDtos, BasePaymentEntities } from '@forklaunch/implementation-ecommerce-base/types';
+import {
+  BasePaymentDtos,
+  BasePaymentEntities
+} from '@forklaunch/implementation-ecommerce-base/types';
 import { EntityManager, InferEntity } from '@mikro-orm/core';
 import Stripe from 'stripe';
 
@@ -13,6 +16,9 @@ export type StripePaymentMappers<
   Dto extends BasePaymentDtos
 > = {
   PaymentMapper: {
+    /** Optional authoritative local relation guard before/after secret retrieval. */
+    validateResume?: (payment: Dto['PaymentMapper'], em: EntityManager) => Promise<void>;
+
     entity: Entities['PaymentMapper'];
     toDto: (
       entity: InferEntity<Entities['PaymentMapper']>

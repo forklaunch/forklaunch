@@ -1,0 +1,156 @@
+/**
+ * Converts a value to the plain string a header, form field or query parameter
+ * expects: a string is returned as-is, numbers, booleans, `null` and
+ * `undefined` go through `String()`, and anything else is handed to
+ * `safeStringify`.
+ *
+ * Delegating the non-primitive case keeps the special-type handling
+ * `safeStringify` already has (Error, BigInt, Map, Set, RegExp, Date, typed
+ * arrays, functions, symbols). This is exactly what these callers did before
+ * `safeStringify` started quoting strings, so the values that go over the wire
+ * are unchanged.
+ *
+ * A value that cannot be serialized, such as a circular structure, comes back
+ * as an `[Unserializable: ...]` message. That message can contain newlines, so
+ * it is not a valid header value.
+ *
+ * @param value - The value to convert
+ * @returns A plain string representation
+ *
+ * @example
+ * ```typescript
+ * toPlainString('hello');        // 'hello' (not '"hello"')
+ * toPlainString(123);            // '123'
+ * toPlainString(true);           // 'true'
+ * toPlainString(null);           // 'null'
+ * toPlainString({ a: 1 });       // '{"a":1}' (objects are JSON-stringified)
+ * toPlainString([1, 2]);         // '[1,2]' (arrays are JSON-stringified)
+ * ```
+ */
+export function toPlainString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value == null) {
+    return String(value);
+  }
+  return safeStringify(value);
+}
+
+/**
+ * Safely stringifies any JavaScript value, handling special cases like:
+ * - Error objects
+ * - BigInt
+ * - Functions
+ * - Symbols
+ * - Special number values (NaN, Infinity)
+ * - Built-in objects (Date, RegExp)
+ * - Collections (Map, Set)
+ * - TypedArrays and ArrayBuffers
+ *
+ * @param arg - The value to stringify
+ * @returns A string representation of the value
+ *
+ * @example
+ * ```typescript
+ * // Handle Error objects
+ * safeStringify(new Error("test")); // '{"name":"Error","message":"test","stack":"..."}'
+ *
+ * // Handle special types
+ * safeStringify(BigInt(123)); // "123n"
+ * safeStringify(Symbol("test")); // "Symbol(test)"
+ * safeStringify(() => {}); // "[Function: anonymous]"
+ * safeStringify(new Map([["key", "value"]])); // '{"__type":"Map","value":[["key","value"]]}'
+ * ```
+ */
+export function safeStringify(arg: unknown): string {
+  // Handle null/undefined
+  if (arg == null) {
+    return String(arg);
+  }
+
+  const replacer = (key: string, value: unknown): unknown => {
+    if (value instanceof Error) {
+      return {
+        name: value.name,
+        message: value.message,
+        stack: value.stack,
+        cause: value.cause
+      };
+    }
+
+    if (typeof value === 'bigint') {
+      return value.toString() + 'n';
+    }
+
+    if (typeof value === 'function') {
+      return `[Function: ${value.name || 'anonymous'}]`;
+    }
+
+    if (typeof value === 'symbol') {
+      return value.toString();
+    }
+
+    if (typeof value === 'number') {
+      if (Number.isNaN(value)) return 'NaN';
+      if (value === Infinity) return 'Infinity';
+      if (value === -Infinity) return '-Infinity';
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (value instanceof RegExp) {
+      return value.toString();
+    }
+
+    if (value instanceof Map) {
+      return {
+        __type: 'Map',
+        value: Array.from(value.entries())
+      };
+    }
+
+    if (value instanceof Set) {
+      return {
+        __type: 'Set',
+        value: Array.from(value.values())
+      };
+    }
+
+    if (ArrayBuffer.isView(value)) {
+      return {
+        __type: value.constructor.name,
+        // ArrayBuffer.isView narrows to ArrayBufferView, which covers DataView
+        // as well as the typed arrays. DataView is genuinely not indexable, so
+        // TypeScript is right that the two types do not overlap and refuses a
+        // direct assertion. The hop through unknown is load-bearing here rather
+        // than habit: every typed array reaching this branch is ArrayLike, and
+        // a DataView yields an empty array instead of throwing.
+        value: Array.from(value as unknown as ArrayLike<unknown>)
+      };
+    }
+
+    if (value instanceof ArrayBuffer) {
+      return {
+        __type: 'ArrayBuffer',
+        value: Array.from(new Uint8Array(value))
+      };
+    }
+
+    return value;
+  };
+
+  try {
+    return JSON.stringify(arg, replacer);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return `[Unserializable: ${error.message}]`;
+    }
+    return '[Unserializable: Unknown error]';
+  }
+}

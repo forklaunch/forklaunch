@@ -89,7 +89,7 @@ describe('webhook idempotency against an app-discovered entity', () => {
     expect(rows[0].idempotencyKey).toBe('ik_test_1');
   });
 
-  test('replaying the same idempotency key is a no-op', async () => {
+  test('replaying the same Stripe event id is a no-op', async () => {
     await makeService().handleWebhookEvent(event);
 
     const rows = await orm.em

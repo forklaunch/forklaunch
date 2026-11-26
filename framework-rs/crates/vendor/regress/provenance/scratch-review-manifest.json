@@ -1,0 +1,182 @@
+{
+  "status": "scratch-unvendored-review",
+  "archiveSha256": "158a764437582235e3501f683b93a0a6f8d825d04a789dbe5ed30b8799b8908a",
+  "source": [
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/api.rs",
+      "relativePath": "src/api.rs",
+      "sha256": "32f1310e51ed732b0d3f0476fef38e462e80e04012987be3ff7ec06c81b40a2e"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/classicalbacktrack.rs",
+      "relativePath": "src/classicalbacktrack.rs",
+      "sha256": "7303be7bde9c95a52fc97be031ecd81f5b4a00afc138964f58d23cb781318cc1"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/codepointset.rs",
+      "relativePath": "src/codepointset.rs",
+      "sha256": "840b227fefbc323441787ed16d2f2b7f15474ff8cf79b8ed6a6c1fe07fcfb286"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/compile_ledger.rs",
+      "relativePath": "src/compile_ledger.rs",
+      "sha256": "b6a7d7103d34985be7c253d264d608b6a746ef2da9c36e9d194be52c2d756307"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/emit.rs",
+      "relativePath": "src/emit.rs",
+      "sha256": "fc5b9b4d442a272630418a20a07e2f27239a901e5fb7bc93c596973f036ca917"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/ir.rs",
+      "relativePath": "src/ir.rs",
+      "sha256": "8af42a6902bc2021b6e839e6a816344b9b101a46a72e5276b34135a138454e5b"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/lib.rs",
+      "relativePath": "src/lib.rs",
+      "sha256": "4a417c28e7639850cef32f35a5a1c64114c6c1ecf7c42c2b34afff06067648a2"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/limits.rs",
+      "relativePath": "src/limits.rs",
+      "sha256": "7e2ebf422cfe8e8724553fdeec41d82d8b4e4fee5684ccf0e386282c6009dddb"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/parse.rs",
+      "relativePath": "src/parse.rs",
+      "sha256": "7f445b7540f5df9ebc6099f3d79a49d0f553dfd4de7732407823178464991442"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/unicode.rs",
+      "relativePath": "src/unicode.rs",
+      "sha256": "df6547d3cc38888ef311587c177ba021d14d2bce9134c5565ca2bc6640f3174f"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/src/unicodetables.rs",
+      "relativePath": "src/unicodetables.rs",
+      "sha256": "7c65f69c644e09b245b8da36d10c551e5ca87e8a5397f5050cd0f24340ce1577"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/tests/unicode_property_escapes.rs",
+      "relativePath": "tests/unicode_property_escapes.rs",
+      "sha256": "4327df799adf9d5fd6b4f95ff269934162cd3faec15a2758986c14c7d0d8639c"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "/private/tmp/fl-regress-probe/src/main.rs",
+      "sha256": "3e41ba3f1f329b9ec892a6518ee0018a9af56d56ee2c4b560032598fd5f655b5"
+    },
+    {
+      "path": "/private/tmp/fl-regress-probe/tests/budget.rs",
+      "sha256": "b448b5663bc8fffd898d702c836db3431fa74ba2cbcfb1a0adfd8d7ba89155f9"
+    },
+    {
+      "path": "/private/tmp/fl-regress-audit-patched.mjs",
+      "sha256": "b0e82d28b3fb864f2313242bfd68120b9e486ae6fb929fc17dd77ef1157f8e3b"
+    },
+    {
+      "path": "/private/tmp/fl-regress-edge-audit.mjs",
+      "sha256": "2cb10f20a5f80062f55baa9a49c69e81fb30b820a8c3ff0f9a80c188f783ab1b"
+    },
+    {
+      "path": "/private/tmp/fl-regress-grammar-audit.mjs",
+      "sha256": "95e9fbb3f4fe925a2ccdb39d9036042f55d37adc058bdb36fcf2f72e70e8c839"
+    },
+    {
+      "path": "/private/tmp/fl-regress-probe-patched",
+      "sha256": "fa4968d44b9f55706615d49ccd294f3f77e7675a985ac8b12a57227357cf4e3d"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/LICENSE-MIT",
+      "sha256": "3f8a05fc8617c5ce569fa5a4f2301cd847fe00fa011bdaa8f353fd55a2691a54"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/LICENSE-APACHE",
+      "sha256": "e36d55837170195cdf934aa6a48c0ad6efba1bde3f5b4a1b9259c171d5aeb647"
+    }
+  ],
+  "handwrittenPatchLines": 2739,
+  "generatedTablePatchLines": 14188,
+  "generatorAndInputs": [
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/binary_properties.rs",
+      "sha256": "c3ccc0dd6d6ec9f2f79c1af00ca44e404f772f6d471466081a37554aa540a403"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/case_folding.rs",
+      "sha256": "a215ba178add4073aa3cbbd34f524f4cd12054240f18353d8f87dd97da35b916"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/scripts.rs",
+      "sha256": "94a143a6adca6db02d3326e43d212f6016abe720379dd9c46eac7a4d9cbaf4c4"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/general_category_values.rs",
+      "sha256": "041436b2284a16b7c9eb92b54fad3b300da0d2e79c07ae6e5424691d6ee72f61"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/main.rs",
+      "sha256": "5215bc0bd2365817a35dd07bc6076049794f73c5035cec68b9c51e81f989ea90"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/uppercase.rs",
+      "sha256": "8bf974d0ed6d9f9c3b15f0e33c39a9a99e64d4c0e872138d37a642d81a5f13ca"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/src/string_properties.rs",
+      "sha256": "8bd057a0bffa76fe5a0707056caeb2e95a63e134e9cdcbc6e5bea7add9e45847"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/Cargo.toml",
+      "sha256": "92cb6fcd25c5aa5d87b3e5185157647075963ebafb65420e0a8a1b854dbb5919"
+    },
+    {
+      "path": "/private/tmp/fl-regress-bounded/gen-unicode/Cargo.lock",
+      "sha256": "368f4d4d2ec58cf5ec5b00cb6b1e06a3b1da7c9361787efd1070b28b1ea9eb53"
+    },
+    {
+      "path": "/private/tmp/fl-regress-unicode16/SHA256SUMS",
+      "sha256": "fa25c5004b5d39478e631f0e72b4d463df8eca2c04e9384b2a87168296fc30dc"
+    }
+  ],
+  "logs": [
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-upstream.log",
+      "sha256": "21ecccd3d1a816bb5a1f4daad2e303f7214bb4167cf386e86c09825214b037fe"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-lib.log",
+      "sha256": "bcb1378115cb656ef4d0002d69b54082b73b01759c5f64de08d6a34502b1e7bb"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-resource.log",
+      "sha256": "cc8eb4b8849c22fffe1ec69b1134b9cf7e996944014525cd17874f988398cd9a"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-focused.log",
+      "sha256": "1fff1d42218a5cc5ccac4413f9c94d8c859a00e0e9501cbff1faf8fbdce42d70"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-minimal.log",
+      "sha256": "2fe028fbf0ac18aa2bb9196459343335b7fcacbf1d2912110b376f90e79a102d"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-build.log",
+      "sha256": "b7ac545e7848ab096df1c9099c636b596d7d2cdf938f4417ff44a13f2afdc322"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-actual.log",
+      "sha256": "f4fd0dea7c63729e6d1bf2250e670bba43f5199c444b64aeff3c6414bf8de114"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-edge.log",
+      "sha256": "d9ae4c8ef535be85995d8585d43c34c61f305901b08adb7648269ef4cfaa757b"
+    },
+    {
+      "path": "/private/tmp/fl-regress-ledger-final-grammar.log",
+      "sha256": "055db22259a65154245030c473d41cd6255401be4473847d8251280d8637ce6e"
+    }
+  ]
+}

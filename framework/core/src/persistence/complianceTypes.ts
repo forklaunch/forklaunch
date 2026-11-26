@@ -1,3 +1,4 @@
+import type { CompliantField, ComplianceOptions } from './compliantField';
 export const ComplianceLevel = {
   pii: 'pii',
   phi: 'phi',
@@ -8,6 +9,23 @@ export type ComplianceLevel =
   (typeof ComplianceLevel)[keyof typeof ComplianceLevel];
 
 export const COMPLIANCE_KEY = '~compliance' as const;
+
+/**
+ * The property type a classification produces. `none` leaves the value as
+ * it is; pii, phi and pci wrap it in a {@link CompliantField}, keeping
+ * `null`/`undefined` outside the wrapper so nullability reads naturally.
+ */
+export type CompliantValue<V, L, O = Record<never, never>> = L extends
+  'pii' | 'phi' | 'pci'
+  ? [V] extends [null | undefined]
+    ? V
+    : | CompliantField<
+          NonNullable<V>,
+          L,
+          O extends { readonly queryable: true } ? true : false
+        >
+      | Extract<V, null | undefined>
+  : V;
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -183,11 +201,15 @@ declare module '@mikro-orm/core' {
      * marker cannot tell them apart. See {@link RequiresEncryptionContext} for
      * why the difference matters at a call site.
      */
-    compliance<const L extends ComplianceLevel>(
-      level: L
+    compliance<
+      const L extends ComplianceLevel,
+      const O extends ComplianceOptions = Record<never, never>
+    >(
+      level: L,
+      options?: L extends EncryptedComplianceLevel ? O : never
     ): Pick<
       UniversalPropertyOptionsBuilder<
-        Value,
+        CompliantValue<Value, L, O>,
         Options & { readonly '~c': L },
         IncludeKeys
       >,

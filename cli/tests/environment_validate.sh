@@ -18,7 +18,7 @@ RUST_BACKTRACE=1 $FL init application env-test-app \
     -o src/modules \
     -d postgresql \
     -f prettier \
-    -l eslint \
+    -l oxlint \
     -v zod \
     -F express \
     -r node \

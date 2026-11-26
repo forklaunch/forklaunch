@@ -1,5 +1,8 @@
 {
   "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+  "files": {
+    "ignore": ["**/.forklaunch/**"]
+  },
   "linter": {
     "enabled": true,
     "rules": {

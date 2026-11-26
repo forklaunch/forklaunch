@@ -1,0 +1,17 @@
+# V8 string-date compatibility
+
+The optional `javascript-date` feature ports Node24.2.0's V8 string parser. It preserves the partial ISO parse state when continuing with the legacy grammar, the original numeric-token rules, calendar rollover, and the complete ±8,640,000,000,000,000ms TimeClip range. It does not coerce arbitrary JavaScript values into strings or replace the existing request/cache date profiles.
+
+`parse_utf16` takes an explicitly selected `LocalTimeZone`; `parse_utf16_host` and `parse_host` discover the process timezone only when an input has no explicit offset and is not an ISO date-only form. The runtime does not start Node, download rules, or call a remote service. Timestamp text cannot select a timezone file: host discovery reads trusted process `TZ` and system timezone configuration.
+
+Named calendar rules are the private, unmodified IANA2025b TZif corpus shipped by jiff-tzdb0.1.4. The existing shared jiff dependency remains unchanged. tz-rs0.7.3 resolves the full calendar range. Repeated local times select the earlier instant; gaps use the pre-transition offset, advancing by the gap. This intentionally avoids a resolver's generic “earliest transition” shortcut, which would erase the minutes inside a gap.
+
+Host parsing retains one replaceable timezone cache entry keyed by the trusted process `TZ` value; changing that value invalidates it. The cache lock is released before calendar resolution. Explicit `LocalTimeZone::discover` remains a fresh lookup.
+
+Unix host discovery follows ICU77's exact-ID, host-file, abbreviation, and standard-offset fallback rules. A plausible but unknown `TZ` is different from a POSIX-rule string rejected as an Olson identifier. Host timezone files can affect discovery and unknown-ID standard offsets, as they do in ICU; named calendar histories remain pinned. `tz-rs` reserves bare `localtime` for `/etc/localtime`, so environment lookup forces its ordinary filename form to preserve libc semantics. Windows host discovery and non-UTF8 `TZ` are explicitly unsupported and return `TimeZoneUnavailable`; explicit named zones and offset-bearing date parsing remain available. Missing/unusable host configuration is an error, not an invented UTC default.
+
+`provenance.json` records upstream source hashes, crate archive hashes, and retained data/license hashes. V8's BSD notice, ICU's Unicode license, and the data's MIT/Unlicense notices are included. The source-derived fractional parser deliberately preserves V8 quirks: for example, Node24.2 parses `.00000000123456789` as123ms because its numeral scanner skips leading zeroes before retaining nine significant digits. This is not a general ISO8601 parser.
+
+Permanent proof fixtures compare actual Node values across grammar/UTF16 inputs, every bundled named zone, historical/far-range dates, and Unix host settings. The configured billing HMAC fixture additionally signs Node-canonicalized timestamps and checks actual HTTP responses, correlation handling, provider-call absence on invalid dates, and existing generated-client controls. These establish the selected HMAC path, not global request-date or all-platform parity.
+
+Primary source: [V8 date parser](https://github.com/nodejs/node/tree/v24.2.0/deps/v8/src/date), [ICU host discovery](https://github.com/nodejs/node/blob/v24.2.0/deps/icu-small/source/common/putil.cpp), [ICU timezone selection](https://github.com/nodejs/node/blob/v24.2.0/deps/icu-small/source/i18n/timezone.cpp), [tz-rs0.7.3 API](https://docs.rs/tz-rs/0.7.3/tz/).

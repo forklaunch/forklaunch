@@ -20,16 +20,23 @@ This creates a new project with the basic structure including:
 - Development environment setup
 - Pre-configured linter, formatter, and Husky
 
-### Two directories, and they are not the same one
+### Application and package workspace
 
-This file sits in the **workspace root** — the directory holding `package.json`,
-where every `{{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}}` command below runs.
+This file sits in the **package workspace** — the directory holding its
+`package.json`, where every `{{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}}`
+command below runs.
 
 The **application root** is above it: the directory holding
 `.forklaunch/manifest.toml`, where every `forklaunch` command runs.
 
-Running `{{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} install` from the application root fails with a
-"no package.json" error. That is the wrong directory, not a broken project.
+Adding a Rust project creates a Cargo workspace at the application root and may
+also create a root `package.json` for generated SDK packages. Run the commands
+below from this package workspace even when a root package manifest exists.
+The shared TypeScript Dockerfile uses this workspace's package-manager lockfile.
+
+For applications with Rust projects, first run `cargo build --workspace` from
+the application root to compile their contracts and generate the TypeScript
+declarations consumed by this workspace.
 
 On first run, from **this** directory:
 
@@ -38,6 +45,11 @@ On first run, from **this** directory:
 {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun run{{/is_bun}} build
 {{#is_node}}pnpm{{/is_node}}{{#is_bun}}bun{{/is_bun}} database:setup
 ```
+
+For applications with Rust projects, then run `cargo generate-lockfile` from the
+application root to include any generated Rust SDKs. Commit `Cargo.lock` and this
+workspace's package-manager lockfile before building the shared Docker images;
+those builds use locked dependency installation.
 
 Now, you can run the project with:
 

@@ -1,0 +1,184 @@
+import { readModelStream } from './modelStream';
+import {
+  createInstanceGatewayTransport,
+  InstanceGatewayRequestError
+} from './instanceGateway';
+
+/**
+ * Client for the ForkLaunch model gateway (part of the managed gateway), for
+ * a managed instance or any app deployed on ForkLaunch.
+ *
+ * The service calls platform-hosted AI models (Azure AI Foundry) without
+ * holding a provider key: each request is signed with its own HMAC key, and
+ * the platform enforces the model allowlist, monthly token budget and rate
+ * limit. For a HIPAA product the platform only offers models covered by its
+ * BAA.
+ *
+ * The platform injects everything this needs: `PLATFORM_GATEWAY_URL` (the
+ * platform's public base), `INSTANCE_ID` and `INSTANCE_HMAC_KEY`, into a
+ * managed instance and, at deploy, into a component that declares models
+ * (`forklaunch infra add <service> models`, which also points them at the
+ * local gateway mock). Without them the client refuses to be created rather
+ * than failing on the first call.
+ *
+ * @example
+ * const models = createModelGatewayClient();
+ * const reply = await models.chat.completions.create({
+ *   model: 'terra',
+ *   messages: [{ role: 'user', content: 'Summarize this intake form: …' }]
+ * });
+ * for await (const chunk of models.chat.completions.stream({ model: 'luna', messages })) {
+ *   process.stdout.write(chunk.choices[0]?.delta?.content ?? '');
+ * }
+ */
+
+export interface ModelGatewayClientOptions {
+  /** Platform base URL. Default: `PLATFORM_GATEWAY_URL`. */
+  gatewayUrl?: string;
+  /** This instance's id. Default: `INSTANCE_ID`. */
+  instanceId?: string;
+  /** This instance's HMAC key. Default: `INSTANCE_HMAC_KEY`. */
+  hmacKey?: string;
+  fetch?: typeof fetch;
+}
+
+/** An OpenAI-style chat message. */
+export interface GatewayChatMessage {
+  role: 'system' | 'developer' | 'user' | 'assistant' | 'tool';
+  content: unknown;
+  [key: string]: unknown;
+}
+
+/** An OpenAI-compatible chat completions request; `model` is a catalog alias. */
+export interface GatewayChatRequest {
+  model: string;
+  messages: GatewayChatMessage[];
+  temperature?: number;
+  top_p?: number;
+  max_tokens?: number;
+  max_completion_tokens?: number;
+  response_format?: unknown;
+  tools?: unknown[];
+  tool_choice?: unknown;
+  parallel_tool_calls?: boolean;
+  stop?: unknown;
+  seed?: number;
+  presence_penalty?: number;
+  frequency_penalty?: number;
+  reasoning_effort?: string;
+}
+
+export interface GatewayChatCompletion {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices: {
+    index: number;
+    message: { role: string; content: string | null; [key: string]: unknown };
+    finish_reason: string | null;
+    [key: string]: unknown;
+  }[];
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  [key: string]: unknown;
+}
+
+export interface GatewayChatChunk {
+  id: string;
+  object: string;
+  model: string;
+  choices: {
+    index: number;
+    delta: { role?: string; content?: string | null; [key: string]: unknown };
+    finish_reason?: string | null;
+  }[];
+  usage?: GatewayChatCompletion['usage'];
+  [key: string]: unknown;
+}
+
+export interface GatewayModels {
+  models: { id: string; baa: boolean }[];
+  monthlyTokenBudget: number;
+  tokensUsedThisMonth: number;
+  requestsPerMinute: number;
+  withheldForHipaa?: string[];
+}
+
+/** A refusal or failure from the gateway, with the status it answered. */
+export class ModelGatewayRequestError extends InstanceGatewayRequestError {
+  override readonly name = 'ModelGatewayRequestError' as const;
+}
+
+export interface ModelGatewayClient {
+  /** The models this instance may call, and where its monthly budget stands. */
+  models(): Promise<GatewayModels>;
+  chat: {
+    completions: {
+      create(request: GatewayChatRequest): Promise<GatewayChatCompletion>;
+      stream(
+        request: GatewayChatRequest,
+        options?: { signal?: AbortSignal }
+      ): AsyncGenerator<GatewayChatChunk>;
+    };
+  };
+}
+
+export function createModelGatewayClient(
+  options: ModelGatewayClientOptions = {}
+): ModelGatewayClient {
+  const transport = createInstanceGatewayTransport(
+    options,
+    'The model gateway'
+  );
+
+  async function send(
+    method: 'GET' | 'POST',
+    route: string,
+    body?: Record<string, unknown>,
+    signal?: AbortSignal
+  ): Promise<Response> {
+    try {
+      return await transport.request(method, route, body, { signal });
+    } catch (error) {
+      if (error instanceof InstanceGatewayRequestError) {
+        throw new ModelGatewayRequestError(
+          error.status,
+          error.message,
+          error.retryAfterSeconds
+        );
+      }
+      throw error;
+    }
+  }
+
+  return {
+    async models() {
+      return (await (await send('GET', '/models')).json()) as GatewayModels;
+    },
+    chat: {
+      completions: {
+        async create(request) {
+          const response = await send(
+            'POST',
+            '/models/chat/completions',
+            request as unknown as Record<string, unknown>
+          );
+          return (await response.json()) as GatewayChatCompletion;
+        },
+        async *stream(request, streamOptions = {}) {
+          const response = await send(
+            'POST',
+            '/models/chat/completions/stream',
+            request as unknown as Record<string, unknown>,
+            streamOptions.signal
+          );
+          yield* readModelStream(response);
+        }
+      }
+    }
+  };
+}

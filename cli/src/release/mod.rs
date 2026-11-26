@@ -9,16 +9,18 @@ use crate::{CliCommand, core::command::command};
 
 mod create;
 mod eject;
+mod git;
 mod info;
 mod list;
-mod git;
 mod manifest_generator;
 pub(crate) mod s3_upload;
+mod set_current;
 mod shared;
 
 #[derive(Debug)]
 pub(crate) struct ReleaseCommand {
     create: CreateCommand,
+    set_current: set_current::SetCurrentCommand,
     info: InfoCommand,
     list: ListCommand,
     eject: EjectCommand,
@@ -28,6 +30,7 @@ impl ReleaseCommand {
     pub(crate) fn new() -> Self {
         Self {
             create: CreateCommand::new(),
+            set_current: set_current::SetCurrentCommand::new(),
             info: InfoCommand::new(),
             list: ListCommand::new(),
             eject: EjectCommand::new(),
@@ -42,6 +45,7 @@ impl CliCommand for ReleaseCommand {
             .subcommand(self.info.command())
             .subcommand(self.list.command())
             .subcommand(self.eject.command())
+            .subcommand(self.set_current.command())
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -50,9 +54,12 @@ impl CliCommand for ReleaseCommand {
             Some(("info", sub_matches)) => self.info.handler(sub_matches),
             Some(("list", sub_matches)) => self.list.handler(sub_matches),
             Some(("eject", sub_matches)) => self.eject.handler(sub_matches),
+            Some(("set-current", sub_matches)) => self.set_current.handler(sub_matches),
             // Default to create for convenience
             None => self.create.handler(matches),
             _ => unreachable!(),
         }
     }
 }
+
+mod prebuilt;

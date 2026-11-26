@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{error_failed_to_read_file, WorkerType},
+    constants::{WorkerType, error_failed_to_read_file},
     core::{
         ast::{
             deletions::{
@@ -479,7 +479,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                     }}
                 }})",
             worker_type,
-            get_worker_producer_factory(r#type),
+            get_worker_producer_factory(r#type, pascal_case_name),
             pascal_case_name,
             pascal_case_name,
             worker_type,
@@ -507,7 +507,7 @@ pub(crate) fn transform_registrations_ts_worker_type(
                         factory: {}
                     }}
                 }})",
-            get_worker_producer_factory(r#type),
+            get_worker_producer_factory(r#type, pascal_case_name),
             pascal_case_name,
             pascal_case_name,
             worker_type,
@@ -1061,6 +1061,27 @@ const serviceDependencies = runtimeDependencies.chain({
 
         let transformed_code = result.unwrap();
         assert!(!transformed_code.is_empty());
+        if std::env::var("PRINT_S3_CODEGEN").is_ok() {
+            println!("{transformed_code}");
+        }
+        // Keyless by default: credentials come from the task role when deployed.
+        assert!(transformed_code.contains("s3ClientConfig({"));
+        assert!(transformed_code.contains("S3ObjectStore, s3ClientConfig"));
+        for key in [
+            "S3_ACCESS_KEY_ID",
+            "S3_SECRET_ACCESS_KEY",
+            "S3_URL",
+            "S3_PREFIX",
+        ] {
+            let at = transformed_code.find(&format!("{key}: {{")).expect(key);
+            assert!(
+                transformed_code[at..at + 120].contains("optional(string)"),
+                "{key} should be optional"
+            );
+        }
+        assert!(transformed_code.contains("prefix: S3_PREFIX"));
+        assert!(transformed_code.contains("maxUploadSeconds: S3_PRESIGN_MAX_UPLOAD_SECONDS"));
+        assert!(!transformed_code.contains("credentials: {"));
     }
 
     #[test]

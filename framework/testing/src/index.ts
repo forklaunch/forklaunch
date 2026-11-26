@@ -37,4 +37,12 @@ export {
   TestSetupResult
 } from './harness';
 
+export {
+  startTestJwtIssuer,
+  surfaceFromTestClaims,
+  TestJwtClaims,
+  TestJwtIssuer,
+  TestJwtIssuerOptions
+} from './jwt';
+
 export { TEST_TOKENS } from './tokens';

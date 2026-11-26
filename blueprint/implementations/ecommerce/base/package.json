@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/implementation-ecommerce-base",
-  "version": "1.0.8",
+  "version": "2.0.0",
   "description": "Ecommerce basic implementation for forklaunch",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Forklift Technologies, Inc.",
@@ -57,19 +57,19 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@forklaunch/common": "^1.2.26",
-    "@forklaunch/core": "^1.5.19",
+    "@forklaunch/common": "^1.2.32",
+    "@forklaunch/core": "^4.1.0",
     "@forklaunch/interfaces-ecommerce": "workspace:^",
-    "@forklaunch/internal": "^1.2.29",
-    "@forklaunch/validator": "^1.2.27",
-    "@mikro-orm/core": "7.1.15",
+    "@forklaunch/internal": "^1.2.37",
+    "@forklaunch/validator": "^1.3.0",
+    "@mikro-orm/core": "7.2.10",
     "@sinclair/typebox": "^0.34.52",
     "ajv": "^8.20.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "depcheck": "^1.4.7",
-    "prettier": "^3.9.6",
+    "prettier": "^3.10.1",
     "typedoc": "^0.28.20",
     "typescript": "^7.0.2"
   },

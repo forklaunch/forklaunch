@@ -39,7 +39,7 @@ export function parseSchemaValue<SV extends AnySchemaValidator>(
   schema: IdiomaticSchema<SV> | undefined,
   context: string
 ): unknown {
-  if (!schema) {
+  if (schema === undefined) {
     return value;
   }
 

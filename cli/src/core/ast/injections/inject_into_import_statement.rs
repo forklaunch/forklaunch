@@ -1,5 +1,3 @@
-use std::borrow::Cow;
-
 use anyhow::{Result, bail};
 use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::{Program, SourceType, Statement};
@@ -13,14 +11,14 @@ pub(crate) fn inject_into_import_statement<'a>(
     source_text: &str,
 ) -> Result<()> {
     // Extract specifier names from the injection
-    let injection_specifiers: Vec<Cow<'_, str>> = injection_program_ast
+    let injection_specifiers: Vec<&str> = injection_program_ast
         .body
         .iter()
         .filter_map(|stmt| match stmt {
             Statement::ImportDeclaration(import) => import.specifiers.as_ref(),
             _ => None,
         })
-        .flat_map(|specs| specs.iter().map(|s| s.name()))
+        .flat_map(|specs| specs.iter().map(|s| s.name().as_str()))
         .collect();
 
     // Check if an import from the same source already exists with all the specifiers
@@ -29,12 +27,14 @@ pub(crate) fn inject_into_import_statement<'a>(
             Statement::ImportDeclaration(import) => import,
             _ => return false,
         };
-        if Cow::Borrowed(import.source.value.as_str()) != Cow::Borrowed(import_source_identifier) {
+        if import.source.value != import_source_identifier {
             return false;
         }
         if let Some(specs) = &import.specifiers {
-            let existing_names: Vec<Cow<'_, str>> = specs.iter().map(|s| s.name()).collect();
-            injection_specifiers.iter().all(|name| existing_names.contains(name))
+            let existing_names: Vec<&str> = specs.iter().map(|s| s.name().as_str()).collect();
+            injection_specifiers
+                .iter()
+                .all(|name| existing_names.contains(name))
         } else {
             false
         }
@@ -57,8 +57,7 @@ pub(crate) fn inject_into_import_statement<'a>(
                 _ => return,
             };
 
-            if Cow::Borrowed(import.source.value.as_str()) > Cow::Borrowed(import_source_identifier)
-            {
+            if import.source.value.as_str().unwrap_or_default() > import_source_identifier {
                 found_import = true;
                 if injection_pos.is_none() {
                     injection_pos = Some(index);
@@ -108,7 +107,7 @@ pub(crate) fn inject_specifier_into_import_statement<'a>(
             _ => return,
         };
 
-        if Cow::Borrowed(import.source.value.as_str()) == Cow::Borrowed(import_source_identifier) {
+        if import.source.value == import_source_identifier {
             found_import = true;
             if import.specifiers.is_some() {
                 let inject_import = match inject_import_program.body.first_mut().unwrap() {

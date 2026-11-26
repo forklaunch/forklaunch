@@ -6,7 +6,7 @@ import {
 
 // twilio sms mapper entity/dto types — twilio pins the record status to the
 // canonical SmsStatusEnum since provider statuses are mapped onto it
-export type TwilioSmsEntities = BaseSmsEntities<typeof SmsStatusEnum>;
+export type TwilioSmsEntities = BaseSmsEntities;
 export type TwilioSmsDtos = BaseSmsDtos<typeof SmsStatusEnum>;
 
 // form-encoded payload posted by Twilio delivery-status callbacks

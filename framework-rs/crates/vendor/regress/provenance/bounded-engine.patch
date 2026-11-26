@@ -1,0 +1,2739 @@
+--- a/src/api.rs
++++ b/src/api.rs
+@@ -984,3 +984,73 @@
+ 
+     result
+ }
++
++#[cfg(feature = "utf16")]
++impl Regex {
++    /// Scratch bounded boolean matching. Compile with the limited constructor
++    /// once that constructor's expansion accounting is fully implemented.
++    pub fn test_utf16_limited(
++        &self,
++        text: &[u16],
++        sticky: bool,
++        limits: crate::limits::MatchLimits,
++    ) -> Result<bool, crate::limits::ResourceLimit> {
++        if self.cr.flags.unicode || self.cr.flags.unicode_sets {
++            crate::classicalbacktrack::test_limited(
++                &self.cr,
++                Utf16Input::new(text, true),
++                text.len(),
++                sticky,
++                limits,
++            )
++        } else {
++            crate::classicalbacktrack::test_limited(
++                &self.cr,
++                Ucs2Input::new(text, false),
++                text.len(),
++                sticky,
++                limits,
++            )
++        }
++    }
++}
++
++#[cfg(feature = "utf16")]
++impl Regex {
++    /// Scratch limited compiler. Admission is conservative and may reject a
++    /// valid expression explicitly; it never reports resource exhaustion as a
++    /// syntax error or nonmatch. The optimizer is deliberately disabled.
++    #[cfg(feature = "std")]
++    pub fn from_utf16_limited(
++        pattern: &[u16],
++        mut flags: Flags,
++        limits: crate::limits::CompileLimits,
++    ) -> Result<Self, crate::limits::CompileFailure> {
++        flags.unicode |= flags.unicode_sets;
++        let ledger = crate::compile_ledger::Scope::enter(limits);
++        crate::limits::admit_compile(pattern, flags, limits)?;
++        flags.no_opt = true;
++        let mut codes = Vec::new();
++        if !crate::compile_ledger::reserve(&mut codes, pattern.len()) {
++            ledger.outcome()?;
++        }
++        if flags.unicode {
++            codes.extend(
++                char::decode_utf16(pattern.iter().copied()).map(|c| match c {
++                    Ok(c) => u32::from(c),
++                    Err(e) => u32::from(e.unpaired_surrogate()),
++                }),
++            );
++        } else {
++            codes.extend(pattern.iter().copied().map(u32::from));
++        }
++        let parsed = parse::try_parse(codes.iter().copied(), flags);
++        ledger.outcome()?;
++        let ir = parsed.map_err(crate::limits::CompileFailure::Syntax)?;
++        let remaining = ledger.remaining(limits);
++        let plan = crate::limits::admit_ir(&ir.node, remaining)?;
++        let cr = emit::emit_limited(&ir, plan, remaining.allocation_units)?;
++        ledger.outcome()?;
++        Ok(Self { cr })
++    }
++}
+--- a/src/classicalbacktrack.rs
++++ b/src/classicalbacktrack.rs
+@@ -74,17 +74,49 @@
+     re: &'a CompiledRegex,
+     bts: Vec<BacktrackInsn<Input>>,
+     s: State<Input::Position>,
++    #[cfg(feature = "utf16")]
++    budget: Option<crate::limits::MatchBudget>,
+ }
+ 
+ impl<'a, Input: InputIndexer> MatchAttempter<'a, Input> {
+     pub(crate) fn new(re: &'a CompiledRegex, entry: Input::Position) -> Self {
+         Self {
+             re,
++            #[cfg(feature = "utf16")]
++            budget: None,
+             bts: vec![BacktrackInsn::Exhausted],
+             s: State {
+                 loops: vec![LoopData::new(entry); re.loops as usize],
+                 groups: vec![GroupData::new(); re.groups as usize],
+             },
++        }
++    }
++
++    #[cfg(feature = "utf16")]
++    fn admit_instruction(&mut self) -> bool {
++        let Some(budget) = &mut self.budget else {
++            return true;
++        };
++        // Reserve the largest per-instruction group restore and loop pushes
++        // before any Vec push/capture clone can grow the stack.
++        let bytes = self
++            .bts
++            .len()
++            .checked_add(self.s.groups.len())
++            .and_then(|n| n.checked_add(4))
++            .and_then(|needed| {
++                let capacity = self.bts.capacity();
++                if needed > capacity {
++                    capacity.checked_add(needed.max(capacity).max(4).checked_mul(2)?)
++                } else {
++                    Some(capacity)
++                }
++            })
++            .and_then(|n| n.checked_mul(core::mem::size_of::<BacktrackInsn<Input>>()))
++            .and_then(|n| n.checked_add(budget.parent_bytes));
++        match bytes {
++            Some(bytes) => budget.charge(bytes),
++            None => budget.fail(crate::limits::ResourceLimit::Stack),
+         }
+     }
+ 
+@@ -464,6 +496,47 @@
+         end_group: CaptureGroupID,
+         negate: bool,
+     ) -> bool {
++        #[cfg(feature = "utf16")]
++        let frame_bytes =
++            {
++                if let Some(budget) = &mut self.budget {
++                    if budget.depth >= budget.depth_limit {
++                        budget.fail(crate::limits::ResourceLimit::Lookaround);
++                        return false;
++                    }
++                    let bytes =
++                        self.bts
++                            .capacity()
++                            .checked_mul(core::mem::size_of::<BacktrackInsn<Input>>())
++                            .and_then(|n| {
++                                n.checked_add(self.s.groups.len().checked_mul(
++                                    core::mem::size_of::<GroupData<Input::Position>>(),
++                                )?)
++                            });
++                    let Some(bytes) = bytes else {
++                        budget.fail(crate::limits::ResourceLimit::Stack);
++                        return false;
++                    };
++                    let Some(total) = budget.parent_bytes.checked_add(bytes) else {
++                        budget.fail(crate::limits::ResourceLimit::Stack);
++                        return false;
++                    };
++                    let Some(reserved) =
++                        total.checked_add(core::mem::size_of::<BacktrackInsn<Input>>())
++                    else {
++                        budget.fail(crate::limits::ResourceLimit::Stack);
++                        return false;
++                    };
++                    if !budget.charge(reserved) {
++                        return false;
++                    }
++                    budget.parent_bytes = total;
++                    budget.depth += 1;
++                    bytes
++                } else {
++                    0
++                }
++            };
+         // Copy capture groups, because if the match fails (or if we are inverted)
+         // we need to restore these.
+         let range = (start_group as usize)..(end_group as usize);
+@@ -479,6 +552,11 @@
+         // Enter into the lookaround's instruction stream.
+         let matched = self.try_at_pos(*input, ip, pos, Dir::new()).is_some();
+ 
++        #[cfg(feature = "utf16")]
++        if let Some(budget) = &mut self.budget {
++            budget.parent_bytes -= frame_bytes;
++            budget.depth -= 1;
++        }
+         // Put back our bts.
+         core::mem::swap(&mut self.bts, &mut saved_bts);
+ 
+@@ -496,6 +574,14 @@
+         } else {
+             self.s.groups.splice(range, saved_groups);
+         }
++        #[cfg(feature = "utf16")]
++        if self
++            .budget
++            .as_ref()
++            .is_some_and(|budget| budget.exhausted.is_some())
++        {
++            return false;
++        }
+         matched != negate
+     }
+ 
+@@ -509,6 +595,10 @@
+         _dir: Dir,
+     ) -> bool {
+         loop {
++            #[cfg(feature = "utf16")]
++            if !self.admit_instruction() {
++                return false;
++            }
+             // We always have a single Exhausted instruction backstopping our stack,
+             // so we do not need to check for empty bts.
+             debug_assert!(!self.bts.is_empty(), "Backtrack stack should not be empty");
+@@ -652,6 +742,10 @@
+         // to.
+         #[allow(clippy::never_loop)]
+         'nextinsn: loop {
++            #[cfg(feature = "utf16")]
++            if !self.admit_instruction() {
++                return None;
++            }
+             'backtrack: loop {
+                 // Helper macro to either increment ip and go to the next insn, or backtrack.
+                 macro_rules! next_or_bt {
+@@ -997,6 +1091,14 @@
+             if self.try_backtrack(input, &mut ip, &mut pos, dir) {
+                 continue 'nextinsn;
+             } else {
++                #[cfg(feature = "utf16")]
++                if self
++                    .budget
++                    .as_ref()
++                    .is_some_and(|budget| budget.exhausted.is_some())
++                {
++                    return None;
++                }
+                 // We have exhausted the backtracking stack.
+                 debug_assert!(self.bts.len() == 1, "Should have exhausted backtrack stack");
+                 return None;
+@@ -1170,3 +1272,67 @@
+         }
+     }
+ }
++
++#[cfg(feature = "utf16")]
++pub(crate) fn test_limited<Input: InputIndexer>(
++    re: &CompiledRegex,
++    input: Input,
++    input_units: usize,
++    sticky: bool,
++    limits: crate::limits::MatchLimits,
++) -> Result<bool, crate::limits::ResourceLimit> {
++    use crate::limits::{MatchBudget, ResourceLimit};
++    if input_units > limits.input_units {
++        return Err(ResourceLimit::Input);
++    }
++    let cost = input_units
++        .checked_add(re.groups as usize)
++        .and_then(|n| n.checked_add(4))
++        .ok_or(ResourceLimit::Work)?;
++    let state_bytes = (re.groups as usize)
++        .checked_mul(core::mem::size_of::<GroupData<Input::Position>>())
++        .and_then(|n| {
++            n.checked_add(
++                (re.loops as usize)
++                    .checked_mul(core::mem::size_of::<LoopData<Input::Position>>())?,
++            )
++        })
++        .ok_or(ResourceLimit::Stack)?;
++    if state_bytes
++        .checked_add(core::mem::size_of::<BacktrackInsn<Input>>())
++        .ok_or(ResourceLimit::Stack)?
++        > limits.stack_bytes
++    {
++        return Err(ResourceLimit::Stack);
++    }
++    let mut matcher = MatchAttempter::new(re, input.left_end());
++    matcher.budget = Some(MatchBudget {
++        remaining: limits.work,
++        stack_bytes: limits.stack_bytes,
++        depth_limit: limits.lookaround_depth.min(128),
++        depth: 0,
++        parent_bytes: state_bytes,
++        cost,
++        exhausted: None,
++    });
++    let mut pos = input.left_end();
++    loop {
++        if !matcher.admit_instruction() {
++            return Err(matcher.budget.as_ref().unwrap().exhausted.unwrap());
++        }
++        let found = matcher.try_at_pos(input, 0, pos, Forward::new()).is_some();
++        if let Some(error) = matcher.budget.as_ref().unwrap().exhausted {
++            return Err(error);
++        }
++        if found {
++            return Ok(true);
++        }
++        if sticky {
++            return Ok(false);
++        }
++        match input.next_right_pos(pos) {
++            Some(next) => pos = next,
++            None => return Ok(false),
++        }
++    }
++}
+--- a/src/codepointset.rs
++++ b/src/codepointset.rs
+@@ -101,9 +101,17 @@
+     }
+ }
+ 
+-#[derive(Clone, Debug, Default, PartialEq, Eq)]
++#[derive(Debug, Default, PartialEq, Eq)]
+ pub struct CodePointSet {
+     ivs: Vec<Interval>,
++}
++
++impl Clone for CodePointSet {
++    fn clone(&self) -> Self {
++        Self {
++            ivs: crate::compile_ledger::copy(&self.ivs),
++        }
++    }
+ }
+ 
+ /// A set of code points stored via as disjoint, non-abutting, sorted intervals.
+@@ -153,6 +161,9 @@
+ 
+     /// Add an interval of code points to the set.
+     pub fn add(&mut self, new_iv: Interval) {
++        if !crate::compile_ledger::charge(0, self.ivs.len().saturating_add(1)) {
++            return;
++        }
+         // Find the mergeable subarray, that is, the range of intervals that intersect
+         // or abut new_iv.
+         let mergeable = self.ivs.equal_range_by(|iv| iv.mergecmp(new_iv));
+@@ -178,6 +189,9 @@
+         match mergeable.end - mergeable.start {
+             0 => {
+                 // New entry.
++                if !crate::compile_ledger::reserve(&mut self.ivs, 1) {
++                    return;
++                }
+                 self.ivs.insert(mergeable.start, new_iv);
+             }
+             1 => {
+@@ -216,6 +230,9 @@
+             core::mem::swap(self, &mut rhs);
+         }
+         for iv in rhs.intervals() {
++            if crate::compile_ledger::failed() {
++                return;
++            }
+             self.add(*iv)
+         }
+     }
+@@ -223,6 +240,12 @@
+     /// \return the intervals
+     pub fn intervals(&self) -> &[Interval] {
+         self.ivs.as_slice()
++    }
++
++    /// Retained storage used by the limited compiler admission pass.
++    #[cfg(feature = "utf16")]
++    pub(crate) fn interval_capacity(&self) -> usize {
++        self.ivs.capacity()
+     }
+ 
+     /// \return the number of intervals that would be produced by inverting.
+@@ -246,6 +269,9 @@
+     pub fn inverted(&self) -> CodePointSet {
+         // The intervals we collect.
+         let mut inverted_ivs = Vec::new();
++        if !crate::compile_ledger::reserve(&mut inverted_ivs, self.ivs.len().saturating_add(1)) {
++            return Self::default();
++        }
+ 
+         // The first code point *not* in the previous interval.
+         let mut start: CodePoint = 0;
+@@ -272,6 +298,12 @@
+     /// Invariants: The intervals must be sorted and disjoint.
+     pub(crate) fn remove(&mut self, intervals: &[Interval]) {
+         let mut result = Vec::new();
++        if !crate::compile_ledger::reserve(
++            &mut result,
++            self.ivs.len().saturating_add(intervals.len()),
++        ) {
++            return;
++        }
+         let mut remove_iter = intervals.iter().peekable();
+         let mut current_remove = remove_iter.next();
+ 
+@@ -308,6 +340,14 @@
+     /// Intersect the set with the given intervals.
+     pub(crate) fn intersect(&mut self, intervals: &[Interval]) {
+         let mut new_ivs = Vec::new();
++        if !crate::compile_ledger::charge(0, self.ivs.len().saturating_mul(intervals.len()))
++            || !crate::compile_ledger::reserve(
++                &mut new_ivs,
++                self.ivs.len().saturating_add(intervals.len()),
++            )
++        {
++            return;
++        }
+         for iv in intervals {
+             for self_iv in self.intervals() {
+                 if iv.overlaps(*self_iv) {
+--- a/src/compile_ledger.rs
++++ b/src/compile_ledger.rs
+@@ -0,0 +1,279 @@
++//! Private cumulative allocation/work ledger. Only limited compilation installs it.
++//! Counts requested collection storage, not allocator bookkeeping or process RSS.
++#[cfg(all(feature = "std", feature = "utf16"))]
++use crate::limits::{CompileLimits, ResourceLimit};
++#[cfg(not(feature = "std"))]
++use alloc::{string::String, vec::Vec};
++#[cfg(all(feature = "std", feature = "utf16"))]
++#[derive(Clone, Copy)]
++struct Ledger {
++    bytes: u64,
++    work: u64,
++    failed: Option<ResourceLimit>,
++}
++#[cfg(all(feature = "std", feature = "utf16"))]
++std::thread_local! { static CURRENT: std::cell::RefCell<Option<Ledger>> = const { std::cell::RefCell::new(None) }; }
++#[cfg(all(feature = "std", feature = "utf16"))]
++pub(crate) struct Scope(Option<Ledger>);
++#[cfg(all(feature = "std", feature = "utf16"))]
++impl Scope {
++    pub fn enter(limits: CompileLimits) -> Self {
++        Self(CURRENT.with(|slot| {
++            slot.replace(Some(Ledger {
++                bytes: limits.allocation_units,
++                work: limits.work,
++                failed: None,
++            }))
++        }))
++    }
++    pub fn outcome(&self) -> Result<(), ResourceLimit> {
++        CURRENT.with(|slot| {
++            slot.borrow()
++                .as_ref()
++                .and_then(|l| l.failed)
++                .map_or(Ok(()), Err)
++        })
++    }
++    pub fn remaining(&self, mut limits: CompileLimits) -> CompileLimits {
++        CURRENT.with(|slot| {
++            if let Some(l) = slot.borrow().as_ref() {
++                limits.allocation_units = l.bytes;
++                limits.work = l.work;
++            }
++        });
++        limits
++    }
++}
++#[cfg(all(feature = "std", feature = "utf16"))]
++impl Drop for Scope {
++    fn drop(&mut self) {
++        CURRENT.with(|slot| {
++            slot.replace(self.0.take());
++        });
++    }
++}
++pub(crate) fn charge(bytes: usize, work: usize) -> bool {
++    #[cfg(all(feature = "std", feature = "utf16"))]
++    {
++        CURRENT.with(|slot| {
++            let mut slot = slot.borrow_mut();
++            let Some(l) = slot.as_mut() else { return true };
++            // Saturating callers use MAX as a fail-closed overflow sentinel,
++            // even when a caller supplies the largest possible quota.
++            if bytes == usize::MAX || work == usize::MAX {
++                l.failed.get_or_insert(ResourceLimit::CompileArithmetic);
++                return false;
++            }
++            if l.failed.is_some() {
++                return false;
++            }
++            match (
++                l.bytes.checked_sub(bytes as u64),
++                l.work.checked_sub(work as u64),
++            ) {
++                (Some(b), Some(w)) => {
++                    l.bytes = b;
++                    l.work = w;
++                    true
++                }
++                _ => {
++                    l.failed = Some(ResourceLimit::CompileExpansion);
++                    false
++                }
++            }
++        })
++    }
++    #[cfg(not(all(feature = "std", feature = "utf16")))]
++    {
++        let _ = (bytes, work);
++        true
++    }
++}
++pub(crate) fn failed() -> bool {
++    !charge(0, 0)
++}
++pub(crate) fn active() -> bool {
++    #[cfg(all(feature = "std", feature = "utf16"))]
++    {
++        CURRENT.with(|s| s.borrow().is_some())
++    }
++    #[cfg(not(all(feature = "std", feature = "utf16")))]
++    {
++        false
++    }
++}
++pub(crate) fn arithmetic_failure() -> bool {
++    #[cfg(all(feature = "std", feature = "utf16"))]
++    CURRENT.with(|slot| {
++        if let Some(l) = slot.borrow_mut().as_mut() {
++            l.failed.get_or_insert(ResourceLimit::CompileArithmetic);
++        }
++    });
++    false
++}
++pub(crate) fn reserve<T>(v: &mut Vec<T>, additional: usize) -> bool {
++    if !active() {
++        v.reserve(additional);
++        return true;
++    }
++    let Some(required) = v.len().checked_add(additional) else {
++        return arithmetic_failure();
++    };
++    if required <= v.capacity() {
++        return charge(0, additional);
++    }
++    let Some(bytes) = required.checked_mul(core::mem::size_of::<T>()) else {
++        return arithmetic_failure();
++    };
++    if !charge(bytes, additional) {
++        return false;
++    }
++    if v.try_reserve_exact(additional).is_err() {
++        let _ = arithmetic_failure();
++        return false;
++    }
++    true
++}
++pub(crate) fn copy<T: Copy>(slice: &[T]) -> Vec<T> {
++    let mut result = Vec::new();
++    if reserve(&mut result, slice.len()) {
++        result.extend_from_slice(slice)
++    }
++    result
++}
++pub(crate) fn push<T>(v: &mut Vec<T>, item: T) -> bool {
++    if !reserve(v, 1) {
++        return false;
++    }
++    v.push(item);
++    true
++}
++pub(crate) fn push_char(s: &mut String, c: char) -> bool {
++    if !active() {
++        s.push(c);
++        return true;
++    }
++    let extra = c.len_utf8();
++    let Some(required) = s.len().checked_add(extra) else {
++        return arithmetic_failure();
++    };
++    if !charge(if required > s.capacity() { required } else { 0 }, 1) {
++        return false;
++    }
++    if s.try_reserve_exact(extra).is_err() {
++        let _ = arithmetic_failure();
++        return false;
++    }
++    s.push(c);
++    true
++}
++#[cfg(all(test, feature = "std", feature = "utf16"))]
++mod tests {
++    use super::*;
++    #[test]
++    fn overflow_sentinel_rejects_even_maximum_quotas() {
++        let scope = Scope::enter(CompileLimits {
++            allocation_units: u64::MAX,
++            work: u64::MAX,
++            ..CompileLimits::default()
++        });
++        assert!(!charge(usize::MAX, 0));
++        assert_eq!(scope.outcome(), Err(ResourceLimit::CompileArithmetic));
++    }
++    #[test]
++    fn collection_failure_precedes_growth() {
++        let scope = Scope::enter(CompileLimits {
++            allocation_units: 8,
++            ..CompileLimits::default()
++        });
++        let mut v = Vec::<u64>::new();
++        assert!(!reserve(&mut v, 2));
++        assert_eq!(v.capacity(), 0);
++        assert_eq!(scope.outcome(), Err(ResourceLimit::CompileExpansion));
++    }
++    #[test]
++    fn set_intersection_work_rejected_before_mutation() {
++        let mut a = crate::codepointset::CodePointSet::new();
++        let mut b = crate::codepointset::CodePointSet::new();
++        for n in 0..100 {
++            a.add_one(n * 3);
++            b.add_one(n * 3);
++        }
++        let original = a.clone();
++        let scope = Scope::enter(CompileLimits {
++            work: 10,
++            ..CompileLimits::default()
++        });
++        a.intersect(b.intervals());
++        assert_eq!(a, original);
++        assert_eq!(scope.outcome(), Err(ResourceLimit::CompileExpansion));
++    }
++    #[test]
++    fn exhausted_parser_never_becomes_success_or_syntax() {
++        for pattern in [
++            r"\p{RGI_Emoji}",
++            r"(?<name>a)|(?<name>b)",
++            r"[[a-z]--[aeiou]]",
++            r"[\q{a|abc|xyz}]",
++            r"(?<=abc)def",
++            r"[a-z]",
++        ] {
++            let scope = Scope::enter(CompileLimits {
++                allocation_units: 512,
++                work: 20,
++                ..CompileLimits::default()
++            });
++            let _ =
++                crate::parse::try_parse(pattern.chars().map(u32::from), crate::Flags::from("iv"));
++            assert_eq!(
++                scope.outcome(),
++                Err(ResourceLimit::CompileExpansion),
++                "{pattern}"
++            );
++        }
++    }
++    #[test]
++    fn reentrant_scope_restores_parent() {
++        let outer = Scope::enter(CompileLimits {
++            work: 1,
++            ..CompileLimits::default()
++        });
++        {
++            let inner = Scope::enter(CompileLimits {
++                work: 0,
++                ..CompileLimits::default()
++            });
++            assert!(!charge(0, 1));
++            assert!(inner.outcome().is_err());
++        }
++        assert!(outer.outcome().is_ok());
++        assert!(charge(0, 1));
++        assert!(!charge(0, 1));
++    }
++    #[test]
++    fn unwind_restores_scope() {
++        let _ = std::panic::catch_unwind(|| {
++            let _scope = Scope::enter(CompileLimits::default());
++            panic!("test unwind")
++        });
++        assert!(!active());
++    }
++    #[test]
++    fn concurrent_scopes_are_isolated() {
++        let threads: Vec<_> = (0..8)
++            .map(|i| {
++                std::thread::spawn(move || {
++                    let scope = Scope::enter(CompileLimits {
++                        work: i,
++                        ..CompileLimits::default()
++                    });
++                    assert_eq!(charge(0, 4), i >= 4);
++                    assert_eq!(scope.outcome().is_ok(), i >= 4);
++                })
++            })
++            .collect();
++        for t in threads {
++            t.join().unwrap();
++        }
++    }
++}
+--- a/src/emit.rs
++++ b/src/emit.rs
+@@ -52,6 +52,29 @@
+ 
+     // Whether the current node is within a lookbehind.
+     in_lookbehind: bool,
++}
++
++enum EmitFrame<'a> {
++    Node(&'a Node),
++    NodeLoopFinish {
++        loop_instruction_index: u32,
++    },
++    NodeLookaroundAssertionFinish {
++        lookaround_instruction_index: u32,
++        prev_in_lookbehind: bool,
++    },
++    NodeAltMiddle {
++        alt_instruction_index: u32,
++        right_node: &'a Node,
++    },
++    NodeAltFinish {
++        alt_instruction_index: u32,
++        jump_instruction_index: u32,
++        right_branch_index: u32,
++    },
++    EndCaptureGroup {
++        group: CaptureGroupID,
++    },
+ }
+ 
+ impl Emitter {
+@@ -122,35 +145,13 @@
+     }
+ 
+     /// Emit instructions corresponding to a given node.
+-    fn emit_node(&mut self, node: &Node) {
+-        enum Emitter<'a> {
+-            Node(&'a Node),
+-            NodeLoopFinish {
+-                loop_instruction_index: u32,
+-            },
+-            NodeLookaroundAssertionFinish {
+-                lookaround_instruction_index: u32,
+-                prev_in_lookbehind: bool,
+-            },
+-            NodeAltMiddle {
+-                alt_instruction_index: u32,
+-                right_node: &'a Node,
+-            },
+-            NodeAltFinish {
+-                alt_instruction_index: u32,
+-                jump_instruction_index: u32,
+-                right_branch_index: u32,
+-            },
+-            EndCaptureGroup {
+-                group: CaptureGroupID,
+-            },
+-        }
+-
+-        let mut stack = vec![Emitter::Node(node)];
++    fn emit_node(&mut self, node: &Node, stack_capacity: Option<usize>) {
++        let mut stack = Vec::with_capacity(stack_capacity.unwrap_or(1));
++        stack.push(EmitFrame::Node(node));
+ 
+         while let Some(inst) = stack.pop() {
+             match inst {
+-                Emitter::NodeLoopFinish {
++                EmitFrame::NodeLoopFinish {
+                     loop_instruction_index,
+                 } => {
+                     self.emit_insn(Insn::LoopAgain {
+@@ -163,7 +164,7 @@
+                         _ => panic!("Should be an EnterLoop instruction"),
+                     }
+                 }
+-                Emitter::NodeLookaroundAssertionFinish {
++                EmitFrame::NodeLookaroundAssertionFinish {
+                     lookaround_instruction_index,
+                     prev_in_lookbehind,
+                 } => {
+@@ -177,20 +178,20 @@
+                     }
+                     self.in_lookbehind = prev_in_lookbehind;
+                 }
+-                Emitter::NodeAltMiddle {
++                EmitFrame::NodeAltMiddle {
+                     alt_instruction_index,
+                     right_node,
+                 } => {
+                     let jump_insn = self.emit_insn_offset(Insn::Jump { target: 0 });
+                     let right_branch = self.next_offset();
+-                    stack.push(Emitter::NodeAltFinish {
++                    stack.push(EmitFrame::NodeAltFinish {
+                         alt_instruction_index,
+                         jump_instruction_index: jump_insn,
+                         right_branch_index: right_branch,
+                     });
+-                    stack.push(Emitter::Node(right_node));
++                    stack.push(EmitFrame::Node(right_node));
+                 }
+-                Emitter::NodeAltFinish {
++                EmitFrame::NodeAltFinish {
+                     alt_instruction_index,
+                     jump_instruction_index,
+                     right_branch_index,
+@@ -206,8 +207,10 @@
+                         _ => panic!("Should be a Jump instruction"),
+                     }
+                 }
+-                Emitter::EndCaptureGroup { group } => self.emit_insn(Insn::EndCaptureGroup(group)),
+-                Emitter::Node(node) => match node {
++                EmitFrame::EndCaptureGroup { group } => {
++                    self.emit_insn(Insn::EndCaptureGroup(group))
++                }
++                EmitFrame::Node(node) => match node {
+                     Node::Empty => {}
+                     Node::Goal => self.emit_insn(Insn::Goal),
+                     Node::Char { c, icase } => {
+@@ -225,18 +228,18 @@
+                     }
+                     Node::Cat(children) => {
+                         for nn in children.iter().rev() {
+-                            stack.push(Emitter::Node(nn));
++                            stack.push(EmitFrame::Node(nn));
+                         }
+                     }
+                     Node::Alt(left, right) => {
+                         // Alternation is followed by the primary branch and has a jump to secondary
+                         // branch. After primary branch, jump to the continuation.
+                         let alt_insn = self.emit_insn_offset(Insn::Alt { secondary: 0 });
+-                        stack.push(Emitter::NodeAltMiddle {
++                        stack.push(EmitFrame::NodeAltMiddle {
+                             alt_instruction_index: alt_insn,
+                             right_node: right,
+                         });
+-                        stack.push(Emitter::Node(left));
++                        stack.push(EmitFrame::Node(left));
+                     }
+                     Node::Bracket(contents) => {
+                         if let Some(ascii_contents) = bracket_as_ascii(contents) {
+@@ -276,10 +279,10 @@
+                         for gid in enclosed_groups.start..enclosed_groups.end {
+                             self.emit_insn(Insn::ResetCaptureGroup(gid))
+                         }
+-                        stack.push(Emitter::NodeLoopFinish {
++                        stack.push(EmitFrame::NodeLoopFinish {
+                             loop_instruction_index: loop_insn,
+                         });
+-                        stack.push(Emitter::Node(loopee));
++                        stack.push(EmitFrame::Node(loopee));
+                     }
+                     Node::Loop1CharBody { loopee, quant } => {
+                         self.emit_insn(Insn::Loop1CharBody {
+@@ -287,15 +290,15 @@
+                             max_iters: quant.max.unwrap_or(usize::MAX),
+                             greedy: quant.greedy,
+                         });
+-                        stack.push(Emitter::Node(loopee));
++                        stack.push(EmitFrame::Node(loopee));
+                     }
+                     Node::CaptureGroup { id, contents, name } => {
+                         let group = *id;
+                         self.result.groups += 1;
+                         self.group_names.push(name.as_deref().unwrap_or("").into());
+                         self.emit_insn(Insn::BeginCaptureGroup(group));
+-                        stack.push(Emitter::EndCaptureGroup { group });
+-                        stack.push(Emitter::Node(contents));
++                        stack.push(EmitFrame::EndCaptureGroup { group });
++                        stack.push(EmitFrame::Node(contents));
+                     }
+                     Node::LookaroundAssertion {
+                         negate,
+@@ -321,11 +324,11 @@
+                         };
+                         let prev_in_lookbehind = self.in_lookbehind;
+                         self.in_lookbehind = *backwards;
+-                        stack.push(Emitter::NodeLookaroundAssertionFinish {
++                        stack.push(EmitFrame::NodeLookaroundAssertionFinish {
+                             lookaround_instruction_index: lookaround,
+                             prev_in_lookbehind,
+                         });
+-                        stack.push(Emitter::Node(contents));
++                        stack.push(EmitFrame::Node(contents));
+                     }
+                     &Node::WordBoundary { invert } => {
+                         if self.result.flags.unicode && self.result.flags.icase {
+@@ -379,21 +382,47 @@
+ 
+ /// Compile the given IR to a CompiledRegex.
+ pub fn emit(n: &ir::Regex) -> CompiledRegex {
++    emit_planned(n, None)
++}
++#[cfg(feature = "utf16")]
++pub(crate) fn emit_limited(
++    n: &ir::Regex,
++    plan: crate::limits::EmitPlan,
++    limit: u64,
++) -> Result<CompiledRegex, crate::limits::ResourceLimit> {
++    let bytes = plan
++        .pending
++        .checked_mul(core::mem::size_of::<EmitFrame<'_>>())
++        .and_then(|n| n.checked_add(plan.allocation_bytes))
++        .ok_or(crate::limits::ResourceLimit::CompileArithmetic)?;
++    if bytes as u64 > limit {
++        return Err(crate::limits::ResourceLimit::CompileExpansion);
++    }
++    Ok(emit_planned(
++        n,
++        Some((plan.instructions, plan.brackets, plan.groups, plan.pending)),
++    ))
++}
++fn emit_planned(n: &ir::Regex, plan: Option<(usize, usize, usize, usize)>) -> CompiledRegex {
+     let mut emitter = Emitter {
+         next_loop_id: 0,
+-        group_names: Vec::new(),
++        group_names: Vec::with_capacity(plan.map_or(0, |p| p.2)),
+         in_lookbehind: false,
+         result: CompiledRegex {
+-            insns: Vec::new(),
+-            brackets: Vec::new(),
++            insns: Vec::with_capacity(plan.map_or(0, |p| p.0)),
++            brackets: Vec::with_capacity(plan.map_or(0, |p| p.1)),
+             loops: 0,
+             groups: 0,
+             group_names: Box::new([]),
+             flags: n.flags,
+-            start_pred: startpredicate::predicate_for_re(n),
++            start_pred: if plan.is_some() {
++                crate::insn::StartPredicate::Arbitrary
++            } else {
++                startpredicate::predicate_for_re(n)
++            },
+         },
+     };
+-    emitter.emit_node(&n.node);
++    emitter.emit_node(&n.node, plan.map(|p| p.3));
+     let mut result = emitter.result;
+     // Populate group names, unless all are empty.
+     debug_assert!(
+--- a/src/ir.rs
++++ b/src/ir.rs
+@@ -127,7 +127,11 @@
+     /// Used as a parameter to walk_mut.
+     pub fn reverse_cats(&mut self, w: &mut Walk) {
+         match self {
+-            Node::Cat(nodes) if w.in_lookbehind => nodes.reverse(),
++            Node::Cat(nodes) if w.in_lookbehind => {
++                if crate::compile_ledger::charge(0, nodes.len()) {
++                    nodes.reverse();
++                }
++            }
+             Node::ByteSequence(..) => panic!("Should not be reversing literal bytes"),
+             _ => {}
+         }
+@@ -383,7 +387,12 @@
+             | Node::BackRef { .. }
+             | Node::Bracket { .. } => {}
+             Node::Cat(nodes) => {
+-                nodes.iter_mut().for_each(|node| self.process(node));
++                for node in nodes.iter_mut() {
++                    if crate::compile_ledger::failed() {
++                        break;
++                    }
++                    self.process(node);
++                }
+             }
+             Node::Alt(left, right) => {
+                 self.process(left.as_mut());
+@@ -409,6 +418,9 @@
+     }
+ 
+     fn process(&mut self, n: &mut Node) {
++        if !crate::compile_ledger::charge(0, 1) {
++            return;
++        }
+         self.walk.skip_children = false;
+         if !self.postorder {
+             (self.func)(n, &mut self.walk);
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -176,6 +176,7 @@
+ mod matchers;
+ mod optimizer;
+ mod parse;
++mod compile_ledger;
+ mod position;
+ mod scm;
+ mod startpredicate;
+@@ -185,3 +186,6 @@
+ 
+ #[cfg(feature = "backend-pikevm")]
+ mod pikevm;
++
++#[cfg(feature = "utf16")]
++pub mod limits;
+--- a/src/limits.rs
++++ b/src/limits.rs
+@@ -0,0 +1,383 @@
++//! Scratch bounded execution API. No existing unlimited API is implicitly limited.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum ResourceLimit {
++    Input,
++    Work,
++    Stack,
++    Lookaround,
++    CompileInput,
++    CompileDepth,
++    CompileExpansion,
++    CompileArithmetic,
++}
++#[derive(Debug, Clone, Copy)]
++pub struct MatchLimits {
++    pub input_units: usize,
++    pub work: usize,
++    pub stack_bytes: usize,
++    pub lookaround_depth: usize,
++}
++impl Default for MatchLimits {
++    fn default() -> Self {
++        Self {
++            input_units: 1 << 20,
++            work: 10_000_000,
++            stack_bytes: 8 << 20,
++            lookaround_depth: 64,
++        }
++    }
++}
++#[derive(Debug)]
++pub(crate) struct MatchBudget {
++    pub remaining: usize,
++    pub stack_bytes: usize,
++    pub depth_limit: usize,
++    pub depth: usize,
++    pub parent_bytes: usize,
++    pub cost: usize,
++    pub exhausted: Option<ResourceLimit>,
++}
++impl MatchBudget {
++    pub fn fail(&mut self, limit: ResourceLimit) -> bool {
++        self.exhausted.get_or_insert(limit);
++        false
++    }
++    pub fn charge(&mut self, bytes: usize) -> bool {
++        if self.exhausted.is_some() {
++            return false;
++        }
++        if bytes > self.stack_bytes {
++            return self.fail(ResourceLimit::Stack);
++        }
++        match self.remaining.checked_sub(self.cost) {
++            Some(left) => {
++                self.remaining = left;
++                true
++            }
++            None => self.fail(ResourceLimit::Work),
++        }
++    }
++}
++
++/// Conservative admission budgets, not a wall-clock timeout or allocator quota.
++#[derive(Debug, Clone, Copy)]
++pub struct CompileLimits {
++    pub pattern_units: usize,
++    pub nesting: usize,
++    pub groups: usize,
++    pub allocation_units: u64,
++    pub work: u64,
++}
++impl Default for CompileLimits {
++    fn default() -> Self {
++        Self {
++            pattern_units: 4096,
++            nesting: 32,
++            groups: 128,
++            allocation_units: 128 << 20,
++            work: 10_000_000,
++        }
++    }
++}
++#[derive(Debug)]
++pub enum CompileFailure {
++    Syntax(crate::Error),
++    Resource(ResourceLimit),
++}
++impl From<ResourceLimit> for CompileFailure {
++    fn from(value: ResourceLimit) -> Self {
++        Self::Resource(value)
++    }
++}
++
++// Structural preflight only. Allocation/work uses the scoped in-path ledger.
++#[cfg(feature = "utf16")]
++pub(crate) fn admit_compile(
++    pattern: &[u16],
++    flags: crate::Flags,
++    limits: CompileLimits,
++) -> Result<(), ResourceLimit> {
++    if pattern.len() > limits.pattern_units {
++        return Err(ResourceLimit::CompileInput);
++    }
++    if !crate::compile_ledger::charge(0, pattern.len()) {
++        return Err(ResourceLimit::CompileExpansion);
++    }
++    let mut groups = 0usize;
++    let mut nesting = 0usize;
++    let mut classes = 0usize;
++    let mut alternatives = 0usize;
++    let mut i = 0;
++    while i < pattern.len() {
++        let c = pattern[i];
++        i += 1;
++        if c == 92 {
++            i = i.saturating_add(1);
++            continue;
++        }
++        if c == 91 {
++            if classes == 0 || flags.unicode_sets {
++                classes = classes
++                    .checked_add(1)
++                    .ok_or(ResourceLimit::CompileArithmetic)?;
++            }
++        } else if c == 93 && classes > 0 {
++            classes -= 1;
++        } else if classes == 0 {
++            match c {
++                40 => {
++                    groups = groups
++                        .checked_add(1)
++                        .ok_or(ResourceLimit::CompileArithmetic)?;
++                    nesting = nesting
++                        .checked_add(1)
++                        .ok_or(ResourceLimit::CompileArithmetic)?;
++                }
++                41 => nesting = nesting.saturating_sub(1),
++                124 => {
++                    alternatives = alternatives
++                        .checked_add(1)
++                        .ok_or(ResourceLimit::CompileArithmetic)?;
++                }
++                123 => {
++                    let mut cursor = i;
++                    let mut number = 0usize;
++                    while let Some(&digit) = pattern.get(cursor) {
++                        if (48..=57).contains(&digit) {
++                            number = number
++                                .checked_mul(10)
++                                .and_then(|n| n.checked_add(usize::from(digit - 48)))
++                                .ok_or(ResourceLimit::CompileArithmetic)?;
++                        } else if digit == 44 {
++                            number = 0;
++                        } else {
++                            break;
++                        }
++                        cursor += 1;
++                    }
++                }
++                _ => {}
++            }
++        }
++        if nesting.saturating_add(classes) > limits.nesting.min(48) {
++            return Err(ResourceLimit::CompileDepth);
++        }
++        if groups > limits.groups || alternatives > 128 {
++            return Err(ResourceLimit::CompileExpansion);
++        }
++    }
++    Ok(())
++}
++
++/// Exact element-count admission for the unoptimized emitter. The parser's
++/// independent admission still needs its own allocation proof.
++#[derive(Clone, Copy)]
++pub(crate) struct EmitPlan {
++    pub instructions: usize,
++    pub brackets: usize,
++    pub groups: usize,
++    pub pending: usize,
++    pub allocation_bytes: usize,
++}
++pub(crate) fn admit_ir(
++    root: &crate::ir::Node,
++    limits: CompileLimits,
++) -> Result<EmitPlan, ResourceLimit> {
++    use crate::{codepointset::Interval, insn::Insn, ir::Node, types::BracketContents};
++    let fail = ResourceLimit::CompileExpansion;
++    let mut pending = Vec::new();
++    if core::mem::size_of::<(&Node, usize)>() as u64 > limits.allocation_units {
++        return Err(fail);
++    }
++    pending.push((root, 0usize));
++    let mut plan = EmitPlan {
++        instructions: 0,
++        brackets: 0,
++        groups: 0,
++        pending: 1,
++        allocation_bytes: 0,
++    };
++    let mut nodes = 0usize;
++    let mut intervals = 0usize;
++    let mut names = 0usize;
++    let mut payload = 0usize;
++    let mut work = limits.work;
++    while let Some((node, depth)) = pending.pop() {
++        work = work.checked_sub(1).ok_or(fail)?;
++        if depth > 256 {
++            return Err(ResourceLimit::CompileDepth);
++        }
++        nodes = nodes.checked_add(1).ok_or(fail)?;
++        let (insns, children) = match node {
++            Node::Empty => (0, 0),
++            Node::Cat(children) => {
++                payload = payload
++                    .checked_add(
++                        children
++                            .capacity()
++                            .checked_sub(children.len())
++                            .ok_or(fail)?
++                            .checked_mul(core::mem::size_of::<Node>())
++                            .ok_or(fail)?,
++                    )
++                    .ok_or(fail)?;
++                (0, children.len())
++            }
++            Node::Alt(..) => (2, 2),
++            Node::CaptureGroup { name, .. } => {
++                plan.groups = plan.groups.checked_add(1).ok_or(fail)?;
++                names = names
++                    .checked_add(name.as_ref().map_or(0, |s| s.len()))
++                    .ok_or(fail)?;
++                (2, 1)
++            }
++            Node::LookaroundAssertion { .. } => (2, 1),
++            Node::Loop {
++                enclosed_groups, ..
++            } => (
++                2 + usize::from(
++                    enclosed_groups
++                        .end
++                        .checked_sub(enclosed_groups.start)
++                        .ok_or(ResourceLimit::CompileArithmetic)?,
++                ),
++                1,
++            ),
++            Node::Loop1CharBody { .. } => (1, 1),
++            Node::Bracket(contents) => {
++                plan.brackets = plan.brackets.checked_add(1).ok_or(fail)?;
++                intervals = intervals
++                    .checked_add(contents.cps.interval_capacity())
++                    .and_then(|n| n.checked_add(contents.cps.intervals().len()))
++                    .ok_or(fail)?;
++                (1, 0)
++            }
++            Node::ByteSequence(bytes) => {
++                payload = payload.checked_add(bytes.capacity()).ok_or(fail)?;
++                (bytes.len().div_ceil(crate::insn::MAX_BYTE_SEQ_LENGTH), 0)
++            }
++            Node::ByteSet(bytes) => {
++                payload = payload.checked_add(bytes.capacity()).ok_or(fail)?;
++                (1, 0)
++            }
++            Node::CharSet(chars) => {
++                payload = payload
++                    .checked_add(
++                        chars
++                            .capacity()
++                            .checked_mul(core::mem::size_of::<u32>())
++                            .ok_or(fail)?,
++                    )
++                    .ok_or(fail)?;
++                (1, 0)
++            }
++            _ => (1, 0),
++        };
++        plan.instructions = plan.instructions.checked_add(insns).ok_or(fail)?;
++        if plan.instructions > u32::MAX as usize {
++            return Err(ResourceLimit::CompileArithmetic);
++        }
++        let count = pending.len().checked_add(children).ok_or(fail)?;
++        plan.pending = plan.pending.max(count);
++        let bytes = nodes
++            .checked_mul(core::mem::size_of::<Node>())
++            .and_then(|n| n.checked_add(payload))
++            .and_then(|n| {
++                n.checked_add(
++                    plan.instructions
++                        .checked_mul(core::mem::size_of::<Insn>())?,
++                )
++            })
++            .and_then(|n| {
++                n.checked_add(
++                    plan.brackets
++                        .checked_mul(core::mem::size_of::<BracketContents>())?,
++                )
++            })
++            .and_then(|n| n.checked_add(intervals.checked_mul(core::mem::size_of::<Interval>())?))
++            .and_then(|n| n.checked_add(plan.groups.checked_mul(core::mem::size_of::<Box<str>>())?))
++            .and_then(|n| n.checked_add(names.checked_mul(2)?))
++            .and_then(|n| {
++                n.checked_add(
++                    count
++                        .checked_mul(core::mem::size_of::<(&Node, usize)>())?
++                        .checked_mul(4)?,
++                )
++            })
++            .ok_or(fail)?;
++        if bytes as u64 > limits.allocation_units {
++            return Err(fail);
++        }
++        plan.allocation_bytes = plan.allocation_bytes.max(bytes);
++        pending.try_reserve_exact(children).map_err(|_| fail)?;
++        match node {
++            Node::Cat(children) => pending.extend(children.iter().map(|child| (child, depth + 1))),
++            Node::Alt(left, right) => {
++                pending.push((left, depth + 1));
++                pending.push((right, depth + 1));
++            }
++            Node::CaptureGroup { contents, .. } | Node::LookaroundAssertion { contents, .. } => {
++                pending.push((contents, depth + 1))
++            }
++            Node::Loop { loopee, .. } | Node::Loop1CharBody { loopee, .. } => {
++                pending.push((loopee, depth + 1))
++            }
++            _ => {}
++        }
++    }
++    // One finish marker per branch/group can coexist with each pending node.
++    plan.pending = nodes
++        .checked_mul(2)
++        .and_then(|n| n.checked_add(1))
++        .ok_or(fail)?;
++    // Stack dispatch, instruction emission, copied bracket intervals and names.
++    let emission_work = plan
++        .pending
++        .checked_add(plan.instructions)
++        .and_then(|n| n.checked_add(intervals))
++        .and_then(|n| n.checked_add(names))
++        .and_then(|n| n.checked_add(plan.groups))
++        .ok_or(fail)?;
++    work.checked_sub(emission_work as u64).ok_or(fail)?;
++    Ok(plan)
++}
++
++#[cfg(all(test, feature = "utf16"))]
++mod compile_admission_tests {
++    use super::*;
++    use crate::ir::Node;
++    #[test]
++    fn counts_retained_payload_capacity_even_when_empty() {
++        let limit = CompileLimits {
++            allocation_units: 512,
++            ..CompileLimits::default()
++        };
++        for node in [
++            Node::ByteSet(Vec::with_capacity(4096)),
++            Node::CharSet(Vec::with_capacity(1024)),
++            Node::ByteSequence(Vec::with_capacity(4096)),
++            Node::Cat(Vec::with_capacity(128)),
++        ] {
++            assert!(matches!(
++                admit_ir(&node, limit),
++                Err(ResourceLimit::CompileExpansion)
++            ));
++        }
++    }
++    #[test]
++    fn rejects_invalid_internal_capture_range_without_overflow() {
++        let node = Node::Loop {
++            loopee: Box::new(Node::Empty),
++            quant: crate::ir::Quantifier {
++                min: 0,
++                max: None,
++                greedy: true,
++            },
++            enclosed_groups: 2..1,
++        };
++        assert!(matches!(
++            admit_ir(&node, CompileLimits::default()),
++            Err(ResourceLimit::CompileArithmetic)
++        ));
++    }
++}
+--- a/src/parse.rs
++++ b/src/parse.rs
+@@ -1,5 +1,6 @@
+ //! Parser from regex patterns to IR
+ 
++use crate::compile_ledger as budget;
+ use crate::{
+     api, charclasses,
+     codepointset::{CodePointSet, Interval, interval_contains},
+@@ -19,13 +20,126 @@
+ use std::collections::HashMap;
+ #[cfg(not(feature = "std"))]
+ use {
+-    alloc::{
+-        boxed::Box,
+-        string::{String, ToString},
+-        vec::Vec,
+-    },
++    alloc::{boxed::Box, string::String, vec::Vec},
+     hashbrown::HashMap,
+ };
++
++trait KeyCost {
++    fn key_cost(&self) -> usize;
++}
++impl KeyCost for usize {
++    fn key_cost(&self) -> usize {
++        1
++    }
++}
++impl KeyCost for String {
++    fn key_cost(&self) -> usize {
++        self.len().saturating_add(1)
++    }
++}
++enum ParserMap<K, V> {
++    Unlimited(HashMap<K, V>),
++    Limited(Vec<(K, V)>),
++}
++impl<K: Eq + core::hash::Hash + KeyCost, V> ParserMap<K, V> {
++    fn new() -> Self {
++        if budget::active() {
++            Self::Limited(Vec::new())
++        } else {
++            Self::Unlimited(HashMap::new())
++        }
++    }
++    fn is_empty(&self) -> bool {
++        match self {
++            Self::Unlimited(m) => m.is_empty(),
++            Self::Limited(m) => m.is_empty(),
++        }
++    }
++    fn get(&self, key: &K) -> Option<&V> {
++        match self {
++            Self::Unlimited(m) => m.get(key),
++            Self::Limited(m) => {
++                for (k, v) in m {
++                    if !budget::charge(0, k.key_cost().saturating_add(key.key_cost())) {
++                        return None;
++                    }
++                    if k == key {
++                        return Some(v);
++                    }
++                }
++                None
++            }
++        }
++    }
++    fn get_or_insert(&mut self, key: K, value: V) -> Option<&mut V> {
++        match self {
++            Self::Unlimited(m) => Some(m.entry(key).or_insert(value)),
++            Self::Limited(m) => {
++                let mut found = None;
++                for (i, (k, _)) in m.iter().enumerate() {
++                    if !budget::charge(0, k.key_cost().saturating_add(key.key_cost())) {
++                        return None;
++                    }
++                    if k == &key {
++                        found = Some(i);
++                        break;
++                    }
++                }
++                let index = if let Some(i) = found {
++                    i
++                } else {
++                    if !budget::reserve(m, 1) {
++                        return None;
++                    }
++                    m.push((key, value));
++                    m.len() - 1
++                };
++                Some(&mut m[index].1)
++            }
++        }
++    }
++    fn insert(&mut self, key: K, value: V) -> bool {
++        match self {
++            Self::Unlimited(m) => {
++                m.insert(key, value);
++                true
++            }
++            Self::Limited(m) => {
++                for (k, v) in m.iter_mut() {
++                    if !budget::charge(0, k.key_cost().saturating_add(key.key_cost())) {
++                        return false;
++                    }
++                    if k == &key {
++                        *v = value;
++                        return true;
++                    }
++                }
++                budget::push(m, (key, value))
++            }
++        }
++    }
++    fn remove(&mut self, key: &K) {
++        match self {
++            Self::Unlimited(m) => {
++                m.remove(key);
++            }
++            Self::Limited(m) => {
++                if !budget::charge(0, m.len().saturating_mul(key.key_cost())) {
++                    return;
++                }
++                if let Some(i) = m.iter().position(|(k, _)| k == key) {
++                    m.remove(i);
++                }
++            }
++        }
++    }
++    fn values(&self) -> Box<dyn Iterator<Item = &V> + '_> {
++        match self {
++            Self::Unlimited(m) => Box::new(m.values()),
++            Self::Limited(m) => Box::new(m.iter().map(|(_, v)| v)),
++        }
++    }
++}
+ 
+ /// Represents an error encountered during regex compilation.
+ ///
+@@ -71,32 +185,44 @@
+         }
+     }
+ 
+-    fn node(self, icase: bool, negate_set: bool) -> ir::Node {
+-        let codepoints = if icase {
+-            unicode::add_icase_code_points(self.codepoints)
+-        } else {
+-            self.codepoints
+-        };
+-        if codepoints.is_empty() && self.alternatives.0.is_empty() {
+-            ir::Node::Bracket(BracketContents {
++    fn node(mut self, icase: bool, negate_set: bool) -> ir::Node {
++        if self.alternatives.0.is_empty() {
++            return ir::Node::Bracket(BracketContents {
+                 invert: negate_set,
+-                cps: codepoints,
+-            })
+-        } else if codepoints.is_empty() {
+-            make_alt(self.alternatives.to_nodes(icase))
+-        } else if self.alternatives.0.is_empty() {
+-            ir::Node::Bracket(BracketContents {
+-                invert: negate_set,
+-                cps: codepoints,
+-            })
+-        } else {
+-            let mut nodes = self.alternatives.to_nodes(icase);
++                cps: self.codepoints,
++            });
++        }
++        if !budget::charge(
++            self.alternatives
++                .0
++                .len()
++                .saturating_mul(core::mem::size_of::<Vec<u32>>()),
++            self.alternatives
++                .0
++                .len()
++                .saturating_mul(self.alternatives.0.len()),
++        ) {
++            return ir::Node::Empty;
++        }
++        self.alternatives
++            .0
++            .sort_by_key(|text| core::cmp::Reverse(text.len()));
++        let has_empty = self.alternatives.0.iter().any(Vec::is_empty);
++        self.alternatives.0.retain(|text| !text.is_empty());
++        let mut nodes = self.alternatives.to_nodes(icase);
++        if !budget::reserve(&mut nodes, 2) {
++            return ir::Node::Empty;
++        }
++        if !self.codepoints.is_empty() {
+             nodes.push(ir::Node::Bracket(BracketContents {
+                 invert: negate_set,
+-                cps: codepoints,
++                cps: self.codepoints,
+             }));
+-            make_alt(nodes)
+-        }
++        }
++        if has_empty {
++            nodes.push(ir::Node::Empty);
++        }
++        make_alt(nodes)
+     }
+ 
+     fn union_operand(&mut self, operand: ClassSetOperand) {
+@@ -117,7 +243,40 @@
+         }
+     }
+ 
++    fn charge_operand_scan(&self, operand: &ClassSetOperand) -> bool {
++        let own = self
++            .codepoints
++            .intervals()
++            .len()
++            .saturating_add(self.alternatives.0.len())
++            .saturating_add(1);
++        let other = match operand {
++            ClassSetOperand::ClassSetCharacter(_) => 1,
++            ClassSetOperand::CharacterClassEscape(cps) => cps.intervals().len().saturating_add(1),
++            ClassSetOperand::Class(class) => class
++                .codepoints
++                .intervals()
++                .len()
++                .saturating_add(class.alternatives.0.len())
++                .saturating_add(1),
++            ClassSetOperand::ClassStringDisjunction(strings) => strings.0.len().saturating_add(1),
++        };
++        // At most four operand scans, with codepoint membership bounded by
++        // interval count. String-to-string comparisons debit separately.
++        budget::charge(0, own.saturating_mul(other).saturating_mul(4))
++    }
+     fn intersect_operand(&mut self, operand: ClassSetOperand) {
++        if !self.charge_operand_scan(&operand) {
++            return;
++        }
++        if !budget::charge(
++            core::mem::size_of::<Interval>()
++                + core::mem::size_of::<Vec<u32>>()
++                + core::mem::size_of::<u32>(),
++            self.alternatives.0.len(),
++        ) {
++            return;
++        }
+         match operand {
+             ClassSetOperand::ClassSetCharacter(c) => {
+                 if self.codepoints.contains(c) {
+@@ -138,6 +297,9 @@
+                 }
+                 self.alternatives.0.clear();
+                 if found_alternative {
++                    if !budget::reserve(&mut self.alternatives.0, 1) {
++                        return;
++                    }
+                     self.alternatives.0.push(Vec::from([c]));
+                 }
+             }
+@@ -146,7 +308,10 @@
+                 let mut retained = Vec::new();
+                 for alternative in &self.alternatives.0 {
+                     if alternative.len() == 1 && cps.contains(alternative[0]) {
+-                        retained.push(alternative.clone());
++                        if !budget::reserve(&mut retained, 1) {
++                            return;
++                        }
++                        retained.push(budget::copy(alternative));
+                     }
+                 }
+                 self.alternatives.0 = retained;
+@@ -161,7 +326,10 @@
+                 let mut retained_alternatives = ClassSetAlternativeStrings::new();
+                 for alternative in &self.alternatives.0 {
+                     if alternative.len() == 1 && class.codepoints.contains(alternative[0]) {
+-                        retained_alternatives.0.push(alternative.clone());
++                        if !budget::reserve(&mut retained_alternatives.0, 1) {
++                            return;
++                        }
++                        retained_alternatives.0.push(budget::copy(alternative));
+                     }
+                 }
+                 self.codepoints.intersect(class.codepoints.intervals());
+@@ -183,6 +351,15 @@
+     }
+ 
+     fn subtract_operand(&mut self, operand: ClassSetOperand) {
++        if !self.charge_operand_scan(&operand) {
++            return;
++        }
++        if !budget::charge(
++            core::mem::size_of::<Vec<u32>>() + core::mem::size_of::<u32>(),
++            self.alternatives.0.len(),
++        ) {
++            return;
++        }
+         match operand {
+             ClassSetOperand::ClassSetCharacter(c) => {
+                 self.codepoints.remove(&[Interval { first: c, last: c }]);
+@@ -194,7 +371,10 @@
+                 let mut to_remove = ClassSetAlternativeStrings::new();
+                 for alternative in &self.alternatives.0 {
+                     if alternative.len() == 1 && cps.contains(alternative[0]) {
+-                        to_remove.0.push(alternative.clone());
++                        if !budget::reserve(&mut to_remove.0, 1) {
++                            return;
++                        }
++                        to_remove.0.push(budget::copy(alternative));
+                     }
+                 }
+                 self.alternatives.remove(to_remove);
+@@ -209,7 +389,10 @@
+                 let mut alternatives_removed = ClassSetAlternativeStrings::new();
+                 for alternative in &self.alternatives.0 {
+                     if alternative.len() == 1 && class.codepoints.contains(alternative[0]) {
+-                        alternatives_removed.0.push(alternative.clone());
++                        if !budget::reserve(&mut alternatives_removed.0, 1) {
++                            return;
++                        }
++                        alternatives_removed.0.push(budget::copy(alternative));
+                     }
+                 }
+                 self.codepoints.remove(codepoints_removed.intervals());
+@@ -240,24 +423,46 @@
+     ClassStringDisjunction(ClassSetAlternativeStrings),
+ }
+ 
+-#[derive(Debug, Clone)]
++#[derive(Debug)]
+ struct ClassSetAlternativeStrings(Vec<Vec<u32>>);
+ 
++impl Clone for ClassSetAlternativeStrings {
++    fn clone(&self) -> Self {
++        let mut values = Vec::new();
++        if budget::reserve(&mut values, self.0.len()) {
++            for s in &self.0 {
++                values.push(budget::copy(s));
++                if budget::failed() {
++                    break;
++                }
++            }
++        }
++        Self(values)
++    }
++}
+ impl ClassSetAlternativeStrings {
+     fn new() -> Self {
+         ClassSetAlternativeStrings(Vec::new())
+     }
+ 
+     fn extend(&mut self, other: Self) {
+-        self.0.extend(other.0);
++        if budget::reserve(&mut self.0, other.0.len()) {
++            self.0.extend(other.0);
++        }
+     }
+ 
+     fn intersect(&mut self, other: Self) {
+         let mut retained = Vec::new();
++        if !self.charge_comparison(&other) {
++            return;
++        }
+         for string in &self.0 {
+             for other_string in &other.0 {
+                 if string == other_string {
+-                    retained.push(string.clone());
++                    if !budget::reserve(&mut retained, 1) {
++                        return;
++                    }
++                    retained.push(budget::copy(string));
+                     break;
+                 }
+             }
+@@ -266,16 +471,57 @@
+     }
+ 
+     fn remove(&mut self, other: Self) {
++        if !self.charge_comparison(&other) {
++            return;
++        }
+         self.0.retain(|string| !other.0.contains(string));
+     }
+ 
++    fn charge_comparison(&self, other: &Self) -> bool {
++        if !budget::charge(0, self.0.len().saturating_add(other.0.len())) {
++            return false;
++        }
++        let max_len = self
++            .0
++            .iter()
++            .chain(&other.0)
++            .map(Vec::len)
++            .max()
++            .unwrap_or(0)
++            .saturating_add(1);
++        budget::charge(
++            0,
++            self.0
++                .len()
++                .saturating_mul(other.0.len())
++                .saturating_mul(max_len),
++        )
++    }
+     fn to_nodes(&self, icase: bool) -> Vec<ir::Node> {
+         let mut nodes = Vec::new();
++        if !budget::reserve(&mut nodes, self.0.len()) {
++            return nodes;
++        }
+         for string in &self.0 {
++            if !budget::charge(
++                string
++                    .len()
++                    .saturating_mul(core::mem::size_of::<ir::Node>()),
++                string.len(),
++            ) {
++                return Vec::new();
++            }
+             nodes.push(ir::Node::Cat(
+                 string
+                     .iter()
+-                    .map(|cp| ir::Node::Char { c: *cp, icase })
++                    .map(|cp| ir::Node::Char {
++                        c: if icase {
++                            unicode::fold_code_point(*cp, true)
++                        } else {
++                            *cp
++                        },
++                        icase,
++                    })
+                     .collect::<Vec<_>>(),
+             ));
+         }
+@@ -285,11 +531,35 @@
+ 
+ fn error<S, T>(text: S) -> Result<T, Error>
+ where
+-    S: ToString,
++    S: AsRef<str>,
+ {
++    let text = text.as_ref();
++    if !budget::charge(text.len(), text.len()) {
++        return Err(Error {
++            text: String::new(),
++        });
++    }
+     Err(Error {
+-        text: text.to_string(),
++        text: text.to_owned(),
+     })
++}
++
++fn error_join<T>(prefix: &str, suffix: &str) -> Result<T, Error> {
++    let Some(len) = prefix.len().checked_add(suffix.len()) else {
++        budget::arithmetic_failure();
++        return error("");
++    };
++    if !budget::charge(len, len) {
++        return error("");
++    }
++    let mut text = String::new();
++    if text.try_reserve_exact(len).is_err() {
++        budget::arithmetic_failure();
++        return error("");
++    }
++    text.push_str(prefix);
++    text.push_str(suffix);
++    Err(Error { text })
+ }
+ 
+ fn make_cat(nodes: ir::NodeList) -> ir::Node {
+@@ -301,14 +571,30 @@
+ }
+ 
+ fn make_alt(nodes: ir::NodeList) -> ir::Node {
+-    let mut mright = None;
+-    for node in nodes.into_iter().rev() {
+-        match mright {
+-            None => mright = Some(node),
+-            Some(right) => mright = Some(ir::Node::Alt(Box::new(node), Box::new(right))),
+-        }
+-    }
+-    mright.unwrap_or(ir::Node::Empty)
++    // Balanced trees preserve left-to-right alternatives while preventing
++    // Unicode string properties from creating thousands of recursive drops.
++    fn build(nodes: &mut impl Iterator<Item = ir::Node>, len: usize) -> ir::Node {
++        match len {
++            0 => ir::Node::Empty,
++            1 => nodes.next().unwrap(),
++            _ => {
++                let left = len / 2;
++                ir::Node::Alt(
++                    Box::new(build(nodes, left)),
++                    Box::new(build(nodes, len - left)),
++                )
++            }
++        }
++    }
++    let len = nodes.len();
++    if !budget::charge(
++        len.saturating_mul(2)
++            .saturating_mul(core::mem::size_of::<ir::Node>()),
++        len,
++    ) {
++        return ir::Node::Empty;
++    }
++    build(&mut nodes.into_iter(), len)
+ }
+ 
+ /// \return a CodePointSet for a given character escape (positive or negative).
+@@ -318,13 +604,16 @@
+     let mut cps;
+     match ct {
+         CharacterClassType::Digits => {
+-            cps = CodePointSet::from_sorted_disjoint_intervals(charclasses::DIGITS.to_vec())
++            cps = CodePointSet::from_sorted_disjoint_intervals(budget::copy(&charclasses::DIGITS))
+         }
+         CharacterClassType::Words => {
+-            cps = CodePointSet::from_sorted_disjoint_intervals(charclasses::WORD_CHARS.to_vec())
++            cps =
++                CodePointSet::from_sorted_disjoint_intervals(budget::copy(&charclasses::WORD_CHARS))
+         }
+         CharacterClassType::Spaces => {
+-            cps = CodePointSet::from_sorted_disjoint_intervals(charclasses::WHITESPACE.to_vec());
++            cps = CodePointSet::from_sorted_disjoint_intervals(budget::copy(
++                &charclasses::WHITESPACE,
++            ));
+             for &iv in charclasses::LINE_TERMINATOR.iter() {
+                 cps.add(iv)
+             }
+@@ -341,11 +630,20 @@
+ 
+ /// \return a Bracket for a given character escape (positive or negative).
+ /// For icase mode, we expand the positive set first, then invert if needed.
+-fn make_bracket_class(ct: CharacterClassType, positive: bool, icase: bool) -> ir::Node {
++fn make_bracket_class(
++    ct: CharacterClassType,
++    positive: bool,
++    icase: bool,
++    unicode: bool,
++) -> ir::Node {
+     // Get the positive (non-inverted) set, perform any icase expansion, then maybe invert.
+     let mut cps = codepoints_from_class_positive(ct);
+     if icase {
+-        cps = unicode::add_icase_code_points(cps);
++        cps = if unicode {
++            unicode::add_icase_code_points(cps)
++        } else {
++            unicode::add_legacy_icase_code_points(cps)
++        };
+     }
+     if !positive {
+         cps = cps.inverted();
+@@ -424,7 +722,7 @@
+     /// A map each from capture group name to corresponding group indices in order.
+     /// Note duplicate names may appear in distinct alternations, per the TC39 proposal.
+     /// See <https://github.com/tc39/proposal-duplicate-named-capturing-groups>
+-    named_group_indices: HashMap<CaptureGroupName, Vec<u32>>,
++    named_group_indices: ParserMap<CaptureGroupName, Vec<u32>>,
+ 
+     /// Whether a lookbehind was encountered.
+     has_lookbehind: bool,
+@@ -450,6 +748,9 @@
+     /// If our contents begin with the string \p s, consume it from our contents
+     /// and return true. Otherwise return false.
+     fn try_consume_str(&mut self, s: &str) -> bool {
++        if !budget::charge(0, s.len()) {
++            return false;
++        }
+         let mut cursor = self.input.clone();
+         for c1 in s.chars() {
+             if cursor.next() != Some(c1 as u32) {
+@@ -471,15 +772,24 @@
+ 
+     /// Peek at the next character.
+     fn peek(&mut self) -> Option<u32> {
++        if !budget::charge(0, 1) {
++            return None;
++        }
+         self.input.peek().copied()
+     }
+ 
+     /// \return the next character.
+     fn next(&mut self) -> Option<u32> {
++        if !budget::charge(0, 1) {
++            return None;
++        }
+         self.input.next()
+     }
+ 
+     fn try_parse(&mut self) -> Result<ir::Regex, Error> {
++        if !budget::charge(2 * core::mem::size_of::<ir::Node>(), 1) {
++            return error("");
++        }
+         self.parse_capture_groups()?;
+ 
+         // Parse a catenation. If we consume everything, it's success. If there's
+@@ -487,12 +797,17 @@
+         let body = self.consume_disjunction()?;
+         match self.input.peek().copied() {
+             Some(c) if c == ')' as u32 => error("Unbalanced parenthesis"),
+-            Some(c) => error(format!(
+-                "Unexpected char: {}",
+-                char::from_u32(c)
+-                    .map(String::from)
+-                    .unwrap_or_else(|| format!("\\u{c:04X}"))
+-            )),
++            Some(c) => {
++                if !budget::charge(64, 1) {
++                    return error("");
++                }
++                error(format!(
++                    "Unexpected char: {}",
++                    char::from_u32(c)
++                        .map(String::from)
++                        .unwrap_or_else(|| format!("\\u{c:04X}"))
++                ))
++            }
+             None => self.finalize(ir::Regex {
+                 node: make_cat(vec![body, ir::Node::Goal]),
+                 flags: self.flags,
+@@ -502,8 +817,15 @@
+ 
+     /// ES6 21.2.2.3 Disjunction.
+     fn consume_disjunction(&mut self) -> Result<ir::Node, Error> {
+-        let mut terms = vec![self.consume_term()?];
++        let mut terms = Vec::new();
++        if !budget::reserve(&mut terms, 1) {
++            return error("");
++        }
++        terms.push(self.consume_term()?);
+         while self.try_consume('|') {
++            if !budget::reserve(&mut terms, 1) {
++                return error("");
++            }
+             terms.push(self.consume_term()?)
+         }
+         Ok(make_alt(terms))
+@@ -513,6 +835,11 @@
+     fn consume_term(&mut self) -> Result<ir::Node, Error> {
+         let mut result: Vec<ir::Node> = Vec::new();
+         loop {
++            if !budget::reserve(&mut result, 3)
++                || !budget::charge(core::mem::size_of::<ir::Node>().saturating_mul(3), 1)
++            {
++                return error("");
++            }
+             let start_group = self.group_count;
+             let mut start_offset = result.len();
+             let mut quantifier_allowed = true;
+@@ -728,6 +1055,15 @@
+                 if matches!(quant.max, Some(max) if quant.min > max) {
+                     return error("Invalid quantifier");
+                 }
++                if !budget::charge(
++                    result
++                        .len()
++                        .saturating_sub(start_offset)
++                        .saturating_mul(core::mem::size_of::<ir::Node>()),
++                    result.len().saturating_sub(start_offset),
++                ) {
++                    return error("");
++                }
+                 let quantifee = result.split_off(start_offset);
+                 if self.loop_count as usize >= MAX_LOOPS {
+                     return error("Loop count limit exceeded");
+@@ -844,7 +1180,11 @@
+                 Some(']') => {
+                     self.consume(']');
+                     if self.flags.icase {
+-                        result.cps = unicode::add_icase_code_points(result.cps);
++                        result.cps = if self.flags.unicode {
++                            unicode::add_icase_code_points(result.cps)
++                        } else {
++                            unicode::add_legacy_icase_code_points(result.cps)
++                        };
+                     }
+                     return Ok(ir::Node::Bracket(result));
+                 }
+@@ -999,9 +1339,9 @@
+                     'p' | 'P' if self.flags.unicode => {
+                         self.consume(ec);
+                         let negate = ec == 'P' as u32;
+-                        match self.try_consume_unicode_property_escape()? {
++                        match self.try_consume_unicode_property_escape()?.0 {
+                             PropertyEscapeKind::CharacterClass(s) => Ok(Some(ClassAtom::Range {
+-                                iv: CodePointSet::from_sorted_disjoint_intervals(s.to_vec()),
++                                iv: CodePointSet::from_sorted_disjoint_intervals(budget::copy(s)),
+                                 negate,
+                             })),
+                             PropertyEscapeKind::StringSet(_) => error("Invalid property escape"),
+@@ -1043,14 +1383,14 @@
+         let op = match self.peek() {
+             Some(0x5D /* ] */) => {
+                 self.consume(']');
+-                result.union_operand(first);
++                result.union_operand(self.fold_set_operand(first));
+                 return Ok(result);
+             }
+             Some(0x26 /* & */) => {
+                 self.consume('&');
+                 if self.peek() == Some(0x26 /* & */) {
+                     self.consume('&');
+-                    result.union_operand(first.clone());
++                    result.union_operand(self.fold_set_operand(first.clone()));
+                     ClassSetOperator::Intersection
+                 } else {
+                     result.codepoints.add_one(0x26 /* & */);
+@@ -1061,20 +1401,27 @@
+                 self.consume('-');
+                 if self.peek() == Some(0x2D /* - */) {
+                     self.consume('-');
+-                    result.union_operand(first.clone());
++                    result.union_operand(self.fold_set_operand(first.clone()));
+                     ClassSetOperator::Subtraction
+                 } else {
+                     match first {
+                         ClassSetOperand::ClassSetCharacter(first) => {
+                             let ClassSetOperand::ClassSetCharacter(last) =
+-                                self.consume_class_set_operand(negate_set)?
++                                self.consume_class_set_operand_raw(negate_set)?
+                             else {
+                                 return error("Invalid class set range");
+                             };
+                             if first > last {
+                                 return error("Invalid class set range");
+                             }
+-                            result.codepoints.add(Interval { first, last });
++                            result.union_operand(self.fold_set_operand(
++                                ClassSetOperand::CharacterClassEscape(
++                                    CodePointSet::from_sorted_disjoint_intervals(vec![Interval {
++                                        first,
++                                        last,
++                                    }]),
++                                ),
++                            ));
+                         }
+                         _ => {
+                             return error("Invalid class set range");
+@@ -1084,7 +1431,7 @@
+                 }
+             }
+             Some(_) => {
+-                result.union_operand(first.clone());
++                result.union_operand(self.fold_set_operand(first.clone()));
+                 ClassSetOperator::Union
+             }
+             None => {
+@@ -1108,21 +1455,27 @@
+                         match operand {
+                             ClassSetOperand::ClassSetCharacter(first) => {
+                                 let ClassSetOperand::ClassSetCharacter(last) =
+-                                    self.consume_class_set_operand(negate_set)?
++                                    self.consume_class_set_operand_raw(negate_set)?
+                                 else {
+                                     return error("Invalid class set range");
+                                 };
+                                 if first > last {
+                                     return error("Invalid class set range");
+                                 }
+-                                result.codepoints.add(Interval { first, last });
++                                result.union_operand(self.fold_set_operand(
++                                    ClassSetOperand::CharacterClassEscape(
++                                        CodePointSet::from_sorted_disjoint_intervals(vec![
++                                            Interval { first, last },
++                                        ]),
++                                    ),
++                                ));
+                             }
+                             _ => {
+                                 return error("Invalid class set range");
+                             }
+                         };
+                     } else {
+-                        result.union_operand(operand);
++                        result.union_operand(self.fold_set_operand(operand));
+                     }
+                 }
+             }
+@@ -1130,7 +1483,7 @@
+             ClassSetOperator::Intersection => {
+                 loop {
+                     let operand = self.consume_class_set_operand(negate_set)?;
+-                    result.intersect_operand(operand);
++                    result.intersect_operand(self.fold_set_operand(operand));
+                     match self.next() {
+                         Some(0x5D /* ] */) => return Ok(result),
+                         Some(0x26 /* & */) => {}
+@@ -1146,7 +1499,7 @@
+             ClassSetOperator::Subtraction => {
+                 loop {
+                     let operand = self.consume_class_set_operand(negate_set)?;
+-                    result.subtract_operand(operand);
++                    result.subtract_operand(self.fold_set_operand(operand));
+                     match self.next() {
+                         Some(0x5D /* ] */) => return Ok(result),
+                         Some(0x2D /* - */) => {}
+@@ -1162,6 +1515,29 @@
+     }
+ 
+     fn consume_class_set_operand(&mut self, negate_set: bool) -> Result<ClassSetOperand, Error> {
++        if !budget::charge(core::mem::size_of::<Interval>(), 1) {
++            return error("");
++        }
++        self.consume_class_set_operand_raw(negate_set)
++    }
++    fn fold_set_operand(&self, operand: ClassSetOperand) -> ClassSetOperand {
++        if !self.flags.icase || matches!(operand, ClassSetOperand::Class(_)) {
++            return operand;
++        }
++        let mut class = ClassSet::new();
++        class.union_operand(operand);
++        class.codepoints = unicode::add_icase_code_points(class.codepoints);
++        for text in &mut class.alternatives.0 {
++            for cp in text {
++                *cp = unicode::fold(*cp);
++            }
++        }
++        ClassSetOperand::Class(class)
++    }
++    fn consume_class_set_operand_raw(
++        &mut self,
++        negate_set: bool,
++    ) -> Result<ClassSetOperand, Error> {
+         use ClassSetOperand::*;
+         let Some(cp) = self.peek() else {
+             return error("Empty class set operand");
+@@ -1172,9 +1548,9 @@
+             0x5B /* [ */ => {
+                 self.consume('[');
+                 let negate_set = self.try_consume('^');
+-                let result = self.consume_class_set_expression(negate_set)?;
++                let mut result = self.consume_class_set_expression(negate_set)?;
+                 if negate_set {
+-                    result.codepoints.inverted();
++                    result.codepoints = result.codepoints.inverted();
+                 }
+                 Ok(Class(result))
+             }
+@@ -1200,20 +1576,17 @@
+                             match self.peek() {
+                                 Some(0x7D /* } */) => {
+                                     self.consume('}');
+-                                    if !alternative.is_empty() {
+-                                        alternatives.push(alternative.clone());
+-                                        alternative.clear();
+-                                    }
++                                    if !budget::reserve(&mut alternatives,1){return error("");}
++                                    alternatives.push(core::mem::take(&mut alternative));
+                                     break;
+                                 }
+                                 Some(0x7C /* | */) => {
+                                     self.consume('|');
+-                                    if !alternative.is_empty() {
+-                                        alternatives.push(alternative.clone());
+-                                        alternative.clear();
+-                                    }
++                                    if !budget::reserve(&mut alternatives,1){return error("");}
++                                    alternatives.push(core::mem::take(&mut alternative));
+                                 }
+                                 Some(_) => {
++                                    if !budget::reserve(&mut alternative,1){return error("");}
+                                     alternative.push(self.consume_class_set_character()?);
+                                 }
+                                 None => {
+@@ -1221,7 +1594,13 @@
+                                 }
+                             }
+                         }
+-                        Ok(ClassStringDisjunction(ClassSetAlternativeStrings(alternatives)))
++                        let mut class=ClassSet::new();
++                        for mut text in alternatives {
++                            if self.flags.icase {for cp in &mut text {*cp=unicode::fold(*cp);}}
++                            if text.len()==1 {class.codepoints.add_one(text[0]);}
++                            else {if negate_set{return error("Negated class cannot contain strings");}if !budget::push(&mut class.alternatives.0,text){return error("");}}
++                        }
++                        Ok(Class(class))
+                     }
+                     // CharacterClassEscape :: d
+                     0x64 /* d */ => {
+@@ -1257,14 +1636,18 @@
+                     0x70 /* p */ => {
+                         self.consume('p');
+                         match self.try_consume_unicode_property_escape()? {
+-                            PropertyEscapeKind::CharacterClass(intervals) => {
+-                                Ok(CharacterClassEscape(CodePointSet::from_sorted_disjoint_intervals(
+-                                    intervals.to_vec(),
+-                                )))
++                            (PropertyEscapeKind::CharacterClass(intervals), special) => {
++                                let mut class=ClassSet::new();
++                                class.codepoints=CodePointSet::from_sorted_disjoint_intervals(budget::copy(intervals));
++                                if self.flags.icase && !special {class.codepoints=unicode::add_icase_code_points(class.codepoints);}
++                                Ok(Class(class))
+                             }
+-                            PropertyEscapeKind::StringSet(_) if negate_set => error("Invalid character escape"),
+-                            PropertyEscapeKind::StringSet(strings) => {
+-                                Ok(ClassStringDisjunction(ClassSetAlternativeStrings(strings.iter().map(|s| s.to_vec()).collect())))
++                            (PropertyEscapeKind::StringSet(_), _) if negate_set => error("Invalid character escape"),
++                            (PropertyEscapeKind::StringSet(strings), _) => {
++                                let mut result=Vec::new();
++                                if !budget::reserve(&mut result,strings.len()){return error("");}
++                                for s in strings {result.push(budget::copy(s));if budget::failed(){return error("");}}
++                                Ok(ClassStringDisjunction(ClassSetAlternativeStrings(result)))
+                             }
+                         }
+                     }
+@@ -1272,12 +1655,14 @@
+                     0x50 /* P */ => {
+                         self.consume('P');
+                         match self.try_consume_unicode_property_escape()? {
+-                            PropertyEscapeKind::CharacterClass(s) => {
+-                                Ok(CharacterClassEscape(CodePointSet::from_sorted_disjoint_intervals(
+-                                    s.to_vec(),
+-                                ).inverted()))
++                            (PropertyEscapeKind::CharacterClass(s), special) => {
++                                let mut class=ClassSet::new();
++                                class.codepoints=CodePointSet::from_sorted_disjoint_intervals(budget::copy(s));
++                                if self.flags.icase && !special {class.codepoints=unicode::add_icase_code_points(class.codepoints);}
++                                class.codepoints=class.codepoints.inverted();
++                                Ok(Class(class))
+                             }
+-                            PropertyEscapeKind::StringSet(_) => error("Invalid character escape"),
++                            (PropertyEscapeKind::StringSet(_), _) => error("Invalid character escape"),
+                         }
+                     }
+                     // ClassSetCharacter:: \b
+@@ -1582,6 +1967,7 @@
+                     CharacterClassType::Digits,
+                     c == 'd' as u32,
+                     self.flags.icase,
++                    self.flags.unicode,
+                 ))
+             }
+ 
+@@ -1591,6 +1977,7 @@
+                     CharacterClassType::Spaces,
+                     c == 's' as u32,
+                     self.flags.icase,
++                    self.flags.unicode,
+                 ))
+             }
+ 
+@@ -1600,6 +1987,7 @@
+                     CharacterClassType::Words,
+                     c == 'w' as u32,
+                     self.flags.icase,
++                    self.flags.unicode,
+                 ))
+             }
+ 
+@@ -1608,30 +1996,43 @@
+             'p' | 'P' if self.flags.unicode || self.flags.unicode_sets => {
+                 self.consume(c);
+                 let negate = c == 'P' as u32;
+-                let property_escape = self.try_consume_unicode_property_escape()?;
++                let (property_escape, special) = self.try_consume_unicode_property_escape()?;
+                 match property_escape {
+                     PropertyEscapeKind::CharacterClass(s) => {
+-                        Ok(ir::Node::Bracket(BracketContents {
+-                            invert: negate,
+-                            cps: CodePointSet::from_sorted_disjoint_intervals(s.to_vec()),
+-                        }))
++                        let mut cps = CodePointSet::from_sorted_disjoint_intervals(budget::copy(s));
++                        if self.flags.unicode_sets {
++                            if self.flags.icase && !special {
++                                cps = unicode::add_icase_code_points(cps);
++                            }
++                            if negate {
++                                cps = cps.inverted();
++                            }
++                        } else {
++                            if negate {
++                                cps = cps.inverted();
++                            }
++                            if self.flags.icase {
++                                cps = unicode::add_icase_code_points(cps);
++                            }
++                        }
++                        Ok(ir::Node::Bracket(BracketContents { invert: false, cps }))
+                     }
+                     PropertyEscapeKind::StringSet(_) if negate => error("Invalid character escape"),
+-                    PropertyEscapeKind::StringSet(strings) => Ok(make_alt(
+-                        strings
+-                            .iter()
+-                            .map(|s| {
+-                                ir::Node::Cat(
+-                                    s.iter()
+-                                        .map(|c| ir::Node::Char {
+-                                            c: *c,
+-                                            icase: self.flags.icase,
+-                                        })
+-                                        .collect(),
+-                                )
+-                            })
+-                            .collect(),
+-                    )),
++                    PropertyEscapeKind::StringSet(strings) => {
++                        let mut values = Vec::new();
++                        if !budget::reserve(&mut values, strings.len()) {
++                            return error("");
++                        }
++                        for string in strings {
++                            values.push(budget::copy(string));
++                            if budget::failed() {
++                                return error("");
++                            }
++                        }
++                        Ok(make_alt(
++                            ClassSetAlternativeStrings(values).to_nodes(self.flags.icase),
++                        ))
++                    }
+                 }
+             }
+ 
+@@ -1676,10 +2077,10 @@
+                 };
+                 // The group name must be the name of a previously defined capture group.
+                 let Some(group_indices) = self.named_group_indices.get(&group_name) else {
+-                    return error(format!(
+-                        "Backreference to invalid named capture group: {}",
+-                        &group_name
+-                    ));
++                    return error_join(
++                        "Backreference to invalid named capture group: ",
++                        &group_name,
++                    );
+                 };
+                 // Note backreferences are 1-based.
+                 let node = match group_indices.len() {
+@@ -1691,6 +2092,15 @@
+                     _ => {
+                         // Unusual case of multiple groups sharing a name: the backref should try each in turn.
+                         // Lower to alternations of backreferences. Reverse to keep it right-associative: a | (b | (c | d))...
++                        if !budget::charge(
++                            group_indices
++                                .len()
++                                .saturating_mul(2)
++                                .saturating_mul(core::mem::size_of::<ir::Node>()),
++                            group_indices.len(),
++                        ) {
++                            return error("");
++                        }
+                         let backrefs = group_indices
+                             .iter()
+                             .rev()
+@@ -1732,7 +2142,11 @@
+             loop {
+                 match self.next().and_then(char::from_u32) {
+                     Some('}') => break,
+-                    Some(c) => s.push(c),
++                    Some(c) => {
++                        if !budget::push_char(&mut s, c) {
++                            return None;
++                        }
++                    }
+                     None => {
+                         // Surrogates not supported in code point escapes.
+                         self.input = orig_input;
+@@ -1760,7 +2174,9 @@
+             let mut s = String::new();
+             for _ in 0..4 {
+                 if let Some(c) = self.next().and_then(char::from_u32) {
+-                    s.push(c);
++                    if !budget::push_char(&mut s, c) {
++                        return None;
++                    }
+                 } else {
+                     // Surrogates are not hex digits.
+                     self.input = orig_input;
+@@ -1786,7 +2202,9 @@
+                             let mut s = String::new();
+                             for _ in 0..4 {
+                                 let c = self.next().and_then(char::from_u32)?;
+-                                s.push(c);
++                                if !budget::push_char(&mut s, c) {
++                                    return None;
++                                }
+                             }
+ 
+                             let uu = u16::from_str_radix(&s, 16).ok()?;
+@@ -1831,7 +2249,12 @@
+             }
+ 
+             if interval_contains(id_start_ranges(), c.into()) || c == '$' || c == '_' {
+-                group_name.push(c);
++                if !budget::charge(group_name.len().saturating_add(c.len_utf8()), 1) {
++                    return None;
++                }
++                if !budget::push_char(&mut group_name, c) {
++                    return None;
++                }
+             } else {
+                 self.input = orig_input;
+                 return None;
+@@ -1861,7 +2284,12 @@
+                 if interval_contains(id_continue_ranges(), c.into()) || c == '$' || c == '_' || c == '\u{200C}' /* <ZWNJ> */ || c == '\u{200D}'
+                 /* <ZWJ> */
+                 {
+-                    group_name.push(c);
++                    if !budget::charge(group_name.len().saturating_add(c.len_utf8()), 1) {
++                        return None;
++                    }
++                    if !budget::push_char(&mut group_name, c) {
++                        return None;
++                    }
+                 } else {
+                     self.input = orig_input;
+                     return None;
+@@ -1894,15 +2322,15 @@
+     /// Pass 1: Collect all named capture groups and record which alternative path each appears in.
+     fn collect_named_group_locations(
+         &mut self,
+-    ) -> Result<HashMap<String, Vec<AlternativePath>>, Error> {
++    ) -> Result<ParserMap<String, Vec<AlternativePath>>, Error> {
+         // Track parenthesis depth and alternative index at each depth
+         let mut paren_depth: usize = 0;
+         // Map from depth to current alternative index at that depth
+-        let mut alt_indices: HashMap<usize, usize> = HashMap::new();
++        let mut alt_indices: ParserMap<usize, usize> = ParserMap::new();
+         alt_indices.insert(0, 0);
+ 
+         // Map from group name to all alternative paths where it appears
+-        let mut named_group_locations: HashMap<String, Vec<AlternativePath>> = HashMap::new();
++        let mut named_group_locations: ParserMap<String, Vec<AlternativePath>> = ParserMap::new();
+ 
+         loop {
+             match self.next().map(to_char_sat) {
+@@ -1936,21 +2364,32 @@
+                     if let Some(name) = group_name {
+                         // Build current alternative path from depth 0 to current depth.
+                         let mut segments = Vec::new();
++                        if !budget::reserve(&mut segments, paren_depth.saturating_add(1)) {
++                            return error("");
++                        }
+                         for d in 0..=paren_depth {
+                             segments.push((d, *alt_indices.get(&d).unwrap_or(&0)));
+                         }
+ 
+-                        // Record this location.
+-                        named_group_locations
+-                            .entry(name.clone())
+-                            .or_default()
+-                            .push(AlternativePath { segments });
+-
+-                        // Store all occurrences in named_group_indices.
+-                        self.named_group_indices
+-                            .entry(name)
+-                            .or_default()
+-                            .push(self.group_count_max);
++                        if !budget::charge(name.len(), name.len()) {
++                            return error("");
++                        }
++                        let Some(paths) =
++                            named_group_locations.get_or_insert(name.clone(), Vec::new())
++                        else {
++                            return error("");
++                        };
++                        if !budget::push(paths, AlternativePath { segments }) {
++                            return error("");
++                        }
++                        let Some(indices) =
++                            self.named_group_indices.get_or_insert(name, Vec::new())
++                        else {
++                            return error("");
++                        };
++                        if !budget::push(indices, self.group_count_max) {
++                            return error("");
++                        }
+                     }
+ 
+                     if is_capturing {
+@@ -1964,7 +2403,9 @@
+ 
+                     // Entering a new group.
+                     paren_depth += 1;
+-                    alt_indices.insert(paren_depth, 0);
++                    if !alt_indices.insert(paren_depth, 0) {
++                        return error("");
++                    }
+                 }
+                 Some(')') => {
+                     // Exiting a group
+@@ -1975,7 +2416,12 @@
+                 }
+                 Some('|') => {
+                     // Moving to next alternative at current depth
+-                    *alt_indices.entry(paren_depth).or_insert(0) += 1;
++                    let Some(index) = alt_indices.get_or_insert(paren_depth, 0) else {
++                        return error("");
++                    };
++                    *index = index.checked_add(1).ok_or_else(|| Error {
++                        text: String::new(),
++                    })?;
+                 }
+                 Some(_) => continue,
+                 None => break,
+@@ -1991,12 +2437,28 @@
+     /// but `/(?<a>x)(?<a>y)/` is invalid (same alternative).
+     fn check_duplicate_conflicts(
+         &self,
+-        named_group_locations: &HashMap<String, Vec<AlternativePath>>,
++        named_group_locations: &ParserMap<String, Vec<AlternativePath>>,
+     ) -> Result<(), Error> {
++        if !budget::charge(core::mem::size_of::<usize>().saturating_mul(4), 1) {
++            return error("");
++        }
+         for paths in named_group_locations.values() {
++            if !budget::charge(0, paths.len().saturating_add(1)) {
++                return error("");
++            }
+             // Check each pair of paths for this group name
+             for i in 0..paths.len() {
+                 for j in (i + 1)..paths.len() {
++                    if !budget::charge(
++                        0,
++                        paths[i]
++                            .segments
++                            .len()
++                            .saturating_mul(paths[j].segments.len())
++                            .saturating_add(1),
++                    ) {
++                        return error("");
++                    }
+                     if paths[i].conflicts_with(&paths[j]) {
+                         return error("Duplicate capture group name");
+                     }
+@@ -2006,7 +2468,7 @@
+         Ok(())
+     }
+ 
+-    fn try_consume_unicode_property_escape(&mut self) -> Result<PropertyEscapeKind, Error> {
++    fn try_consume_unicode_property_escape(&mut self) -> Result<(PropertyEscapeKind, bool), Error> {
+         if !self.try_consume('{') {
+             return error("Invalid character at property escape start");
+         }
+@@ -2023,7 +2485,10 @@
+                     else {
+                         break;
+                     };
+-                    return Ok(value);
++                    return Ok((
++                        value,
++                        name.is_none() && matches!(buffer.as_str(), "ASCII" | "Any"),
++                    ));
+                 }
+                 '=' if name.is_none() => {
+                     self.consume(c);
+@@ -2035,7 +2500,9 @@
+                 }
+                 c if c.is_ascii_alphanumeric() || c == '_' => {
+                     self.consume(c);
+-                    buffer.push(c);
++                    if !budget::push_char(&mut buffer, c) {
++                        return error("");
++                    }
+                 }
+                 _ => break,
+             }
+@@ -2070,7 +2537,7 @@
+         flags,
+         loop_count: 0,
+         group_count: 0,
+-        named_group_indices: HashMap::new(),
++        named_group_indices: ParserMap::new(),
+         group_count_max: 0,
+         has_lookbehind: false,
+     };
+--- a/src/unicode.rs
++++ b/src/unicode.rs
+@@ -144,7 +144,8 @@
+     if unicode {
+         return fold(cu);
+     }
+-    uppercase(cu)
++    let upper = uppercase(cu);
++    if cu >= 128 && upper < 128 { cu } else { upper }
+ }
+ 
+ pub fn fold(cu: u32) -> u32 {
+@@ -194,6 +195,9 @@
+ // Add all folded characters in the given interval to the given code point set.
+ // This skips characters which fold to themselves.
+ fn fold_interval(iv: Interval, recv: &mut CodePointSet) {
++    if !crate::compile_ledger::charge(0, FOLDS.len().saturating_add(iv.count_codepoints())) {
++        return;
++    }
+     let overlaps = FOLDS.equal_range_by(|tr| {
+         if tr.first() > iv.last {
+             Ordering::Greater
+@@ -239,6 +243,15 @@
+ /// Find all characters that fold into the given interval and add them to the given code point set.
+ /// This skips characters which fold to themselves.
+ fn unfold_interval(iv: Interval, recv: &mut CodePointSet) {
++    if !crate::compile_ledger::charge(
++        0,
++        FOLDS
++            .iter()
++            .map(|r| (r.last() - r.first() + 1) as usize)
++            .sum(),
++    ) {
++        return;
++    }
+     // Note: We still need to check all ranges because the relationship between
+     // transformed_from and transformed_to intervals can be complex
+     for tr in FOLDS.iter() {
+@@ -326,12 +339,18 @@
+ pub fn add_icase_code_points(mut input: CodePointSet) -> CodePointSet {
+     let mut folded = input.clone();
+     for iv in input.intervals() {
++        if crate::compile_ledger::failed() {
++            return CodePointSet::default();
++        }
+         fold_interval(*iv, &mut folded)
+     }
+ 
+     // Reuse input storage.
+     input.clone_from(&folded);
+     for iv in folded.intervals() {
++        if crate::compile_ledger::failed() {
++            return CodePointSet::default();
++        }
+         unfold_interval(*iv, &mut input);
+     }
+     input
+@@ -579,3 +598,41 @@
+         }
+     }
+ }
++
++// ECMAScript non-Unicode Canonicalize works over code units and does not fold
++// non-ASCII characters into ASCII. Build sorted runs without quadratic inserts.
++pub(crate) fn add_legacy_icase_code_points(input: CodePointSet) -> CodePointSet {
++    if !crate::compile_ledger::charge(
++        65536,
++        131073usize.saturating_mul(input.intervals().len().saturating_add(1)),
++    ) {
++        return CodePointSet::default();
++    }
++    let mut canonical = vec![false; 65536];
++    for cp in 0..=65535 {
++        if input.contains(cp) {
++            canonical[fold_code_point(cp, false) as usize] = true;
++        }
++    }
++    let mut ranges = Vec::new();
++    let mut start = None;
++    for cp in 0..=65536 {
++        let yes = cp < 65536 && canonical[fold_code_point(cp, false) as usize];
++        match (start, yes) {
++            (None, true) => start = Some(cp),
++            (Some(first), false) => {
++                if !crate::compile_ledger::reserve(&mut ranges, 1) {
++                    return CodePointSet::default();
++                }
++                ranges.push(Interval {
++                    first,
++                    last: cp - 1,
++                });
++                start = None;
++            }
++            _ => {}
++        }
++    }
++    CodePointSet::from_sorted_disjoint_intervals(ranges)
++}
++

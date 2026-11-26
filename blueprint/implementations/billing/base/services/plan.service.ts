@@ -22,18 +22,13 @@ export class BasePlanService<
   PlanCadenceEnum,
   CurrencyEnum,
   BillingProviderEnum,
-  MapperEntities extends BasePlanEntities<
-    PlanCadenceEnum,
-    CurrencyEnum,
-    BillingProviderEnum
-  >,
+  MapperEntities extends BasePlanEntities,
   MapperDomains extends BasePlanDtos<
     PlanCadenceEnum,
     CurrencyEnum,
     BillingProviderEnum
   > = BasePlanDtos<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>
-> implements PlanService<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum>
-{
+> implements PlanService<PlanCadenceEnum, CurrencyEnum, BillingProviderEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -116,7 +111,7 @@ export class BasePlanService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(plan);
+      innerEm.persist(plan);
     });
     return this.mappers.PlanMapper.toDto(plan);
   }
@@ -152,7 +147,7 @@ export class BasePlanService<
     );
     const updatedPlan = await (em ?? this.em).upsert(plan);
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(plan);
+      innerEm.persist(plan);
     });
     const updatedPlanDto = await this.mappers.PlanMapper.toDto(updatedPlan);
     return updatedPlanDto;

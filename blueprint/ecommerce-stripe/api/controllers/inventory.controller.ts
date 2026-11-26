@@ -6,10 +6,30 @@ import {
   string
 } from '../../schema';
 import { ci, tokens } from '../../bootstrapper';
-import { InventoryMapper } from '../../domain/mappers/inventory.mappers';
+import {
+  CreateInventoryMapper,
+  InventoryMapper
+} from '../../domain/mappers/inventory.mappers';
 
 const serviceFactory = ci.scopedResolver(tokens.InventoryService);
 const HMAC_SECRET_KEY = ci.resolve(tokens.HMAC_SECRET_KEY);
+
+/** Creates the stock record for a variant; one record per variant. */
+export const createInventory = handlers.post(
+  schemaValidator,
+  '/',
+  {
+    name: 'Create Inventory',
+    access: 'internal',
+    summary: 'Create the stock record for a variant',
+    auth: { hmac: { secretKeys: { default: HMAC_SECRET_KEY } } },
+    body: CreateInventoryMapper.schema,
+    responses: { 200: InventoryMapper.schema }
+  },
+  async (req, res) => {
+    res.status(200).json(await serviceFactory().createInventory(req.body));
+  }
+);
 
 export const getInventory = handlers.get(
   schemaValidator,

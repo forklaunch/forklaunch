@@ -1,23 +1,10 @@
-import {
-  array,
-  handlers,
-  IdSchema,
-  IdsSchema,
-  PLATFORM_READ_PERMISSIONS,
-  schemaValidator,
-  string
-} from '@forklaunch/blueprint-core';
+import { bindRuntimeAuth } from '@forklaunch/blueprint-core';
+import { userContract } from '../contracts/user.contract';
+import { handlers, schemaValidator } from '@forklaunch/blueprint-core';
 import { IdsDto } from '@forklaunch/common';
 import { getCachedJwks } from '@forklaunch/core/http';
 import { jwtVerify } from 'jose';
 import { ci, tokens } from '../../bootstrapper';
-import { PermissionMapper } from '../../domain/mappers/permission.mappers';
-import { RoleMapper } from '../../domain/mappers/role.mappers';
-import {
-  CreateUserMapper,
-  UpdateUserMapper,
-  UserMapper
-} from '../../domain/mappers/user.mappers';
 
 const openTelemetryCollector = ci.resolve(tokens.OtelCollector);
 const serviceFactory = ci.scopedResolver(tokens.UserService);
@@ -49,24 +36,10 @@ const decodeResourceWithOrganizationId = async (token: string) => {
 
 export const createUser = handlers.post(
   schemaValidator,
-  '/',
-  {
-    name: 'Create User',
-    access: 'internal',
-    summary: 'Creates a new user',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: CreateUserMapper.schema,
-    responses: {
-      201: string,
-      500: string
-    }
-  },
+  userContract.createUser.path,
+  bindRuntimeAuth(userContract.createUser.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Creating user', req.body);
 
@@ -77,24 +50,10 @@ export const createUser = handlers.post(
 
 export const createBatchUsers = handlers.post(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Create Batch Users',
-    access: 'internal',
-    summary: 'Creates multiple users',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    body: array(CreateUserMapper.schema),
-    responses: {
-      201: string,
-      500: string
-    }
-  },
+  userContract.createBatchUsers.path,
+  bindRuntimeAuth(userContract.createBatchUsers.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Creating batch users', req.body);
     await serviceFactory().createBatchUsers(req.body);
@@ -104,27 +63,11 @@ export const createBatchUsers = handlers.post(
 
 export const getUser = handlers.get(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Get User',
-    access: 'protected',
-    summary: 'Gets a user by ID',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedPermissions: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: UserMapper.schema,
-      500: string
-    },
-    params: IdSchema
-  },
+  userContract.getUser.path,
+  bindRuntimeAuth(userContract.getUser.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     if (!req.session?.organizationId) {
       return res.status(401).send('Unauthorized: missing organization context');
@@ -143,27 +86,11 @@ export const getUser = handlers.get(
 
 export const getBatchUsers = handlers.get(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Get Batch Users',
-    access: 'protected',
-    summary: 'Gets multiple users by IDs',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedPermissions: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: array(UserMapper.schema),
-      500: string
-    },
-    query: IdsSchema
-  },
+  userContract.getBatchUsers.path,
+  bindRuntimeAuth(userContract.getBatchUsers.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Retrieving batch users', req.query);
 
@@ -184,30 +111,11 @@ export const getBatchUsers = handlers.get(
 
 export const updateUser = handlers.put(
   schemaValidator,
-  '/',
-  {
-    name: 'Update User',
-    access: 'protected',
-    summary: 'Updates a user by ID',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedRoles: PLATFORM_READ_PERMISSIONS
-    },
-    body: UpdateUserMapper.schema,
-    responses: {
-      200: string,
-      401: string,
-      403: string,
-      404: string,
-      500: string
-    }
-  },
+  userContract.updateUser.path,
+  bindRuntimeAuth(userContract.updateUser.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Updating user', req.body);
 
@@ -236,30 +144,11 @@ export const updateUser = handlers.put(
 
 export const updateBatchUsers = handlers.put(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Update Batch Users',
-    access: 'protected',
-    summary: 'Updates multiple users by IDs',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedRoles: PLATFORM_READ_PERMISSIONS
-    },
-    body: array(UpdateUserMapper.schema),
-    responses: {
-      200: string,
-      401: string,
-      403: string,
-      404: string,
-      500: string
-    }
-  },
+  userContract.updateBatchUsers.path,
+  bindRuntimeAuth(userContract.updateBatchUsers.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Updating batch users', req.body);
 
@@ -290,30 +179,11 @@ export const updateBatchUsers = handlers.put(
 
 export const deleteUser = handlers.delete(
   schemaValidator,
-  '/:id',
-  {
-    name: 'Delete User',
-    access: 'protected',
-    summary: 'Deletes a user by ID',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedRoles: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: string,
-      401: string,
-      403: string,
-      404: string,
-      500: string
-    },
-    params: IdSchema
-  },
+  userContract.deleteUser.path,
+  bindRuntimeAuth(userContract.deleteUser.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Deleting user', req.params);
 
@@ -347,30 +217,11 @@ export const deleteUser = handlers.delete(
 
 export const deleteBatchUsers = handlers.delete(
   schemaValidator,
-  '/batch',
-  {
-    name: 'Delete Batch Users',
-    access: 'protected',
-    summary: 'Deletes multiple users by IDs',
-    auth: {
-      sessionSchema: {
-        organizationId: string
-      },
-      jwt: {
-        jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL
-      },
-      decodeResource: decodeResourceWithOrganizationId,
-      allowedRoles: PLATFORM_READ_PERMISSIONS
-    },
-    responses: {
-      200: string,
-      401: string,
-      403: string,
-      404: string,
-      500: string
-    },
-    query: IdsSchema
-  },
+  userContract.deleteBatchUsers.path,
+  bindRuntimeAuth(userContract.deleteBatchUsers.details, {
+    jwksPublicKeyUrl: JWKS_PUBLIC_KEY_URL,
+    decodeResource: decodeResourceWithOrganizationId
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Deleting batch users', req.query);
 
@@ -417,7 +268,7 @@ export const deleteBatchUsers = handlers.delete(
  * ```typescript
  * createHmacToken({
  *   method: 'GET',
- *   path: '/123414/surface-roles',
+ *   path: '/user/123414/surface-roles',
  *   body?: {
  *     someKey: '123414'
  *   },
@@ -429,26 +280,10 @@ export const deleteBatchUsers = handlers.delete(
  */
 export const surfaceRoles = handlers.get(
   schemaValidator,
-  '/:id/surface-roles',
-  {
-    name: 'Surface User Roles',
-    access: 'internal',
-    summary: 'Surfaces the roles for a user',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: array(RoleMapper.schema),
-      500: string
-    },
-    params: {
-      ...IdSchema
-    }
-  },
+  userContract.surfaceRoles.path,
+  bindRuntimeAuth(userContract.surfaceRoles.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Verifying user role', req.params);
     const { id } = req.params;
@@ -469,7 +304,7 @@ export const surfaceRoles = handlers.get(
  * ```typescript
  * createHmacToken({
  *   method: 'GET',
- *   path: '/123414/surface-permissions',
+ *   path: '/user/123414/surface-permissions',
  *   body?: {
  *     someKey: '123414'
  *   },
@@ -481,26 +316,10 @@ export const surfaceRoles = handlers.get(
  */
 export const surfacePermissions = handlers.get(
   schemaValidator,
-  '/:id/surface-permissions',
-  {
-    name: 'Surface User Permissions',
-    access: 'internal',
-    summary: 'Verifies if a user has a specified permission',
-    auth: {
-      hmac: {
-        secretKeys: {
-          default: HMAC_SECRET_KEY
-        }
-      }
-    },
-    responses: {
-      200: array(PermissionMapper.schema),
-      500: string
-    },
-    params: {
-      ...IdSchema
-    }
-  },
+  userContract.surfacePermissions.path,
+  bindRuntimeAuth(userContract.surfacePermissions.details, {
+    secretKeys: { default: HMAC_SECRET_KEY }
+  }),
   async (req, res) => {
     openTelemetryCollector.debug('Verifying user permission', req.params);
     const { id } = req.params;

@@ -34,19 +34,22 @@ impl InfoCommand {
 
 impl CliCommand for InfoCommand {
     fn command(&self) -> Command {
-        command("info", "Show details for a release (or the most recent releases)")
-            .arg(
-                Arg::new("version")
-                    .long("version")
-                    .short('v')
-                    .help("Release version to show (omit to list the 5 most recent)"),
-            )
-            .arg(
-                Arg::new("base_path")
-                    .long("path")
-                    .short('p')
-                    .help("Path to application root (optional)"),
-            )
+        command(
+            "info",
+            "Show details for a release (or the most recent releases)",
+        )
+        .arg(
+            Arg::new("version")
+                .long("version")
+                .short('v')
+                .help("Release version to show (omit to list the 5 most recent)"),
+        )
+        .arg(
+            Arg::new("base_path")
+                .long("path")
+                .short('p')
+                .help("Path to application root (optional)"),
+        )
     }
 
     fn handler(&self, matches: &ArgMatches) -> Result<()> {
@@ -96,7 +99,10 @@ impl CliCommand for InfoCommand {
                     )?;
                 }
                 if releases.is_empty() {
-                    log_info!(stdout, "No releases yet. Create one with: forklaunch release create --version <version>");
+                    log_info!(
+                        stdout,
+                        "No releases yet. Create one with: forklaunch release create --version <version>"
+                    );
                 }
             }
         }

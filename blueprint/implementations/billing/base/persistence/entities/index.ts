@@ -13,9 +13,9 @@ export const CheckoutSession = defineComplianceEntity({
   properties: {
     id: fp.string().primary().compliance('none'),
     customerId: fp.string().compliance('none'),
-    paymentMethods: fp.enum().array().compliance('none'),
-    currency: fp.enum().compliance('none'),
-    status: fp.enum().compliance('none')
+    paymentMethods: fp.enum<string[]>().array().compliance('none'),
+    currency: fp.enum<string[]>().compliance('none'),
+    status: fp.enum<string[]>().compliance('none')
   }
 });
 
@@ -24,9 +24,9 @@ export const PaymentLink = defineComplianceEntity({
   properties: {
     id: fp.string().primary().compliance('none'),
     amount: fp.double().compliance('none'),
-    paymentMethods: fp.enum().array().compliance('none'),
-    currency: fp.enum().compliance('none'),
-    status: fp.enum().compliance('none')
+    paymentMethods: fp.enum<string[]>().array().compliance('none'),
+    currency: fp.enum<string[]>().compliance('none'),
+    status: fp.enum<string[]>().compliance('none')
   }
 });
 
@@ -37,9 +37,9 @@ export const Plan = defineComplianceEntity({
     name: fp.string().compliance('none'),
     price: fp.double().compliance('none'),
     externalId: fp.string().compliance('none'),
-    cadence: fp.enum().compliance('none'),
-    currency: fp.enum().compliance('none'),
-    billingProvider: fp.enum().nullable().compliance('none')
+    cadence: fp.enum<string[]>().compliance('none'),
+    currency: fp.enum<string[]>().compliance('none'),
+    billingProvider: fp.enum<string[]>().nullable().compliance('none')
   }
 });
 
@@ -49,8 +49,8 @@ export const Subscription = defineComplianceEntity({
     id: fp.string().primary().compliance('none'),
     partyId: fp.string().compliance('none'),
     externalId: fp.string().compliance('none'),
-    partyType: fp.enum().compliance('none'),
-    billingProvider: fp.enum().nullable().compliance('none'),
+    partyType: fp.enum<string[]>().compliance('none'),
+    billingProvider: fp.enum<string[]>().nullable().compliance('none'),
     active: fp.boolean().compliance('none')
   }
 });

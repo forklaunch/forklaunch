@@ -139,14 +139,14 @@ Once selected, commit fully. Do not silently drift.
 If the plan involves creating a new application, module, or project (not modifying an existing one), ask the user which toolchain profile they want:
 
 1. **Modern defaults** — Bun runtime, Biome (format + lint), oxlint, Vitest. Fastest DX, fewer config files. Note: no `better-sqlite` support with Bun.
-2. **Standard stack** — Node/pnpm, Prettier + ESLint, Vitest. Battle-tested, widest ecosystem compatibility.
+2. **Standard stack** — Node/pnpm, Prettier + oxlint, Vitest. Battle-tested, widest ecosystem compatibility.
 3. **Mix** — Let the user pick per category (runtime, formatter, linter, test framework). Present the options table:
 
 | Category   | Standard         | Modern           |
 |------------|------------------|------------------|
 | Runtime    | Node + pnpm      | Bun              |
 | Formatter  | Prettier         | Biome            |
-| Linter     | ESLint           | oxlint (or Biome)|
+| Linter     | oxlint           | oxlint           |
 | HTTP       | Express          | Express          |
 | Test       | Vitest           | Vitest           |
 

@@ -1,0 +1,22 @@
+[package]
+name = "{{{name}}}"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "{{{description}}}"
+
+[dependencies]
+serde_json = {}
+axum = {}
+tokio = { features = ["macros", "rt-multi-thread", "net", "signal"] }
+forklaunch-core = {path = "../../.forklaunch/framework-rs/crates/core", features = ["openapi", "auth", "encryption", "otlp", "postgres", "remote-jwks", "domain", "provider-http"] }
+forklaunch-axum = { path = "../../.forklaunch/framework-rs/crates/axum", features = ["remote-jwks", "mcp"] }
+forklaunch-ecommerce-interface = { path = "../../.forklaunch/blueprint-rs/crates/interfaces/ecommerce-interface" }
+forklaunch-ecommerce-base = { path = "../../.forklaunch/blueprint-rs/crates/implementations/ecommerce/ecommerce-base", features = ["postgres", "worker"] }
+forklaunch-ecommerce-stripe = { path = "../../.forklaunch/blueprint-rs/crates/implementations/ecommerce/ecommerce-stripe", features = ["http"] }
+forklaunch-ecommerce-paypal = { path = "../../.forklaunch/blueprint-rs/crates/implementations/ecommerce/ecommerce-paypal" }
+forklaunch-worker-interface = { path = "../../.forklaunch/blueprint-rs/crates/interfaces/worker-interface" }
+forklaunch-worker-database = { path = "../../.forklaunch/blueprint-rs/crates/implementations/worker/worker-database", features = ["postgres", "runtime", "http-control"] }
+jsonwebtoken = {}
+sqlx = { default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres"] }

@@ -1,0 +1,530 @@
+{
+  "reviewed_at": "2026-10-13T04:55:33Z",
+  "purpose": "Candidate selection and source spot-review; not a complete audit or integration validation",
+  "registry_metadata": [
+    {
+      "name": "loco-rs",
+      "url": "https://crates.io/api/v1/crates/loco-rs",
+      "repository": "https://github.com/loco-rs/loco",
+      "updated_at": "2026-09-24T09:41:34.692609Z",
+      "releases": [
+        {
+          "version": "1.2.0",
+          "created_at": "2026-09-24T09:41:34.692609Z",
+          "rust_version": "1.94"
+        },
+        {
+          "version": "1.1.0",
+          "created_at": "2026-08-16T07:20:05.314328Z",
+          "rust_version": "1.94"
+        },
+        {
+          "version": "1.0.1",
+          "created_at": "2026-07-31T09:36:21.743180Z",
+          "rust_version": "1.94"
+        },
+        {
+          "version": "1.0.0",
+          "created_at": "2026-07-29T10:05:53.736953Z",
+          "rust_version": "1.94"
+        }
+      ]
+    },
+    {
+      "name": "rs-auth",
+      "url": "https://crates.io/api/v1/crates/rs-auth",
+      "repository": "https://github.com/rs-auth/rs-auth",
+      "updated_at": "2026-04-15T06:26:39.863282Z",
+      "releases": [
+        {
+          "version": "0.1.2",
+          "created_at": "2026-04-15T06:26:39.863282Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.1",
+          "created_at": "2026-04-13T07:42:44.685789Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.0",
+          "created_at": "2026-04-10T04:02:44.153329Z",
+          "rust_version": "1.85"
+        }
+      ]
+    },
+    {
+      "name": "rs-auth-core",
+      "url": "https://crates.io/api/v1/crates/rs-auth-core",
+      "repository": "https://github.com/rs-auth/rs-auth",
+      "updated_at": "2026-04-15T06:25:37.937982Z",
+      "releases": [
+        {
+          "version": "0.1.2",
+          "created_at": "2026-04-15T06:25:37.937982Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.1",
+          "created_at": "2026-04-13T07:42:01.902298Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.0",
+          "created_at": "2026-04-10T04:01:13.670170Z",
+          "rust_version": "1.85"
+        }
+      ]
+    },
+    {
+      "name": "rs-auth-axum",
+      "url": "https://crates.io/api/v1/crates/rs-auth-axum",
+      "repository": "https://github.com/rs-auth/rs-auth",
+      "updated_at": "2026-04-15T06:26:17.043766Z",
+      "releases": [
+        {
+          "version": "0.1.2",
+          "created_at": "2026-04-15T06:26:17.043766Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.1",
+          "created_at": "2026-04-13T07:42:20.822335Z",
+          "rust_version": "1.85"
+        },
+        {
+          "version": "0.1.0",
+          "created_at": "2026-04-10T04:02:18.586301Z",
+          "rust_version": "1.85"
+        }
+      ]
+    },
+    {
+      "name": "auth-framework",
+      "url": "https://crates.io/api/v1/crates/auth-framework",
+      "repository": "https://github.com/ciresnave/auth-framework",
+      "updated_at": "2026-10-13T04:18:44.572742Z",
+      "releases": [
+        {
+          "version": "0.6.0-rc48",
+          "created_at": "2026-10-13T04:18:44.572742Z",
+          "rust_version": "1.95"
+        },
+        {
+          "version": "0.6.0-rc47",
+          "created_at": "2026-10-13T03:07:34.774486Z",
+          "rust_version": "1.95"
+        },
+        {
+          "version": "0.6.0-rc46",
+          "created_at": "2026-10-13T00:18:13.931026Z",
+          "rust_version": "1.95"
+        },
+        {
+          "version": "0.5.0-rc31",
+          "created_at": "2026-10-13T00:18:08.029926Z",
+          "rust_version": "1.88"
+        }
+      ]
+    },
+    {
+      "name": "tower-sessions",
+      "url": "https://crates.io/api/v1/crates/tower-sessions",
+      "repository": "https://github.com/maxcountryman/tower-sessions",
+      "updated_at": "2026-02-01T01:52:39.750984Z",
+      "releases": [
+        {
+          "version": "0.15.0",
+          "created_at": "2026-02-01T01:52:39.750984Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.14.0",
+          "created_at": "2025-01-01T17:45:12.321985Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.13.0",
+          "created_at": "2024-09-03T16:54:40.675588Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.12.3",
+          "created_at": "2024-08-15T22:37:41.154140Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "axum-login",
+      "url": "https://crates.io/api/v1/crates/axum-login",
+      "repository": "https://github.com/maxcountryman/axum-login",
+      "updated_at": "2025-07-20T15:23:10.473411Z",
+      "releases": [
+        {
+          "version": "0.18.0",
+          "created_at": "2025-07-20T15:23:10.473411Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.17.0",
+          "created_at": "2025-01-05T17:49:49.916936Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.16.0",
+          "created_at": "2024-09-04T22:33:16.486073Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.15.3",
+          "created_at": "2024-06-10T17:15:18.094630Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "axum_session_auth",
+      "url": "https://crates.io/api/v1/crates/axum_session_auth",
+      "repository": "https://github.com/AscendingCreations/AxumSessionAuth",
+      "updated_at": "2026-08-10T19:34:49.042338Z",
+      "releases": [
+        {
+          "version": "0.21.0",
+          "created_at": "2026-08-10T19:34:49.042338Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.20.0",
+          "created_at": "2026-04-30T16:12:53.470932Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.19.0",
+          "created_at": "2026-03-17T20:27:53.452475Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.18.0",
+          "created_at": "2026-02-03T21:23:43.613198Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "openidconnect",
+      "url": "https://crates.io/api/v1/crates/openidconnect",
+      "repository": "https://github.com/ramosbugs/openidconnect-rs",
+      "updated_at": "2025-07-06T22:08:11.936749Z",
+      "releases": [
+        {
+          "version": "4.0.1",
+          "created_at": "2025-07-06T22:08:11.936749Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "4.0.0",
+          "created_at": "2025-01-21T00:53:10.525868Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "4.0.0-rc.1",
+          "created_at": "2024-09-17T03:29:14.464621Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "4.0.0-alpha.2",
+          "created_at": "2024-06-01T20:59:20.717296Z",
+          "rust_version": "1.65"
+        }
+      ]
+    },
+    {
+      "name": "oauth2",
+      "url": "https://crates.io/api/v1/crates/oauth2",
+      "repository": "https://github.com/ramosbugs/oauth2-rs",
+      "updated_at": "2025-01-21T00:40:54.118712Z",
+      "releases": [
+        {
+          "version": "5.0.0",
+          "created_at": "2025-01-21T00:40:54.118712Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "5.0.0-rc.1",
+          "created_at": "2024-09-16T21:07:08.489014Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "5.0.0-alpha.4",
+          "created_at": "2024-04-12T01:11:32.019669Z",
+          "rust_version": "1.65"
+        },
+        {
+          "version": "5.0.0-alpha.3",
+          "created_at": "2024-03-21T01:44:28.022783Z",
+          "rust_version": "1.65"
+        }
+      ]
+    },
+    {
+      "name": "oauth-axum",
+      "url": "https://crates.io/api/v1/crates/oauth-axum",
+      "repository": null,
+      "updated_at": "2024-12-18T21:32:33.353800Z",
+      "releases": [
+        {
+          "version": "0.1.4",
+          "created_at": "2024-12-18T21:32:33.353800Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.1.3",
+          "created_at": "2024-09-13T10:24:40.737395Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.1.2",
+          "created_at": "2024-05-10T10:22:24.839621Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.1.1",
+          "created_at": "2024-05-06T12:37:00.667060Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "webgates",
+      "url": "https://crates.io/api/v1/crates/webgates",
+      "repository": "https://github.com/emirror-de/webgates",
+      "updated_at": "2026-08-15T18:30:00.662154Z",
+      "releases": [
+        {
+          "version": "1.2.0",
+          "created_at": "2026-08-15T18:30:00.662154Z",
+          "rust_version": "1.94"
+        },
+        {
+          "version": "1.1.0",
+          "created_at": "2026-08-10T15:16:10.162232Z",
+          "rust_version": "1.94"
+        },
+        {
+          "version": "1.0.0",
+          "created_at": "2026-05-13T07:33:07.735659Z",
+          "rust_version": "1.91"
+        },
+        {
+          "version": "0.0.0",
+          "created_at": "2026-02-11T16:51:31.586070Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "authkestra",
+      "url": "https://crates.io/api/v1/crates/authkestra",
+      "repository": "https://github.com/marcjazz/authkestra",
+      "updated_at": "2026-09-26T07:41:36.846407Z",
+      "releases": [
+        {
+          "version": "0.13.1",
+          "created_at": "2026-09-26T07:41:36.846407Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.13.0",
+          "created_at": "2026-09-23T11:11:59.746800Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.12.0",
+          "created_at": "2026-09-21T17:05:27.373083Z",
+          "rust_version": null
+        },
+        {
+          "version": "0.11.1",
+          "created_at": "2026-09-15T13:17:18.906720Z",
+          "rust_version": null
+        }
+      ]
+    },
+    {
+      "name": "webauthn-rs",
+      "url": "https://crates.io/api/v1/crates/webauthn-rs",
+      "repository": "https://github.com/kanidm/webauthn-rs",
+      "updated_at": "2026-04-30T02:03:55.653656Z",
+      "releases": [
+        {
+          "version": "0.6.1-dev",
+          "created_at": "2026-04-30T02:03:55.653656Z",
+          "rust_version": "1.88"
+        },
+        {
+          "version": "0.5.5",
+          "created_at": "2026-04-30T01:56:25.731940Z",
+          "rust_version": "1.88"
+        },
+        {
+          "version": "0.6.0-dev",
+          "created_at": "2026-03-20T00:58:29.909234Z",
+          "rust_version": "1.88"
+        },
+        {
+          "version": "0.5.4",
+          "created_at": "2025-12-10T05:49:37.303581Z",
+          "rust_version": "1.85"
+        }
+      ]
+    }
+  ],
+  "source_checksums": [
+    {
+      "package": "loco-rs-1.2.0",
+      "path": "Cargo.toml",
+      "sha256": "081e762ab3784ecb8e82bb238006c40091709ba45aa653fd70f9fbff6a3fbbb3"
+    },
+    {
+      "package": "loco-rs-1.2.0",
+      "path": "src/hash.rs",
+      "sha256": "0cd5b793902946d6a07ed7f27792868584bd78342a12fcf8609c2edc4153df24"
+    },
+    {
+      "package": "rs-auth-core-0.1.2",
+      "path": "Cargo.toml",
+      "sha256": "2a861b08f58f56baa78095c45491f522dd48eaa1f32003050beaec5e47d42056"
+    },
+    {
+      "package": "rs-auth-core-0.1.2",
+      "path": "src/config.rs",
+      "sha256": "0f299b423b5a4e4e5f1e303f5f07a895866d53f6bb5f8f871c580dd1a12217d1"
+    },
+    {
+      "package": "rs-auth-core-0.1.2",
+      "path": "src/crypto/hash.rs",
+      "sha256": "6edccfdc49d3b31f1c372aac087dab95fd937e1d882d49f6ac807543756aee1e"
+    },
+    {
+      "package": "rs-auth-core-0.1.2",
+      "path": "src/service.rs",
+      "sha256": "ceb89ee95069d7ce741f83c383e3975707d258987239cbbcaa1b4b895baa97ce"
+    },
+    {
+      "package": "rs-auth-core-0.1.2",
+      "path": "src/oauth/google.rs",
+      "sha256": "e43f4079d1aaaa56f50a4ca80fb4def79b5a9d64b23e0c155582e87db5aa8cc1"
+    },
+    {
+      "package": "rs-auth-axum-0.1.2",
+      "path": "Cargo.toml",
+      "sha256": "a2c829d76b7640b96c996ef5c80cb2b5af1a001739e62019db3bc9a62826e6b4"
+    },
+    {
+      "package": "rs-auth-axum-0.1.2",
+      "path": "src/handlers/oauth.rs",
+      "sha256": "b51349528173df6f55977baf037164c3b9438fff21c09d6fb2b17fad1b1b7629"
+    },
+    {
+      "package": "auth-framework-0.6.0-rc48",
+      "path": "Cargo.toml",
+      "sha256": "22b105398b5b7d3f7874d0036f5734aaba08b3c62e2209da2ef0be1393f3e132"
+    },
+    {
+      "package": "auth-framework-0.6.0-rc48",
+      "path": "src/utils/password.rs",
+      "sha256": "895750b8b5ae2d6771fd418c9c9ae74e0e57020ed891e4e2af98b7835eed8473"
+    },
+    {
+      "package": "tower-sessions-0.15.0",
+      "path": "Cargo.toml",
+      "sha256": "a5525f9f6d22f47b333aa4725e795c3dfd0d0f84db302a26d6f5885e2b5e19ec"
+    },
+    {
+      "package": "tower-sessions-0.15.0",
+      "path": "src/service.rs",
+      "sha256": "1a1fc8b18e2961986e2c2462f39a032528569869dcacb040d9428037e843d8a5"
+    },
+    {
+      "package": "axum-login-0.18.0",
+      "path": "Cargo.toml",
+      "sha256": "1a1c49bada487b39e3afdc3397d7ae4687d1d06e97aafe5300c7c29849cbd249"
+    },
+    {
+      "package": "axum-login-0.18.0",
+      "path": "src/lib.rs",
+      "sha256": "28d31f2d0d525d5712cdd535dcf4f66ff14559c7c1c0bdbc0a9e7f0cbc33ba03"
+    },
+    {
+      "package": "axum_session_auth-0.21.0",
+      "path": "Cargo.toml",
+      "sha256": "5c748a58b66a11804011fa258db0db184e80c9158bbd8231751df4d97a2c0963"
+    },
+    {
+      "package": "axum_session_auth-0.21.0",
+      "path": "README.md",
+      "sha256": "7e30b67b1a9c5ee6b5e4664e613696b25cea1d24fc6eed87a0af4d09812e46f4"
+    },
+    {
+      "package": "openidconnect-4.0.1",
+      "path": "Cargo.toml",
+      "sha256": "213f8d50eeb9f65b4f53b9470f17bde8cfccdd23d5a9b2633dd1534d5a0db1bc"
+    },
+    {
+      "package": "openidconnect-4.0.1",
+      "path": "src/lib.rs",
+      "sha256": "ef13b79cd4bb1f6ffa5c7e9954a1f63f4e25ecb64b1a8f8f7a3eca23178246d7"
+    },
+    {
+      "package": "oauth2-5.0.0",
+      "path": "Cargo.toml",
+      "sha256": "534e3ece9c871d8e93f2695db3e2a2a9e70a8f7ee2b4b8b3f451c059270814e4"
+    },
+    {
+      "package": "oauth2-5.0.0",
+      "path": "src/lib.rs",
+      "sha256": "584e3a02899a65cf7c0b0e9eb03422700a2b43a3bd6987ab2db3906152ebcf62"
+    },
+    {
+      "package": "oauth-axum-0.1.4",
+      "path": "Cargo.toml",
+      "sha256": "17153e19115fe7df022e836118b31a92562bab7884a51b1f9f504b1bb94d024b"
+    },
+    {
+      "package": "oauth-axum-0.1.4",
+      "path": "README.md",
+      "sha256": "a9300cc67780cfd41cd26c3ad46e2931b2bd1713db6d7196211eb00c13c9c5b7"
+    },
+    {
+      "package": "webgates-1.2.0",
+      "path": "Cargo.toml",
+      "sha256": "0ec91c1b1b32946ffc7b77d48a550e2409b30e949bc34719773aa1fe537cf421"
+    },
+    {
+      "package": "webgates-1.2.0",
+      "path": "README.md",
+      "sha256": "55c57b630be8fa9f6d6eb6d6b66e3c7c62cfbb9e90c6d789ee90842eb1612dd8"
+    },
+    {
+      "package": "authkestra-0.13.1",
+      "path": "Cargo.toml",
+      "sha256": "090c75b8788f5ec4a3d23a0e3b3fcc88241709376e898cdad0a515a2ddbc30f2"
+    },
+    {
+      "package": "authkestra-0.13.1",
+      "path": "README.md",
+      "sha256": "53155cb5f065d344f248ca423aece592500690b36ad721121192533db8e9fa68"
+    },
+    {
+      "package": "webauthn-rs-0.5.5",
+      "path": "Cargo.toml",
+      "sha256": "f8b01b4e390d4d955f370a92bd96fa3549117e4fdf0358c4f550d0f01167fb51"
+    },
+    {
+      "package": "webauthn-rs-0.5.5",
+      "path": "src/lib.rs",
+      "sha256": "c5299f99d8c11e4f47848b2b13408f361201065cd7118db6fbcfe8dca46703f9"
+    }
+  ]
+}

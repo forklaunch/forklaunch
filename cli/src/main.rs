@@ -1,14 +1,15 @@
+use account::AccountCommand;
 use alerts::AlertsCommand;
 use analyze::AnalyzeCommand;
-use score::ScoreCommand;
 use anyhow::Result;
+use app::AppCommand;
 use change::ChangeCommand;
 use clap::{ArgMatches, Command, command};
 use cloud_account::CloudAccountCommand;
 use compliance::ComplianceCommand;
-use data::DataCommand;
 use config::ConfigCommand;
 use context::ContextCommand;
+use data::DataCommand;
 use delete::DeleteCommand;
 use depcheck::DepcheckCommand;
 use deploy::DeployCommand;
@@ -19,7 +20,6 @@ use environment::EnvironmentCommand;
 use github::GithubCommand;
 use infra::InfraCommand;
 use init::InitCommand;
-use app::AppCommand;
 use integrate::IntegrateCommand;
 use login::LoginCommand;
 use logout::LogoutCommand;
@@ -27,7 +27,9 @@ use managed::ManagedCommand;
 use notifiers::NotifiersCommand;
 use observe::ObserveCommand;
 use openapi::OpenApiCommand;
+use org::OrgCommand;
 use release::ReleaseCommand;
+use score::ScoreCommand;
 use sync::SyncCommand;
 use version::VersionCommand;
 use whoami::WhoAmICommand;
@@ -37,20 +39,22 @@ use crate::sdk::SdkCommand;
 
 mod alerts;
 mod analyze;
-mod score;
 mod constants;
+mod score;
 #[macro_use]
 mod core;
+mod account;
 mod app;
 mod change;
 mod cloud_account;
 mod compliance;
 mod config;
-mod data;
 mod context;
+mod data;
 mod delete;
 mod depcheck;
 mod deploy;
+mod dev;
 mod dlq;
 mod drift;
 mod eject;
@@ -62,9 +66,11 @@ mod integrate;
 mod login;
 mod logout;
 mod managed;
+mod model;
 mod notifiers;
 mod observe;
 mod openapi;
+mod org;
 mod prompt;
 mod release;
 mod sdk;
@@ -85,6 +91,7 @@ fn main() -> Result<()> {
     let analyze = AnalyzeCommand::new();
     let score = ScoreCommand::new();
     let change = ChangeCommand::new();
+    let account = AccountCommand::new();
     let cloud_account = CloudAccountCommand::new();
     let compliance = ComplianceCommand::new();
     let data = DataCommand::new();
@@ -93,6 +100,7 @@ fn main() -> Result<()> {
     let delete = DeleteCommand::new();
     let depcheck = DepcheckCommand::new();
     let deploy = DeployCommand::new();
+    let dev = dev::DevCommand;
     let dlq = DlqCommand::new();
     let drift = DriftCommand::new();
     let eject = EjectCommand::new();
@@ -102,11 +110,13 @@ fn main() -> Result<()> {
     let app = AppCommand::new();
     let integrate = IntegrateCommand::new();
     let login = LoginCommand::new();
+    let model = model::ModelCommand;
     let logout = LogoutCommand::new();
     let managed = ManagedCommand::new();
     let notifiers = NotifiersCommand::new();
     let observe = ObserveCommand::new();
     let openapi = OpenApiCommand::new();
+    let org = OrgCommand::new();
     let release = ReleaseCommand::new();
     let sdk = SdkCommand::new();
     let whoami = WhoAmICommand::new();
@@ -118,6 +128,17 @@ fn main() -> Result<()> {
         .propagate_version(true)
         .arg_required_else_help(true)
         .subcommand_required(true)
+        .arg(
+            clap::Arg::new(crate::core::accounts::ACCOUNT_FLAG)
+                .long("account")
+                .global(true)
+                .value_name("NAME")
+                .help(
+                    "Run as this account from the keyring (see `forklaunch account`). \
+                     Also settable with FORKLAUNCH_ACCOUNT",
+                ),
+        )
+        .subcommand(account.command())
         .subcommand(alerts.command())
         .subcommand(app.command())
         .subcommand(init.command())
@@ -133,6 +154,7 @@ fn main() -> Result<()> {
         .subcommand(config.command())
         .subcommand(context.command())
         .subcommand(deploy.command())
+        .subcommand(dev.command())
         .subcommand(dlq.command())
         .subcommand(drift.command())
         .subcommand(environment.command())
@@ -140,8 +162,10 @@ fn main() -> Result<()> {
         .subcommand(github.command())
         .subcommand(integrate.command())
         .subcommand(openapi.command())
+        .subcommand(org.command())
         .subcommand(release.command())
         .subcommand(login.command())
+        .subcommand(model.command())
         .subcommand(logout.command())
         .subcommand(managed.command())
         .subcommand(notifiers.command())
@@ -154,10 +178,14 @@ fn main() -> Result<()> {
         .get_matches();
 
     if let Some((cmd, sub_matches)) = matches.subcommand() {
+        // Before anything reads a token, and before a pinned binary is
+        // re-executed with the account this invocation resolved.
+        crate::core::accounts::init_selection(&matches, sub_matches)?;
         crate::core::version_check::precheck_version(sub_matches, cmd)?;
     }
 
     let result = match matches.subcommand() {
+        Some(("account", sub_matches)) => account.handler(sub_matches),
         Some(("alerts", sub_matches)) => alerts.handler(sub_matches),
         Some(("app", sub_matches)) => app.handler(sub_matches),
         Some(("init", sub_matches)) => init.handler(sub_matches),
@@ -172,6 +200,7 @@ fn main() -> Result<()> {
         Some(("delete", sub_matches)) => delete.handler(sub_matches),
         Some(("depcheck", sub_matches)) => depcheck.handler(sub_matches),
         Some(("deploy", sub_matches)) => deploy.handler(sub_matches),
+        Some(("dev", sub_matches)) => dev.handler(sub_matches),
         Some(("dlq", sub_matches)) => dlq.handler(sub_matches),
         Some(("drift", sub_matches)) => drift.handler(sub_matches),
         Some(("eject", sub_matches)) => eject.handler(sub_matches),
@@ -180,8 +209,10 @@ fn main() -> Result<()> {
         Some(("github", sub_matches)) => github.handler(sub_matches),
         Some(("integrate", sub_matches)) => integrate.handler(sub_matches),
         Some(("openapi", sub_matches)) => openapi.handler(sub_matches),
+        Some(("org", sub_matches)) => org.handler(sub_matches),
         Some(("release", sub_matches)) => release.handler(sub_matches),
         Some(("login", sub_matches)) => login.handler(sub_matches),
+        Some(("model", sub_matches)) => model.handler(sub_matches),
         Some(("logout", sub_matches)) => logout.handler(sub_matches),
         Some(("managed", sub_matches)) => managed.handler(sub_matches),
         Some(("notifiers", sub_matches)) => notifiers.handler(sub_matches),
@@ -196,7 +227,16 @@ fn main() -> Result<()> {
 
     match result {
         Ok(_) => result,
-        // TODO: make sure that the error text returns in red color
-        Err(error) => Err(error),
+        Err(error) => {
+            // An outcome that is not a failure (a deploy parked for approval, a
+            // wait the CLI gave up on) reports its own exit code so a script can
+            // tell it from a real error; everything else stays exit 1.
+            let code = crate::core::exit_code::exit_code_for(&error);
+            if code == 1 {
+                return Err(error);
+            }
+            eprintln!("{}", error);
+            std::process::exit(code);
+        }
     }
 }

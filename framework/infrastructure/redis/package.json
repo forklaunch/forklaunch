@@ -1,6 +1,6 @@
 {
   "name": "@forklaunch/infrastructure-redis",
-  "version": "1.4.14",
+  "version": "1.5.0",
   "description": "Redis infrastructure for ForkLaunch components.",
   "homepage": "https://github.com/forklaunch/forklaunch-js#readme",
   "bugs": {
@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forklaunch/forklaunch-js.git"
+    "url": "git+https://github.com/forklaunch/forklaunch.git"
   },
   "license": "MIT",
   "author": "Rohin Bhargava",
@@ -33,7 +33,6 @@
   "scripts": {
     "build": "tsc --noEmit && tsup ./index.ts --format cjs,esm --no-splitting --tsconfig tsconfig.json --out-dir lib --clean --sourcemap && tsc -p tsconfig.build.json --emitDeclarationOnly && if [ -f eject-infrastructure-package.bash ]; then pnpm package:eject; fi",
     "clean": "rm -rf lib pnpm.lock.yaml node_modules",
-    "docs": "typedoc --out docs *",
     "format": "prettier --ignore-path=.prettierignore --config .prettierrc '**/*.{ts,tsx,json}' --write",
     "lint": "eslint . -c eslint.config.mjs",
     "lint:fix": "eslint . -c eslint.config.mjs --fix",
@@ -45,20 +44,16 @@
   "dependencies": {
     "@forklaunch/common": "workspace:^",
     "@forklaunch/core": "workspace:^",
-    "redis": "^6.2.1"
+    "redis": "^6.3.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/jest": "^30.0.0",
-    "globals": "^17.12.0",
-    "jest": "^30.5.1",
-    "prettier": "^3.9.6",
-    "testcontainers": "^12.1.0",
-    "ts-jest": "^29.4.12",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "testcontainers": "^12.2.2",
     "ts-node": "^10.9.2",
-    "tsup": "^8.5.1",
-    "typedoc": "^0.28.20",
+    "tsup": "^9.0.0",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.70.0"
+    "typescript-eslint": "^8.73.0"
   }
 }

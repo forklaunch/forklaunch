@@ -4,7 +4,7 @@ import { BaseSmsEntities } from './baseSmsEntity.types';
 
 export type SmsMappers<
   StatusEnum,
-  MapperEntities extends BaseSmsEntities<StatusEnum>,
+  MapperEntities extends BaseSmsEntities,
   MapperDomains extends BaseSmsDtos<StatusEnum>
 > = {
   SmsRecordMapper: {

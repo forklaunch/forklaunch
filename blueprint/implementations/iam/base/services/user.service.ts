@@ -21,11 +21,10 @@ import { UserMappers } from '../domain/types/user.mapper.types';
 
 export class BaseUserService<
   SchemaValidator extends AnySchemaValidator,
-  OrganizationStatus = unknown,
+  OrganizationStatus extends Record<string, string> = Record<string, string>,
   MapperEntities extends UserEntities = UserEntities,
   MapperDomains extends UserDtos = UserDtos
-> implements UserService
-{
+> implements UserService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -80,7 +79,7 @@ export class BaseUserService<
     );
 
     if (em) {
-      await em.persist(user);
+      em.persist(user);
     } else {
       await this.em.persist(user).flush();
     }
@@ -108,7 +107,7 @@ export class BaseUserService<
     );
 
     if (em) {
-      await em.persist(users);
+      em.persist(users);
     } else {
       await this.em.persist(users).flush();
     }
@@ -161,11 +160,14 @@ export class BaseUserService<
       this.openTelemetryCollector.info('Getting batch users', idsDto);
     }
 
+    // FilterQuery admits non-object forms, so rest syntax needs the object view.
+    const { ids, ...filters } = idsDto as IdsDto & Record<string, unknown>;
     return Promise.all(
       (
         await (em ?? this.em).find(
           this.mappers.UserMapper.entity as typeof User,
-          idsDto,
+          // Same query shape the caller passed, with ids as an $in filter.
+          { ...filters, id: { $in: ids } } as unknown as typeof idsDto,
           {
             populate: ['id', '*']
           }
@@ -194,7 +196,7 @@ export class BaseUserService<
     );
 
     if (em) {
-      await em.persist(user);
+      em.persist(user);
     } else {
       await this.em.persist(user).flush();
     }
@@ -222,7 +224,7 @@ export class BaseUserService<
     );
 
     if (em) {
-      await em.persist(users);
+      em.persist(users);
     } else {
       await this.em.persist(users).flush();
     }
@@ -262,9 +264,10 @@ export class BaseUserService<
       this.openTelemetryCollector.info('Deleting batch users', idsDto);
     }
 
+    const { ids, ...filters } = idsDto;
     const filter = {
-      ...idsDto,
-      id: { $in: idsDto.ids },
+      ...filters,
+      id: { $in: ids },
       ...(idsDto.organization && {
         organization: idsDto.organization.id
       })

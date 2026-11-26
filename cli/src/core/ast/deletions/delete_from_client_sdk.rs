@@ -1,7 +1,7 @@
 use anyhow::Result;
 use convert_case::{Case, Casing};
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{BindingPatternKind, Declaration, Program, Statement};
+use oxc_ast::ast::{BindingPattern, Declaration, Program, Statement};
 
 use crate::core::ast::deletions::delete_import_statement::delete_import_statement;
 
@@ -14,18 +14,18 @@ fn delete_from_client_sdk_function<'a>(
 
     for (index, stmt) in app_program_ast.body.iter().enumerate() {
         let export = match stmt {
-            Statement::ExportNamedDeclaration(export) => export,
+            Statement::ExportDeclaration(export) => export,
             _ => continue,
         };
 
         let var_decl = match &export.declaration {
-            Some(Declaration::VariableDeclaration(var_decl)) => var_decl,
+            Declaration::VariableDeclaration(var_decl) => var_decl,
             _ => continue,
         };
 
         if let Some(declarator) = var_decl.declarations.first() {
-            if let BindingPatternKind::BindingIdentifier(var_name) = &declarator.id.kind {
-                if var_name.name == format!("{}SdkClient", camel_case_name) {
+            if let BindingPattern::BindingIdentifier(var_name) = &declarator.id {
+                if var_name.name == format!("{}SdkClient", camel_case_name).as_str() {
                     statements_to_remove.push(index);
                 }
             }

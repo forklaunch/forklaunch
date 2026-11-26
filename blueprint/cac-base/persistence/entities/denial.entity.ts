@@ -1,0 +1,56 @@
+import { sqlBaseProperties } from '@forklaunch/blueprint-core';
+import {
+  defineComplianceEntity,
+  fp,
+  RetentionDuration
+} from '@forklaunch/core/persistence';
+import type { InferEntity } from '@mikro-orm/core';
+import { DenialReasonCategory } from '../../domain/enum/denialReasonCategory.enum';
+import { WorklistStatus } from '../../domain/enum/worklistStatus.enum';
+import { Claim } from './claim.entity';
+
+// Denial worklist entry — one row per CARC/RARC-coded rejection caught by
+// the scrubbing engine (§6). This *is* the report: cac-base never submits
+// claims or receives real remittances itself (§8), so every Denial row
+// comes from ScrubbingService, not from a payer response.
+export const Denial = defineComplianceEntity({
+  name: 'Denial',
+  properties: {
+    ...sqlBaseProperties,
+    organizationId: fp.uuid().compliance('none'),
+    claim: () => fp.manyToOne(Claim).deleteRule('cascade').updateRule('cascade'),
+    carcCode: fp.string().compliance('none'),
+    category: fp.enum(() => DenialReasonCategory).compliance('none'),
+    // What the scrubbing engine found, in words a coder can act on, and the
+    // charge line and code it is about: several denials on one claim often
+    // share a CARC (CO-16 especially) and are otherwise indistinguishable.
+    // 'none' like the code columns on Charge and Diagnosis: the text is
+    // built only from line positions, unit counts and the claim's own
+    // procedure/diagnosis codes, never from a patient field.
+    message: fp.text().compliance('none'),
+    // 1-based position among the encounter's charges in entry order
+    // (Charge.lineNumber, falling back to createdAt); null
+    // when the finding is not about one charge line (a diagnosis, a unit
+    // cap summed over lines, a claim with no lines).
+    chargeLine: fp.integer().nullable().compliance('none'),
+    // The procedure or diagnosis code the finding is about, normalized;
+    // null when there is none (a blank field, for instance).
+    code: fp.string().nullable().compliance('none'),
+    worklistStatus: fp
+      .enum(() => WorklistStatus)
+      .default(WorklistStatus.OPEN)
+      .compliance('none'),
+    resolvedAt: fp.datetime().nullable().compliance('none')
+  },
+  // HIPAA §164.530(j) — denial worklist records purged after 7 years. This
+  // entity carries no PII/PHI fields of its own (patient identity lives on
+  // Claim/Patient, each with their own retention posture), so 'delete' is
+  // the correct action here rather than 'anonymize', which would be a no-op
+  // with nothing to null out. See plan/cac/MEDICAL-CODING-IMPLEMENTATION-PLAN.md §4.
+  retention: {
+    duration: RetentionDuration.years(7),
+    action: 'delete'
+  }
+});
+
+export type Denial = InferEntity<typeof Denial>;

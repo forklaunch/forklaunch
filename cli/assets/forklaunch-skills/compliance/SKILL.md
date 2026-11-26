@@ -1,6 +1,6 @@
 ---
 name: compliance
-description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, encryption, tenant isolation, DPIA."
+description: "Compliance: fp property builder, defineComplianceEntity, access levels, audit CLI, compliance documents (docs CLI), encryption, tenant isolation, DPIA."
 user-invokable: true
 ---
 
@@ -18,10 +18,62 @@ Use when the user asks about:
 - Tenant isolation (MikroORM filters, PostgreSQL RLS)
 - Audit logging
 - The `forklaunch compliance audit` CLI command
+- Compliance documents for audits and security reviews (`forklaunch compliance docs`)
 - Compliance reports in the portal
 - GDPR erasure/export endpoints
 - Data residency enforcement
 - Secrets management
+
+## Rust Storage Declarations and Audit Coverage
+
+Generated health services explicitly declare that they own no durable storage in
+`persistence/compliance_schema.rs`. Durable worker hooks declare the actual sealed
+event and public routing context; they do not classify every broker scheduler,
+lease or dead-letter column. Both emit `.forklaunch/compliance.json` in the crate
+during compilation and regenerate a deleted artifact on the next compile. It is a
+git-ignored build output; edit the typed declarations, never the JSON.
+
+Built-in modules copy canonical declared logical members from their TS blueprint
+policy into the application-owned declaration hook. Those lists are partial:
+inherited fields, relationships, provider control tables and unclassified
+extensions are not silently marked `none`. Existing explicit TS `none` policy is
+preserved even where the Rust adapter encrypts the value. Encryption settings do
+not invent a privacy classification. Review the source hook when changing policy.
+CAC currently uses a mock code provider and explicitly owns no durable storage.
+The lightweight `forklaunch-core` build feature is `compliance-artifact`; it does
+not require runtime encryption or database dependencies.
+
+
+For Rust projects, use strict `ComplianceMetadata` storage declarations and the
+framework's protected-member adapters. The TypeScript property-builder and
+MikroORM examples below do not apply to Rust.
+
+The Notes build hook generates `.forklaunch/compliance.json` in the service crate
+from the same storage declarations used by its protected-field adapter, and
+`forklaunch compliance validate-artifacts` reads it there (older crate-root
+`compliance.json` files are still accepted; `forklaunch sync` moves them). Each member has
+an explicit `none`, `pii`, `phi`, or `pci` classification and storage mapping.
+This artifact describes declared policy; it does not certify encryption,
+tenancy, source freshness, key rotation, retention, export, or erasure.
+
+```sh
+cargo check --workspace
+forklaunch compliance validate-artifacts --path . --json
+forklaunch compliance audit --path . --offline --json
+```
+
+`validate-artifacts` discovers Rust service/worker artifacts using manifest
+`cratePath` entries, validates their bounded versioned schema and fails when an
+artifact is missing or invalid. A missing exporter is unfinished integration;
+do not create an empty artifact merely to make the check pass. An intentionally
+empty declaration set still provides no runtime compliance evidence.
+
+`audit` includes Rust declarations separately under `rustDeclarations`, with
+explicit unknown encryption, tenancy and lifecycle coverage. `--offline` uses
+cached dependency advisories and sends no platform report. Rust applications
+stay in local reporting because platform scoring cannot currently represent
+this declared-only coverage. Do not turn successful artifact validation into a
+compliance score or an `encrypted: true` claim.
 
 ## Architecture Overview
 
@@ -98,7 +150,61 @@ Do not write `fp.number()` unless the generated persistence package actually exp
 - `defineEntity` — No compliance validation. Only for framework internals or third-party entities. Do not import `defineEntity` from `@forklaunch/core/persistence` in Studio-generated services; recent generated persistence packages do not export it there.
 - For catalog/reference data with no sensitive fields, still use `defineComplianceEntity` and classify scalar fields as `"none"`.
 
-The return type of `defineComplianceEntity` is identical to `defineEntity` — the `ClassifiedProperty` wrapper is stripped at the type level. MikroORM sees the same entity structure.
+The return type of `defineComplianceEntity` matches `defineEntity`, except that every `pii`, `phi` and `pci` property is typed `CompliantField<T, level>` (see below).
+
+## Compliant Fields (pii / phi / pci)
+
+A `pii`, `phi` or `pci` property is **not its value**. It loads as a `CompliantField`, and the only ways to the value are:
+
+| Read | Returns | Use it for |
+| --- | --- | --- |
+| `user.email.deanon` | the plaintext (`string`, `Date`, …) | business logic, your own API responses, BAA-covered providers. Every read is reported to `onComplianceAccess` listeners |
+| `user.email.anon` | an `Anon` (`.value` is a de-identified string) | logs, analytics, non-BAA providers, anything that must not carry protected data |
+
+There are no `toString` / `toJSON` / inspect overloads: `` `${user.email}` `` prints `[object Object]` and `JSON.stringify(user)` prints `"email":{}`. Always write `.deanon` or `.anon` explicitly.
+
+```typescript
+const User = defineComplianceEntity({
+  name: 'User',
+  properties: {
+    id: fp.uuid().primary().compliance('none'),
+    // queryable: allows where / $in / $ne / $nin via a blind index (email_idx)
+    email: fp.string().unique().compliance('pii', { queryable: true, normalize: 'lowercase' }),
+    name: fp.string().compliance('pii'),                  // anon: random token
+    dob: fp.datetime().compliance('phi'),                 // anon: year
+    zip: fp.string().compliance('pii', { anon: 'zip3' }), // anon: 3-digit ZIP (000 if sparse)
+  },
+});
+
+// Writing takes plain values: em.create and em.assign wrap them.
+const user = em.create(User, { id, email: 'Ada@Example.com', name: 'Ada', dob, zip: '94110' });
+em.assign(user, { name: 'Ada Lovelace' });
+
+// Reading is explicit.
+const dto = { email: user.email.deanon, name: user.name.deanon };
+logger.info('signed up', { user: user.name.anon.value }); // tok_...
+
+// Querying takes plain values, for queryable fields only (equality only).
+await em.findOne(User, { email: 'ada@example.com' });
+await em.find(User, { email: { $in: emails } });
+```
+
+Rules:
+
+- **Read with `.deanon` / `.anon`**, never the bare property. A bare property in a string, comparison or DTO is a type error.
+- **Spreading an entity drops compliant fields** (they live on the prototype). In a `toDto` mapper write `({ ...deanon(entity), ... })` — `deanon` from `@forklaunch/core/persistence` copies the entity with every compliant field revealed (and reported).
+- **Write with plain values through `em.create` / `em.assign`.** Direct assignment (`user.name = 'x'`) works at runtime but is a type error; use `em.assign`.
+- **`where` needs `{ queryable: true }`** on the property. It adds a `<column>_idx` column (keyed HMAC, per tenant); only `$eq`, `$ne`, `$in`, `$nin` work. `$like`, ranges and sorting on protected fields are refused: they would need the plaintext. `.unique()` on a queryable field applies to the index.
+- **`anon` strategies**: `token` (default for strings; random, stored with the value), `year` (default for dates), `zip3`, `last4`, `redact` (default for numbers, json, enums, arrays).
+- **Decryption is lazy, under the loading tenant**: loading an entity never decrypts. `.deanon` decrypts on first read with the key of the tenant bound when the row was loaded (the `wrapEmWithTenantContext` entity manager's tenant), or when the value was assigned. It works after the query returns, with nothing bound, so DTO mappers need no `withEncryptionContext` wrapper. Do not bind the tenant from a request argument to read a row: with a different tenant bound, `.deanon` throws `TenantMismatchError`. A row loaded with no tenant bound (a raw `orm.em.fork()`) still needs one bound at read time.
+- **No encryptor, no write**: writing a compliant field without `registerEncryptor()` throws; values are never stored in plaintext.
+- **Better Auth**: `@forklaunch/better-auth-mikro-orm-fork` >= 0.5.10 hands Better Auth `.deanon` values; older adapters return `{}` for `pci` account columns and break sign-in.
+
+### Upgrading an existing app
+
+1. `npx -y -p typescript@5 -p @forklaunch/core forklaunch-migrate-compliant-fields` rewrites bare reads to `.deanon`, entity spreads to `...deanon(entity)`, and lists `where` clauses on fields that need `{ queryable: true }`. Hand-written types that restate an entity's field types (shape entities, DTO interfaces) must use the same classification as the real entity.
+2. Add `{ queryable: true }` where listed, then generate a migration (it adds `<column>_idx` columns and moves unique constraints onto them).
+3. Deploy, then run `reencryptEncryptedColumns()` once: it seals existing values into the `v4` envelope (random IV, anon token) and writes the blind indexes. Until then legacy rows still read with `.deanon`, but token `.anon` throws `LegacyCiphertextError` and `where` lookups miss them.
 
 ## Route Access Levels
 
@@ -140,13 +246,14 @@ The `access` field is type-narrowed: setting `access: 'public'` makes `auth` opt
 
 ## Field Encryption
 
-PII/PHI/PCI fields may be automatically encrypted/decrypted by
-`ComplianceEventSubscriber` or `EncryptedType` depending on the entity/module:
+PII/PHI/PCI fields are compliant fields (above); encryption happens in their
+column type on flush:
 
-- **Algorithm**: AES-256-GCM
-- **Key derivation**: HKDF-SHA256 with per-tenant salt
-- **Format**: `v1:base64(iv):base64(authTag):base64(ciphertext)`
-- **Triggered automatically** on persist/load — no manual encryption needed
+- **Algorithm**: AES-256-GCM, a fresh random IV per write
+- **Key derivation**: HKDF-SHA256, per tenant, from `ENCRYPTION_KEY`
+- **Format**: `v4:{keyId}:{anon}:{iv}:{tag}:{ciphertext}` (legacy `v1`–`v3` still read)
+- **Lookups**: a separate blind index, `bi1:{keyId}:{hmac}`, in `<column>_idx` for queryable fields
+- **Triggered automatically** on flush — no manual encryption needed; decryption happens on `.deanon`
 - **Blocks `nativeInsert`** to prevent bypassing encryption
 
 Configuration:
@@ -680,6 +787,100 @@ When uploaded, the platform computes:
 - **PCI Data Flow Diagram** (Mermaid format)
 - **DPIA** (GDPR Data Protection Impact Assessment with data inventory, mitigations, cross-border analysis)
 
+## Compliance Documents (`forklaunch compliance docs`)
+
+The Document Center writes audit documents (SOC 2, HIPAA, ISO 27001, GDPR,
+PCI DSS) from the platform's records of the organization's apps: data-flow and
+data inventory, infrastructure controls and gaps, subprocessors, change log,
+secure development policy, onboarding and offboarding, backup and disaster
+recovery, encryption and key management, logging and monitoring, network
+security, GDPR records of processing, and a privacy facts sheet (the facts a
+privacy policy must state, not the policy itself). Anything the platform
+cannot prove is left as `[Needs input: ...]` for a person to answer. People
+and HR policies (code of conduct, training, acceptable use) are left to the
+organization's compliance tool.
+
+Two kinds of document:
+
+- **Company-wide** (policies, subprocessors): one per organization. `generate`
+  adds a version to it.
+- **Per system** (data flow, infrastructure controls, change log): each copy
+  covers its own set of applications. `generate` makes a new copy; the default
+  scope is the apps that declare a compliance framework.
+
+```bash
+forklaunch compliance docs list [--app <applicationId>] [--json]
+forklaunch compliance docs generate <type> [--apps id1,id2] [--title "Hospital review"] [--json]
+forklaunch compliance docs regenerate <documentId>... [--json]
+forklaunch compliance docs regenerate --all            # every document configuration
+forklaunch compliance docs regenerate <documentId> --apps id1,id2   # change a system copy's scope
+forklaunch compliance docs show <documentId>           # newest markdown to stdout
+forklaunch compliance docs save <documentId> --file doc.md [--base-version N] [--note "..."]
+forklaunch compliance docs download <documentId>... [--approved] [--format md|pdf|both] [-o dir]
+forklaunch compliance docs download --all [--include approved|latest] [--format md|pdf|both] [--app <applicationId>] [-o file.zip]
+forklaunch compliance docs push <documentId>... [--json]   # approved version to Oneleet
+forklaunch compliance docs push --all                     # every approved document
+forklaunch compliance docs delete <documentId>...         # only documents never approved
+```
+
+`push` sends a document's approved version (as a PDF) to the organization's
+Oneleet workspace, attached to each Oneleet control that document type is
+evidence for, or to the evidence library when the workspace has none of them.
+Drafts are refused. Oneleet is connected once in the dashboard (Compliance,
+then Documents) with a service key that has the `WRITE_EVIDENCE` scope; the key
+is stored encrypted and never returned. A 409 means Oneleet is not connected
+or the document has no approved version.
+
+What the documents read from code comes with each release: `release create`
+attaches the field inventory (regulated fields per entity, their service and
+retention rule) and a storage scan (every `TtlCache` / `ObjectStore` write:
+key prefix, TTL, and whether a tenant context encrypts it per tenant). An
+entity with regulated fields and no `retention` is reported as "kept until
+deleted", so declaring `retention: { duration, action }` on the entity is what
+changes the Data Retention Schedule.
+
+Diagrams are ```architecture blocks: JSON with `layout` (`boundaries` for a
+system's data flow, `layers` for a simple stack, `flow` for a process),
+`boundary` (the cloud network's label, boundaries only), `nodes` (`id`, `label`, `kind`: client, gateway, service,
+worker with `parent`, database, cache, objectstore, queue, search, integration,
+step, decision, end; optional `detail`) and `edges` (`from`, `to`, optional
+`label`, and `tone`: `restricted` for health or payment data, `personal` for
+personal data). Service-to-service edges are drawn as API calls. The dashboard
+and the PDFs draw them with the same renderer. Edit the
+JSON, never an image; regenerating rebuilds them from platform records.
+```mermaid blocks also render, for diagrams people add by hand.
+
+Agent workflow for filling in documents (answer once, every document updates):
+
+```bash
+forklaunch compliance docs inputs --json          # every open question: key, question, suggestion, documents asking it
+forklaunch compliance docs answer owner-name-and-role="Ada Diaz, CTO" review-cadence-for-example-every-quarter="Every quarter"
+forklaunch compliance docs answer --file answers.json   # { "key": "answer", ... }; - reads stdin
+```
+
+1. `docs inputs --json`. Each entry has a `key`, the `question`, the documents
+   that ask it, and sometimes a `suggestion` (what the platform already knows,
+   such as the organization's admins). A suggestion is a hint, not an answer.
+2. Answer only from what the user told you or the repository proves (CI
+   workflow files for required checks, branch protection settings, a
+   CODEOWNERS file, IaC for backup retention). Ask the user for the rest in
+   one batch; do not guess people, dates, targets or cadences.
+3. `docs answer key=value ...`. Answers are saved for the organization, written
+   into every document that asks that question (a new version, earlier edits
+   kept), and filled in automatically whenever a document is regenerated.
+   An empty value forgets a saved answer.
+4. For wording changes beyond an answer: `docs show <id> > doc.md`, edit,
+   `docs save <id> --file doc.md --note "what changed"` (409 = someone saved
+   since you read it; show again and re-apply).
+5. Tell the user what is still open. **Do not approve**: approval is a named
+   person's sign-off in the dashboard (Compliance, then Documents), and the CLI
+   has no approve command on purpose.
+
+Never write that an app "is compliant" or "certified"; documents describe
+controls and auditors decide. After infrastructure or integration changes,
+`docs regenerate --all` refreshes every document from current records (new
+versions; earlier ones stay in history).
+
 ## Portal Compliance Page
 
 The compliance reports page is at `/dashboard/applications/:id/compliance`:
@@ -767,6 +968,36 @@ const exported = await compliance.export("user-123");
 - Any SDK with `compliance.eraseUserData` / `compliance.exportUserData` qualifies
 - Lives in **client-sdk** (not framework) because it knows what services exist
 
+## Rust Protected Values and Subject Lifecycle
+
+Use `ProtectedField` for actual encrypted storage and audited plaintext reads;
+`ComplianceMetadata` alone is a declaration. Keep `anonymous()` irreversibly
+redacted. Opt-in `DisclosurePolicy::{RandomToken, Year, Zip3, Last4}` produces
+explicit authenticated projections, not certified anonymity. Existing rows need
+an audited reclassification migration; key rotation preserves random tokens.
+
+With core `postgres` + `encryption`, `subject::export` provides stable encrypted
+snapshots and authorized idempotent mailbox delivery. `prepare` requires an
+explicit absolute snapshot expiry; persist it with the operation ID. Schedule
+bounded `purge_expired` using a separate cleanup role, with acknowledged intent.
+Expired source snapshots cannot be read or recreated after cleanup. Retain
+non-plaintext operation tombstones for the full operation-ID replay lifetime.
+Mailbox cleanup does not automatically remove source snapshots or backups.
+
+`PostgresSubjectEraseStore::database_only` covers declared SQL records only.
+For external copies, enqueue `PostgresErasureOutbox` targets in the same SQL
+transaction as caller-owned authorized source deletion, then reconcile through
+an idempotent destination adapter. A remote success followed by receipt failure
+must be safely retryable. Require immutable version locators or conditional
+deletes to preserve concurrent writes. Completion covers the sealed target set,
+not automatically all subject data. Do not generate destructive product routes
+or invent retention/ownership policy from compliance classifications.
+
+See `framework-rs/crates/core/PERSISTENCE.md` in the framework repository for
+examples and PostgreSQL regression receipts. Inspect configured dependency
+versions before assuming these APIs exist in an application. A declared-only
+CLI artifact report is never proof of runtime lifecycle enforcement.
+
 ## Secrets Management
 
 ```typescript
@@ -805,7 +1036,7 @@ All under the `/compliance` router prefix:
 | GET    | `/applications/:appId/environments/:envName/audit/reports`  | JWT  | List historical audit reports        |
 | POST   | `/retention/enforce`                                        | HMAC | Trigger retention enforcement        |
 
-### Per-Service Compliance Endpoints (generated on every service)
+### TypeScript Per-Service Compliance Endpoints
 
 | Method | Path                         | Auth | Description                             |
 | ------ | ---------------------------- | ---- | --------------------------------------- |

@@ -7,7 +7,7 @@ use oxc_ast::ast::SourceType;
 use oxc_codegen::{Codegen, CodegenOptions};
 
 use crate::{
-    constants::{error_failed_to_read_file, WorkerType},
+    constants::{WorkerType, error_failed_to_read_file},
     core::{
         ast::{
             infrastructure::{
@@ -372,7 +372,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                 }}
             }});",
             worker_type_name,
-            get_worker_producer_factory(worker_type),
+            get_worker_producer_factory(worker_type, &pascal_case_name),
             pascal_case_name,
             pascal_case_name,
             worker_type_name,
@@ -400,7 +400,7 @@ pub(crate) fn transform_registrations_ts_service_to_worker(
                     factory: {}
                 }}
             }});",
-            get_worker_producer_factory(worker_type),
+            get_worker_producer_factory(worker_type, &pascal_case_name),
             pascal_case_name,
             pascal_case_name,
             worker_type_name,

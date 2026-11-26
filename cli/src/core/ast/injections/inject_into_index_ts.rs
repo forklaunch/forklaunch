@@ -15,15 +15,15 @@ pub(crate) fn inject_into_index_ts_export<'a>(
         .enumerate()
         .for_each(|(index, stmt)| {
             match stmt {
-                Statement::ExportNamedDeclaration(expr) => {
-                    if let Some(source) = &expr.source {
-                        if source.value.as_str() <= target_module_path.as_str() {
-                            maybe_splice_pos = Some(index);
-                        }
+                Statement::ExportFromDeclaration(expr) => {
+                    if expr.source.value.as_str().unwrap_or_default() <= target_module_path.as_str()
+                    {
+                        maybe_splice_pos = Some(index);
                     }
                 }
                 Statement::ExportAllDeclaration(expr) => {
-                    if expr.source.value.as_str() <= target_module_path.as_str() {
+                    if expr.source.value.as_str().unwrap_or_default() <= target_module_path.as_str()
+                    {
                         maybe_splice_pos = Some(index);
                     }
                 }
@@ -68,18 +68,10 @@ export * from './alpha.controller';
 export * from './mango.controller';
 export * from './zeta.controller';";
 
-        let mut index_program = parse_ast_program(
-            &allocator,
-            index_text,
-            SourceType::ts(),
-        );
+        let mut index_program = parse_ast_program(&allocator, index_text, SourceType::ts());
 
         let injection_text = "export * from './beta.controller';";
-        let mut injection_program = parse_ast_program(
-            &allocator,
-            injection_text,
-            SourceType::ts(),
-        );
+        let mut injection_program = parse_ast_program(&allocator, injection_text, SourceType::ts());
 
         let result =
             inject_into_index_ts_export(&mut index_program, &mut injection_program, "beta");
@@ -108,18 +100,10 @@ export * from './zeta.controller';";
 export * from './gamma.controller';
 export * from './omega.controller';";
 
-        let mut index_program = parse_ast_program(
-            &allocator,
-            index_text,
-            SourceType::ts(),
-        );
+        let mut index_program = parse_ast_program(&allocator, index_text, SourceType::ts());
 
         let injection_text = "export * from './beta.controller';";
-        let mut injection_program = parse_ast_program(
-            &allocator,
-            injection_text,
-            SourceType::ts(),
-        );
+        let mut injection_program = parse_ast_program(&allocator, injection_text, SourceType::ts());
 
         let _ = inject_into_index_ts_export(&mut index_program, &mut injection_program, "beta");
         let output = codegen(&index_program);
@@ -140,18 +124,10 @@ export * from './omega.controller';";
 export * from './alpha.controller';
 export * from './beta.controller';";
 
-        let mut index_program = parse_ast_program(
-            &allocator,
-            index_text,
-            SourceType::ts(),
-        );
+        let mut index_program = parse_ast_program(&allocator, index_text, SourceType::ts());
 
         let injection_text = "export * from './zeta.controller';";
-        let mut injection_program = parse_ast_program(
-            &allocator,
-            injection_text,
-            SourceType::ts(),
-        );
+        let mut injection_program = parse_ast_program(&allocator, injection_text, SourceType::ts());
 
         let _ = inject_into_index_ts_export(&mut index_program, &mut injection_program, "zeta");
         let output = codegen(&index_program);

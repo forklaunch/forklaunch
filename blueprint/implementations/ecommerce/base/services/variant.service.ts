@@ -21,8 +21,7 @@ export class BaseVariantService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseVariantEntities,
   MapperDomains extends BaseVariantDtos = BaseVariantDtos
-> implements VariantService
-{
+> implements VariantService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -83,7 +82,10 @@ export class BaseVariantService<
     em?: EntityManager
   ): Promise<MapperDomains['VariantMapper'][]> {
     if (this.evaluatedTelemetryOptions.logging) {
-      this.openTelemetryCollector.info('Listing variants by product', productIdDto);
+      this.openTelemetryCollector.info(
+        'Listing variants by product',
+        productIdDto
+      );
     }
     return Promise.all(
       (
@@ -113,7 +115,7 @@ export class BaseVariantService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(variant);
+      innerEm.persist(variant);
     });
     return this.mappers.VariantMapper.toDto(variant);
   }
@@ -166,13 +168,18 @@ export class BaseVariantService<
       em ?? this.em,
       ...args
     );
-    const updatedVariant = await (em ?? this.em).transactional(async (innerEm) => {
-      return await innerEm.upsert(variant);
-    });
+    const updatedVariant = await (em ?? this.em).transactional(
+      async (innerEm) => {
+        return await innerEm.upsert(variant);
+      }
+    );
     return this.mappers.VariantMapper.toDto(updatedVariant);
   }
 
-  async deleteVariant(idDto: { id: string }, em?: EntityManager): Promise<void> {
+  async deleteVariant(
+    idDto: { id: string },
+    em?: EntityManager
+  ): Promise<void> {
     if (this.evaluatedTelemetryOptions.logging) {
       this.openTelemetryCollector.info('Deleting variant', idDto);
     }

@@ -23,8 +23,7 @@ export class BaseRoleService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends RoleEntities = RoleEntities,
   MapperDomains extends RoleDtos = RoleDtos
-> implements RoleService
-{
+> implements RoleService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -72,7 +71,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(role);
+      em.persist(role);
     } else {
       await this.em.persist(role).flush();
     }
@@ -96,7 +95,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(roles);
+      em.persist(roles);
     } else {
       await this.em.persist(roles).flush();
     }
@@ -164,7 +163,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(role);
+      em.persist(role);
     } else {
       await this.em.persist(role).flush();
     }
@@ -188,7 +187,7 @@ export class BaseRoleService<
     );
 
     if (em) {
-      await em.persist(roles);
+      em.persist(roles);
     } else {
       await this.em.persist(roles).flush();
     }

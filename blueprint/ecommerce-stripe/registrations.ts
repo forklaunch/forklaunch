@@ -12,6 +12,7 @@ import {
   wrapEmWithTenantContext
 } from '@forklaunch/core/persistence';
 import { RedisTtlCache } from '@forklaunch/infrastructure-redis';
+import { STORE_ENCRYPTION_TENANT } from './domain/utils/storeEncryptionTenant.util';
 import {
   createConfigInjector,
   getEnvVar,
@@ -301,7 +302,7 @@ const runtimeDependencies = environmentConfig.chain({
     ) =>
       wrapEmWithTenantContext(
         Orm.em.fork(context?.entityManagerOptions),
-        context?.tenantId
+        context?.tenantId ?? STORE_ENCRYPTION_TENANT
       ) as EntityManager
   }
 });

@@ -1,39 +1,33 @@
 /**
- * Sourced directly from @forklaunch/validator/zod and @forklaunch/express —
- * the actual origin of these constructs — instead of the app-level
- * @forklaunch/blueprint-core aggregator. blueprint/core/registrations.ts has
- * a pre-existing bug (a type-only import written as a value import) that
- * crashes anything loaded via tsx-on-source, including the shipped billing
- * module. This file lets ecommerce-stripe run without depending on that fix.
+ * Re-exported from the app's core package, like every other module, so the
+ * ecommerce module uses the app's validator (zod or typebox) and HTTP
+ * framework (Express or hyper-express). It used to import
+ * @forklaunch/validator/zod and @forklaunch/express directly, which broke
+ * every typebox or hyper-express app (TS2883, TS7006). The core
+ * registrations bug that workaround avoided (type-only exports written as
+ * values) is fixed.
  */
-import {
-  array,
-  optional,
-  SchemaValidator as SchemaValidatorFactory,
-  string
-} from '@forklaunch/validator/zod';
+import { array, optional, string } from '@forklaunch/blueprint-core';
 
 export {
   array,
   boolean,
   date,
   enum_,
+  forklaunchExpress,
+  forklaunchRouter,
+  handlers,
   number,
   optional,
+  PERMISSIONS,
   record,
+  ROLES,
+  schemaValidator,
   string,
   unknown,
   uuid
-} from '@forklaunch/validator/zod';
-export {
-  forklaunchExpress,
-  forklaunchRouter,
-  handlers
-} from '@forklaunch/express';
-export { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
-
-export const schemaValidator = SchemaValidatorFactory();
-export type SchemaValidator = ReturnType<typeof SchemaValidatorFactory>;
+} from '@forklaunch/blueprint-core';
+export type { SchemaValidator } from '@forklaunch/blueprint-core';
 
 export const IdSchema = { id: string };
 // Optional — every "list all" endpoint (Review, Subscription, PromoCode,

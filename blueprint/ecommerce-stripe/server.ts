@@ -24,6 +24,7 @@ setupRls(orm, { logger: openTelemetryCollector });
 
 //! creates an instance of forklaunchExpress
 const app = forklaunchExpress(schemaValidator, openTelemetryCollector, {
+  cors: 'environment',
   auth: {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     surfacePermissions: async (_payload, _req) => {
@@ -55,7 +56,8 @@ app.use(paymentRouter);
 app.use(webhookRouter);
 
 //! starts the server
-app.listen(port, host, () => {
+// hyper-express returns a Promise from listen; nothing awaits startup here.
+void app.listen(port, host, () => {
   openTelemetryCollector.info(
     `🎉 Ecommerce Server is running at http://${host}:${port} 🎉.\nAn API reference can be accessed at http://${host}:${port}/api/${version}${docsPath}`
   );

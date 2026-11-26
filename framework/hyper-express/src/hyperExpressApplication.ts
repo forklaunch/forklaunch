@@ -1,6 +1,7 @@
 import { getEnvVar, safeStringify } from '@forklaunch/common';
 import {
   ATTR_HTTP_RESPONSE_STATUS_CODE,
+  createMcpHttpHandler,
   DocsConfiguration,
   ForklaunchExpressLikeApplication,
   ForklaunchRouter,
@@ -8,6 +9,7 @@ import {
   generateOpenApiSpecs,
   isForklaunchRequest,
   isPortBound,
+  isSeparateMcpListener,
   MetricsDefinition,
   OPENAPI_DEFAULT_VERSION,
   OpenTelemetryCollector,
@@ -28,6 +30,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import * as uWebsockets from 'uWebSockets.js';
+import { toAuthRequest, toFetchRequest, writeFetchResponse } from './mcpBridge';
 import { startHyperExpressCluster } from './cluster/hyperExpress.cluster';
 import { contentParse } from './middleware/contentParse.middleware';
 import { enrichResponseTransmission } from './middleware/enrichResponseTransmission.middleware';
@@ -237,10 +240,14 @@ export class Application<
           path: mcpPath,
           version,
           additionalTools,
-          contentTypeMapping
+          contentTypeMapping,
+          authenticate,
+          sessions,
+          sessionIdleTimeoutMs
         } = this.mcpConfiguration ?? {};
         const zodSchemaValidator = this.schemaValidator;
-        const finalMcpPort = mcpPort ?? port + 2000;
+        const finalMcpPort =
+          mcpPort ?? (Number(process.env.MCP_PORT) || port + 2000);
 
         const mcpServer = generateMcpServer(
           zodSchemaValidator,
@@ -251,14 +258,29 @@ export class Application<
           this as ForklaunchRouter<ZodSchemaValidator>,
           this.mcpConfiguration,
           options,
-          contentTypeMapping
+          contentTypeMapping,
+          authenticate
         );
 
         if (additionalTools) {
           additionalTools(mcpServer);
         }
 
-        if (
+        if (!isSeparateMcpListener(mcpPort)) {
+          const mcpHandler = createMcpHttpHandler(mcpServer, {
+            authenticate,
+            sessions,
+            sessionIdleTimeoutMs,
+            workerCount: this.hostingConfiguration?.workerCount
+          });
+          this.internal.any(mcpPath ?? '/mcp', async (req, res) => {
+            const response = await mcpHandler.handle(
+              await toFetchRequest(req, protocol),
+              toAuthRequest(req)
+            );
+            await writeFetchResponse(response, res);
+          });
+        } else if (
           this.hostingConfiguration?.workerCount &&
           this.hostingConfiguration.workerCount > 1
         ) {

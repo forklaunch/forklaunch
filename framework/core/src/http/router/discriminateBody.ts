@@ -1,3 +1,4 @@
+import { SchemaObject } from 'openapi3-ts/oas31';
 import { AnySchemaValidator, SchemaValidator } from '@forklaunch/validator';
 import {
   Body,
@@ -23,7 +24,8 @@ import {
  */
 export function discriminateBody<SV extends AnySchemaValidator>(
   schemaValidator: SV,
-  body: Body<SV> | undefined
+  body: Body<SV> | undefined,
+  inputProjection?: SchemaObject
 ):
   | {
       contentType: string;
@@ -92,7 +94,8 @@ export function discriminateBody<SV extends AnySchemaValidator>(
       schema: maybeTypedBody
     };
   } else if (
-    (schemaValidator as SchemaValidator).openapi(maybeTypedBody).format ===
+    (inputProjection ??
+      (schemaValidator as SchemaValidator).openapi(maybeTypedBody)).format ===
     'binary'
   ) {
     return {

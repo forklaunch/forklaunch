@@ -255,6 +255,18 @@ export type ExpressLikeApplicationOptions<
          */
         path?: `/${string}`;
         /**
+         * Session handling when MCP is served on the application port.
+         * `stateless` (default) lets any worker or task answer any request.
+         * `stateful` keeps sessions in process memory, so it needs a single
+         * worker and, behind a load balancer, sticky sessions.
+         */
+        sessions?: 'stateless' | 'stateful';
+        /**
+         * Stateful sessions with no request for this long are closed.
+         * Defaults to 15 minutes.
+         */
+        sessionIdleTimeoutMs?: number;
+        /**
          * Additional options for FastMCP.
          */
         options?: ConstructorParameters<typeof FastMCP>[0];
@@ -318,7 +330,21 @@ export type ExpressLikeApplicationOptions<
         discreteVersions?: boolean;
       };
   /**
-   * CORS configuration options.
+   * How this application answers cross-origin browser requests.
+   *
+   * - `'environment'`: only the origins listed in the `CORS_ORIGINS`
+   *   environment variable (comma separated) are allowed; when that is unset,
+   *   no cross-origin request is allowed in production and only localhost
+   *   origins are allowed elsewhere.
+   * - CORS options: used exactly as given.
+   *
+   * Leaving it out behaves like `'environment'`, but the application
+   * factories mark that call deprecated so a linter points at it: say which
+   * one the application wants.
+   *
+   * WARNING: an object without `origin`, including an empty `cors: {}`,
+   * allows EVERY origin (`Access-Control-Allow-Origin: *`). Name the origins:
+   * `cors: { origin: ['https://app.example.com'] }`.
    */
-  cors?: CorsOptions;
+  cors?: CorsOptions | 'environment';
 };

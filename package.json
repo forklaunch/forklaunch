@@ -5,5 +5,5 @@
   "devDependencies": {
     "husky": "^9.1.7"
   },
-  "packageManager": "pnpm@11.1.0"
+  "packageManager": "pnpm@11.28.7"
 }

@@ -1,0 +1,85 @@
+{
+  "parser": {
+    "upstream": "https://github.com/nodejs/node/tree/v24.2.0/deps/v8/src/date",
+    "license": "BSD-3-Clause"
+  },
+  "timezone": {
+    "resolver": "tz-rs =0.7.3",
+    "resolverLicense": "MIT OR Apache-2.0",
+    "dataSource": "https://crates.io/api/v1/crates/jiff-tzdb/0.1.4/download",
+    "version": "2025b",
+    "license": "MIT OR Unlicense",
+    "note": "Private data only. Does not replace shared jiff-tzdb dependencies.",
+    "resolverArchiveSha256": "4fc6c929ffa10fb34f4a3c7e9a73620a83ef2e85e47f9ec3381b8289e6762f42",
+    "dataArchiveSha256": "c1283705eb0a21404d2bfd6eef2a7593d240bc42a0bdb39db0ad6fa2ec026524"
+  },
+  "sources": [
+    {
+      "file": "dateparser-inl.h",
+      "sha256": "f4d6751423c17f671f383aa4bfa9f8c8158a09fc28f7bc860c71edc2cb01fb73"
+    },
+    {
+      "file": "dateparser.h",
+      "sha256": "8c4dd28958ac3781d99c038f3fcc9ae70814c34377e314c4867642d5b3466665"
+    },
+    {
+      "file": "dateparser.cc",
+      "sha256": "64ae6bae3ba2438a8a9323a0a1010da285f51bcbab1e02adf753fbbdaffaf461"
+    },
+    {
+      "file": "date.cc",
+      "sha256": "5394ed9dc2e001dbf1ed0cc32382d1ba12c33c39e09e08cdc9e1253b16e2066a"
+    },
+    {
+      "file": "date.h",
+      "sha256": "dbf631fc2c2f2c26491b3123e0b27f2a6b98af5811edc2a576eff6bfb7b8b9a3"
+    },
+    {
+      "file": "icu-timezone.cpp",
+      "sha256": "e6812800e9d6919f9ff03123dde1ac7ea6d6d23f8e617a8fde29d265dd575510"
+    },
+    {
+      "file": "icu-putil.cpp",
+      "sha256": "273b2d51249908744815a91004751ab81ac852eeadbdaee0de59c29cf14cb032"
+    },
+    {
+      "file": "LICENSE",
+      "sha256": "6ab33af8774a0f396ee3aeeb761e3229057682d6f9fa7f572e390c2cb3a6e509"
+    },
+    {
+      "file": "tzname.rs",
+      "sha256": "3a30a45188594375f46c4d269955378a4c83184d0d0e7d5050bda236588a7570"
+    },
+    {
+      "file": "concatenated-zoneinfo.dat",
+      "sha256": "f5e7105fc88bf9755fa59d33f40d1614c3d097470c476a8e7761c97f662ac574"
+    },
+    {
+      "file": "COPYING",
+      "sha256": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f"
+    },
+    {
+      "file": "LICENSE-MIT",
+      "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+    },
+    {
+      "file": "UNLICENSE",
+      "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+    }
+  ],
+  "hostDiscovery": {
+    "source": "https://raw.githubusercontent.com/nodejs/node/v24.2.0/deps/icu-small/source/common/putil.cpp",
+    "license": "Unicode-3.0",
+    "platforms": "Unix host discovery; Windows host detection is not implemented",
+    "runtimeNode": false
+  },
+  "retainedFiles": {
+    "LICENSE-V8": "6ab33af8774a0f396ee3aeeb761e3229057682d6f9fa7f572e390c2cb3a6e509",
+    "LICENSE-ICU": "451167c55c0fa447cc2d5632714f5e3c567fe4f1e1badefab2c1333852198aca",
+    "tzdb/COPYING": "01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f",
+    "tzdb/LICENSE-MIT": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f",
+    "tzdb/UNLICENSE": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c",
+    "tzdb/concatenated-zoneinfo.dat": "f5e7105fc88bf9755fa59d33f40d1614c3d097470c476a8e7761c97f662ac574",
+    "tzdb/tzname.rs": "3a30a45188594375f46c4d269955378a4c83184d0d0e7d5050bda236588a7570"
+  }
+}

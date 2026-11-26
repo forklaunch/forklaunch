@@ -78,8 +78,9 @@ impl CliCommand for FetchCommand {
             );
         }
 
-        let body: serde_json::Value =
-            response.json().with_context(|| "Failed to parse OpenAPI spec response")?;
+        let body: serde_json::Value = response
+            .json()
+            .with_context(|| "Failed to parse OpenAPI spec response")?;
         let spec = body.get("spec").unwrap_or(&body);
         let pretty = serde_json::to_string_pretty(spec)?;
 

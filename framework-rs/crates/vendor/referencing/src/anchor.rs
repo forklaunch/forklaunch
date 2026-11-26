@@ -1,0 +1,481 @@
+//! Anchors identify sub-schemas within a document by name.
+//!
+//! JSON Schema defines two anchor flavors:
+//! - [`Anchor::Default`]: a plain anchor (`$anchor`), resolved against the current base URI.
+//! - [`Anchor::Dynamic`]: a dynamic anchor (`$dynamicAnchor`), which re-anchors to the
+//!   outermost matching dynamic anchor found in the dynamic scope during resolution.
+//!
+//! [`AnchorIter`] avoids a heap allocation for the common case of 0–2 anchors per schema object.
+
+use serde_json::Value;
+
+use crate::{Draft, Error, Resolved, Resolver, ResourceRef};
+
+/// An anchor within a resource.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Anchor<'a> {
+    Default {
+        name: &'a str,
+        resource: ResourceRef<'a>,
+    },
+    Dynamic {
+        name: &'a str,
+        resource: ResourceRef<'a>,
+    },
+}
+
+impl<'a> Anchor<'a> {
+    /// Anchor's name.
+    #[inline]
+    pub(crate) fn name(&self) -> &'a str {
+        match self {
+            Anchor::Default { name, .. } | Anchor::Dynamic { name, .. } => name,
+        }
+    }
+}
+
+impl<'r> Anchor<'r> {
+    pub(crate) fn resolve_static(&self, resolver: Resolver<'r>) -> Result<Resolved<'r>, Error> {
+        let resource = match self {
+            Anchor::Default { resource, .. } | Anchor::Dynamic { resource, .. } => resource,
+        };
+        Ok(Resolved::new(
+            resource.contents(),
+            resolver,
+            resource.draft(),
+        ))
+    }
+
+    /// Get the resource for this anchor.
+    pub(crate) fn resolve(&self, resolver: Resolver<'r>) -> Result<Resolved<'r>, Error> {
+        match self {
+            Anchor::Default { resource, .. } => Ok(Resolved::new(
+                resource.contents(),
+                resolver,
+                resource.draft(),
+            )),
+            Anchor::Dynamic { name, resource } => {
+                let scope = resolver.dynamic_scope();
+                let mut last = *resource;
+                let mut found_in = None;
+                for uri in &scope {
+                    match resolver.lookup_anchor(uri, name) {
+                        Ok(anchor) => {
+                            if let Anchor::Dynamic { resource, .. } = anchor {
+                                last = resource;
+                                found_in = Some(uri);
+                            }
+                        }
+                        Err(Error::NoSuchAnchor { .. }) => {}
+                        Err(err) => return Err(err),
+                    }
+                }
+                // The anchor's own document is the base for references inside it
+                let resolver = match found_in {
+                    Some(uri) => resolver.at_uri(uri)?,
+                    None => resolver,
+                };
+                Ok(Resolved::new(
+                    last.contents(),
+                    resolver.in_subresource(last)?,
+                    last.draft(),
+                ))
+            }
+        }
+    }
+}
+
+/// An iterator over 0, 1, or 2 anchors — avoids a [`Vec`] allocation for the common case.
+pub(crate) enum AnchorIter<'a> {
+    Empty,
+    One(Anchor<'a>),
+    Two(Anchor<'a>, Anchor<'a>),
+}
+
+impl<'a> Iterator for AnchorIter<'a> {
+    type Item = Anchor<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match std::mem::replace(self, AnchorIter::Empty) {
+            AnchorIter::Empty => None,
+            AnchorIter::One(anchor) => Some(anchor),
+            AnchorIter::Two(first, second) => {
+                *self = AnchorIter::One(second);
+                Some(first)
+            }
+        }
+    }
+}
+
+pub(crate) fn anchor(draft: Draft, contents: &Value) -> AnchorIter<'_> {
+    let Some(schema) = contents.as_object() else {
+        return AnchorIter::Empty;
+    };
+
+    // First check for top-level anchors
+    let default_anchor =
+        schema
+            .get("$anchor")
+            .and_then(Value::as_str)
+            .map(|name| Anchor::Default {
+                name,
+                resource: ResourceRef::new(contents, draft),
+            });
+
+    let dynamic_anchor = schema
+        .get("$dynamicAnchor")
+        .and_then(Value::as_str)
+        .map(|name| Anchor::Dynamic {
+            name,
+            resource: ResourceRef::new(contents, draft),
+        });
+
+    match (default_anchor, dynamic_anchor) {
+        (Some(default), Some(dynamic)) => AnchorIter::Two(default, dynamic),
+        (Some(default), None) => AnchorIter::One(default),
+        (None, Some(dynamic)) => AnchorIter::One(dynamic),
+        (None, None) => AnchorIter::Empty,
+    }
+}
+
+pub(crate) fn anchor_2019(draft: Draft, contents: &Value) -> AnchorIter<'_> {
+    match contents
+        .as_object()
+        .and_then(|schema| schema.get("$anchor"))
+        .and_then(Value::as_str)
+    {
+        Some(name) => AnchorIter::One(Anchor::Default {
+            name,
+            resource: ResourceRef::new(contents, draft),
+        }),
+        None => AnchorIter::Empty,
+    }
+}
+
+pub(crate) fn legacy_anchor_in_dollar_id(draft: Draft, contents: &Value) -> AnchorIter<'_> {
+    match contents
+        .as_object()
+        .and_then(|schema| schema.get("$id"))
+        .and_then(Value::as_str)
+        .and_then(|id| id.strip_prefix('#'))
+    {
+        Some(id) => AnchorIter::One(Anchor::Default {
+            name: id,
+            resource: ResourceRef::new(contents, draft),
+        }),
+        None => AnchorIter::Empty,
+    }
+}
+
+pub(crate) fn legacy_anchor_in_id(draft: Draft, contents: &Value) -> AnchorIter<'_> {
+    match contents
+        .as_object()
+        .and_then(|schema| schema.get("id"))
+        .and_then(Value::as_str)
+        .and_then(|id| id.strip_prefix('#'))
+    {
+        Some(id) => AnchorIter::One(Anchor::Default {
+            name: id,
+            resource: ResourceRef::new(contents, draft),
+        }),
+        None => AnchorIter::Empty,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Draft, Registry};
+    use serde_json::json;
+
+    #[test]
+    fn test_lookup_trivial_dynamic_ref() {
+        let one = Draft::Draft202012.create_resource(json!({"$dynamicAnchor": "foo"}));
+        let registry = Registry::new()
+            .add("http://example.com", &one)
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+        let resolved = resolver.lookup("#foo").expect("Lookup failed");
+        assert_eq!(resolved.contents(), one.contents());
+    }
+
+    #[test]
+    fn test_multiple_lookup_trivial_dynamic_ref() {
+        let true_resource = Draft::Draft202012.create_resource(json!(true));
+        let root = Draft::Draft202012.create_resource(json!({
+            "$id": "http://example.com",
+            "$dynamicAnchor": "fooAnchor",
+            "$defs": {
+                "foo": {
+                    "$id": "foo",
+                    "$dynamicAnchor": "fooAnchor",
+                    "$defs": {
+                        "bar": true,
+                        "baz": {
+                            "$dynamicAnchor": "fooAnchor",
+                        },
+                    },
+                },
+            },
+        }));
+
+        let registry = Registry::new()
+            .extend([
+                ("http://example.com", &root),
+                ("http://example.com/foo/", &true_resource),
+                ("http://example.com/foo/bar", &root),
+            ])
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+
+        let first = resolver.lookup("").expect("Lookup failed");
+        let second = first.resolver().lookup("foo/").expect("Lookup failed");
+        let third = second.resolver().lookup("bar").expect("Lookup failed");
+        let fourth = third
+            .resolver()
+            .lookup("#fooAnchor")
+            .expect("Lookup failed");
+        assert_eq!(fourth.contents(), root.contents());
+        assert_eq!(format!("{:?}", fourth.resolver()), "Resolver { base_uri: \"http://example.com\", scopes: \"[http://example.com/foo/, http://example.com, http://example.com]\" }");
+    }
+
+    #[test]
+    fn dynamic_anchor_in_another_document_uses_that_document_as_base() {
+        let root = Draft::Draft202012.create_resource(json!({
+            "$id": "https://example.com/root.json",
+            "$defs": {"node": {"$dynamicAnchor": "node"}}
+        }));
+        let tree = Draft::Draft202012.create_resource(json!({
+            "$id": "https://example.com/tree.json",
+            "$dynamicAnchor": "node"
+        }));
+        let registry = Registry::new()
+            .extend([
+                ("https://example.com/root.json", &root),
+                ("https://example.com/tree.json", &tree),
+            ])
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry.resolver(
+            crate::uri::from_str("https://example.com/root.json").expect("Invalid base URI"),
+        );
+
+        let tree = resolver.lookup("tree.json").expect("Lookup failed");
+        let node = tree.resolver().lookup("#node").expect("Lookup failed");
+
+        assert_eq!(node.contents(), &root.contents()["$defs"]["node"]);
+        assert_eq!(
+            node.resolver().base_uri().as_str(),
+            "https://example.com/root.json"
+        );
+    }
+
+    #[test]
+    fn test_multiple_lookup_dynamic_ref_to_nondynamic_ref() {
+        let one = Draft::Draft202012.create_resource(json!({"$anchor": "fooAnchor"}));
+        let two = Draft::Draft202012.create_resource(json!({
+            "$id": "http://example.com",
+            "$dynamicAnchor": "fooAnchor",
+            "$defs": {
+                "foo": {
+                    "$id": "foo",
+                    "$dynamicAnchor": "fooAnchor",
+                    "$defs": {
+                        "bar": true,
+                        "baz": {
+                            "$dynamicAnchor": "fooAnchor",
+                        },
+                    },
+                },
+            },
+        }));
+
+        let registry = Registry::new()
+            .extend([
+                ("http://example.com", &two),
+                ("http://example.com/foo/", &one),
+                ("http://example.com/foo/bar", &two),
+            ])
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+
+        let first = resolver.lookup("").expect("Lookup failed");
+        let second = first.resolver().lookup("foo/").expect("Lookup failed");
+        let third = second.resolver().lookup("bar").expect("Lookup failed");
+        let fourth = third
+            .resolver()
+            .lookup("#fooAnchor")
+            .expect("Lookup failed");
+        assert_eq!(fourth.contents(), two.contents());
+    }
+
+    #[test]
+    fn test_unknown_anchor() {
+        let schema = Draft::Draft202012.create_resource(json!({
+            "$defs": {
+                "foo": { "$anchor": "knownAnchor" }
+            }
+        }));
+        let registry = Registry::new()
+            .add("http://example.com", schema)
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+
+        let result = resolver.lookup("#unknownAnchor");
+        assert_eq!(
+            result.expect_err("Should fail").to_string(),
+            "Anchor 'unknownAnchor' does not exist"
+        );
+    }
+
+    #[test]
+    fn test_invalid_anchor_with_slash() {
+        let schema = Draft::Draft202012.create_resource(json!({
+            "$defs": {
+                "foo": { "$anchor": "knownAnchor" }
+            }
+        }));
+        let registry = Registry::new()
+            .add("http://example.com", schema)
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+
+        let result = resolver.lookup("#invalid/anchor");
+        assert_eq!(
+            result.expect_err("Should fail").to_string(),
+            "Anchor 'invalid/anchor' is invalid"
+        );
+    }
+
+    #[test]
+    fn test_lookup_trivial_recursive_ref() {
+        let resource = Draft::Draft201909.create_resource(json!({"$recursiveAnchor": true}));
+        let registry = Registry::new()
+            .add("http://example.com", &resource)
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+        let first = resolver.lookup("").expect("Lookup failed");
+        let resolved = first
+            .resolver()
+            .lookup_recursive_ref()
+            .expect("Lookup failed");
+        assert_eq!(resolved.contents(), resource.contents());
+    }
+
+    #[test]
+    fn test_lookup_recursive_ref_to_bool() {
+        let true_resource = Draft::Draft201909.create_resource(json!(true));
+        let registry = Registry::new()
+            .add("http://example.com", &true_resource)
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+        let resolved = resolver.lookup_recursive_ref().expect("Lookup failed");
+        assert_eq!(resolved.contents(), true_resource.contents());
+    }
+
+    #[test]
+    fn test_multiple_lookup_recursive_ref_to_bool() {
+        let true_resource = Draft::Draft201909.create_resource(json!(true));
+        let root = Draft::Draft201909.create_resource(json!({
+            "$id": "http://example.com",
+            "$recursiveAnchor": true,
+            "$defs": {
+                "foo": {
+                    "$id": "foo",
+                    "$recursiveAnchor": true,
+                    "$defs": {
+                        "bar": true,
+                        "baz": {
+                            "$recursiveAnchor": true,
+                            "$anchor": "fooAnchor",
+                        },
+                    },
+                },
+            },
+        }));
+
+        let registry = Registry::new()
+            .extend([
+                ("http://example.com", &root),
+                ("http://example.com/foo/", &true_resource),
+                ("http://example.com/foo/bar", &root),
+            ])
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+        let first = resolver.lookup("").expect("Lookup failed");
+        let second = first.resolver().lookup("foo/").expect("Lookup failed");
+        let third = second.resolver().lookup("bar").expect("Lookup failed");
+        let fourth = third
+            .resolver()
+            .lookup_recursive_ref()
+            .expect("Lookup failed");
+        assert_eq!(fourth.contents(), root.contents());
+    }
+
+    #[test]
+    fn test_multiple_lookup_recursive_ref_with_nonrecursive_ref() {
+        let one = Draft::Draft201909.create_resource(json!({"$recursiveAnchor": true}));
+        let two = Draft::Draft201909.create_resource(json!({
+            "$id": "http://example.com",
+            "$recursiveAnchor": true,
+            "$defs": {
+                "foo": {
+                    "$id": "foo",
+                    "$recursiveAnchor": true,
+                    "$defs": {
+                        "bar": true,
+                        "baz": {
+                            "$recursiveAnchor": true,
+                            "$anchor": "fooAnchor",
+                        },
+                    },
+                },
+            },
+        }));
+        let three = Draft::Draft201909.create_resource(json!({"$recursiveAnchor": false}));
+
+        let registry = Registry::new()
+            .extend([
+                ("http://example.com", &three),
+                ("http://example.com/foo/", &two),
+                ("http://example.com/foo/bar", &one),
+            ])
+            .expect("Invalid resources")
+            .prepare()
+            .expect("Invalid resources");
+        let resolver = registry
+            .resolver(crate::uri::from_str("http://example.com").expect("Invalid base URI"));
+        let first = resolver.lookup("").expect("Lookup failed");
+        let second = first.resolver().lookup("foo/").expect("Lookup failed");
+        let third = second.resolver().lookup("bar").expect("Lookup failed");
+        let fourth = third
+            .resolver()
+            .lookup_recursive_ref()
+            .expect("Lookup failed");
+        assert_eq!(fourth.contents(), two.contents());
+    }
+}

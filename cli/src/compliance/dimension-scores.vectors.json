@@ -1,0 +1,204 @@
+{
+  "description": "Golden cases for computeDimensionScores. Every implementation (core TypeScript, the Rust CLI's derive_dimension_scores) must produce exactly these scores. Deductions compound: retained *= 1 - points/100 per finding, per mapped category; floored at 5; a construction failure is an ordinary governance finding (30 points), not a zero.",
+  "cases": [
+    {
+      "name": "no findings",
+      "findings": [],
+      "expect": {
+        "compliance": 100,
+        "security": 100,
+        "scale": 100,
+        "observability": 100,
+        "governance": 100,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "one encryption finding hits security and compliance",
+      "findings": [
+        {
+          "category": "encryption",
+          "points": 20
+        }
+      ],
+      "expect": {
+        "compliance": 80,
+        "security": 80,
+        "scale": 100,
+        "observability": 100,
+        "governance": 100,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "two findings on one category compound, not add",
+      "findings": [
+        {
+          "category": "encryption",
+          "points": 20
+        },
+        {
+          "category": "encryption",
+          "points": 20
+        }
+      ],
+      "expect": {
+        "compliance": 64,
+        "security": 64,
+        "scale": 100,
+        "observability": 100,
+        "governance": 100,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "many small findings never pass the floor",
+      "findings": [
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        },
+        {
+          "category": "access-control",
+          "points": 30
+        }
+      ],
+      "expect": {
+        "compliance": 100,
+        "security": 5,
+        "scale": 100,
+        "observability": 100,
+        "governance": 5,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "unknown category counts as compliance",
+      "findings": [
+        {
+          "category": "something-new",
+          "points": 10
+        }
+      ],
+      "expect": {
+        "compliance": 90,
+        "security": 100,
+        "scale": 100,
+        "observability": 100,
+        "governance": 100,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "points are clamped to 0-100",
+      "findings": [
+        {
+          "category": "alerting",
+          "points": 250
+        },
+        {
+          "category": "multi-az",
+          "points": -5
+        }
+      ],
+      "expect": {
+        "compliance": 100,
+        "security": 100,
+        "scale": 100,
+        "observability": 5,
+        "governance": 100,
+        "unscored": []
+      }
+    },
+    {
+      "name": "construction failure is a governance penalty, not a zero",
+      "findings": [
+        {
+          "category": "construction",
+          "points": 30
+        }
+      ],
+      "expect": {
+        "compliance": 100,
+        "security": 100,
+        "scale": 100,
+        "observability": 100,
+        "governance": 70,
+        "unscored": [
+          "scale",
+          "observability"
+        ]
+      }
+    },
+    {
+      "name": "one decimal of precision",
+      "findings": [
+        {
+          "category": "logging",
+          "points": 7
+        },
+        {
+          "category": "logging",
+          "points": 7
+        }
+      ],
+      "expect": {
+        "compliance": 100,
+        "security": 100,
+        "scale": 100,
+        "observability": 86.5,
+        "governance": 86.5,
+        "unscored": [
+          "scale"
+        ]
+      }
+    }
+  ]
+}

@@ -190,7 +190,7 @@ Learn how to modify application-level configuration, runtimes, and frameworks.
 
 - Runtime changes (Node.js ↔ Bun)
 - HTTP framework updates (Express ↔ Hyper-Express)
-- Development tool changes (Prettier ↔ Biome, ESLint ↔ oxlint)
+- Development tool changes (Prettier ↔ Biome, ESLint → oxlint)
 - Testing framework updates (Jest ↔ Vitest)
 - Validation library changes (Zod ↔ TypeBox)
 
@@ -334,7 +334,7 @@ Handle different requirements across environments:
 
 ```bash
 # Development optimized
-forklaunch change application --formatter prettier --linter eslint
+forklaunch change application --formatter prettier --linter oxlint
 
 # Production optimized
 forklaunch change application --formatter biome --linter oxlint

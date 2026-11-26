@@ -17,7 +17,7 @@ describe('SampleWorker Routes E2E Tests with PostgreSQL Container', () => {
     const setup = await setupTestDatabase();
     orm = setup.orm;
     redis = setup.redis;
-  }, 60000);
+  });
 
   beforeEach(async () => {
     await clearDatabase({ orm, redis });
@@ -28,7 +28,7 @@ describe('SampleWorker Routes E2E Tests with PostgreSQL Container', () => {
 
   afterAll(async () => {
     await cleanupTestDatabase();
-  }, 30000);
+  });
 
   describe('GET /sample-worker/:id - sampleWorkerGet', () => {
     it('should get a sample worker successfully', async () => {

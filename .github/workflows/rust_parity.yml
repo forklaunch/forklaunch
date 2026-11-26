@@ -1,0 +1,1519 @@
+name: Rust Framework Parity
+
+# Nightly and on demand only: the parity suites compare the Rust crates with
+# their TypeScript counterparts, which pull requests do not need to wait for.
+# The scripts live in framework-rs/parity.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+# actions: read lets the compiler-cache steps find and download earlier
+# runs' store artifacts.
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  # Both parity jobs run as parallel shards; which steps belong to which
+  # shard is data in .github/workflows/scripts/parity_shards.py, which also
+  # writes the `matrix.shard` conditions below (run it after adding steps).
+  framework:
+    name: framework (${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [core, http, zod]
+    # The V8 date oracle reads TZ through the host zoneinfo. Ubuntu 26.04's
+    # tzdata-legacy names (e.g. Eire) resolve differently in Node's ICU than the
+    # pinned 2025b rules; 24.04's zoneinfo matches them.
+    runs-on: ubuntu-24.04
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/framework-rs/target
+      # Full debuginfo across every feature-set test binary exhausts the
+      # runner disk; line tables keep file:line in panics and backtraces.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      FORKLAUNCH_TEST_REDIS_URL: redis://127.0.0.1:6379/
+      FORKLAUNCH_TEST_S3_ENDPOINT: http://127.0.0.1:9000
+      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
+      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
+      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
+      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      # Compiled output comes from the shared sccache store; only the
+      # registry is cached per workspace.
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: framework-rs-${{ matrix.shard }}
+          fallback-family: framework-rs-core
+          size: 1500M
+          free-disk: 'true'
+          stable-tmp: 'true'
+      - name: Start isolated S3-compatible storage
+        run: |
+          docker run -d --name forklaunch-rust-s3 --memory 512m \
+            --tmpfs /data:rw,size=128m,mode=1777 -p 127.0.0.1:9000:9000 \
+            -e MINIO_ROOT_USER=parity-test-access -e MINIO_ROOT_PASSWORD=parity-test-secret-only \
+            cgr.dev/chainguard/minio@sha256:6476f81b9739912fa9f50ceae2bb049a30336527cccd24beccfbeb4145f8f696 \
+            server /data --address :9000
+          for _ in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/ready; then exit 0; fi
+            sleep 1
+          done
+          docker logs forklaunch-rust-s3
+          exit 1
+      - run: python3 scripts/rust_format.py framework-rs/Cargo.toml
+        if: matrix.shard == 'core' # shard
+      - run: cargo clippy --manifest-path framework-rs/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+        if: matrix.shard == 'core' # shard
+      - run: cargo doc --manifest-path framework-rs/Cargo.toml --workspace --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+        if: matrix.shard == 'core' # shard
+      - name: Framework tests and reviewed OpenAPI / SDK snapshots
+        run: cargo test --manifest-path framework-rs/Cargo.toml --workspace --all-features
+        if: matrix.shard == 'core' # shard
+      - run: CARGO_TARGET_DIR=framework-rs/target cargo test --manifest-path framework-rs/crates/vendor/referencing/Cargo.toml --locked --lib
+        if: matrix.shard == 'core' # shard
+      - run: CARGO_TARGET_DIR=framework-rs/target cargo test --manifest-path framework-rs/crates/vendor/referencing/Cargo.toml --locked --lib --features forklaunch-ajv-pointer-decoding
+        if: matrix.shard == 'core' # shard
+      - run: CARGO_TARGET_DIR=framework-rs/target cargo test --manifest-path framework-rs/crates/vendor/jsonschema/Cargo.toml --locked --lib --no-default-features --features idna -- --skip validator::tests::validate_ref
+        if: matrix.shard == 'core' # shard
+      - run: CARGO_TARGET_DIR=framework-rs/target cargo test --manifest-path framework-rs/crates/vendor/referencing/Cargo.toml --locked --lib --features 'forklaunch-static-anchor-resolution forklaunch-ajv-ref-siblings forklaunch-legacy-fragment-ids'
+        if: matrix.shard == 'core' # shard
+      - run: CARGO_TARGET_DIR=framework-rs/target cargo test --manifest-path framework-rs/crates/vendor/jsonschema/Cargo.toml --locked --lib --no-default-features --features 'idna forklaunch-static-anchor-resolution' -- --skip validator::tests::validate_ref
+        if: matrix.shard == 'core' # shard
+      - name: AJV sibling compatibility profile (default-profile assertions run above)
+        run: >-
+          CARGO_TARGET_DIR=framework-rs/target cargo test
+          --manifest-path framework-rs/crates/vendor/jsonschema/Cargo.toml --locked --lib
+          --no-default-features --features 'idna forklaunch-ajv-ref-siblings forklaunch-static-anchor-resolution forklaunch-legacy-fragment-ids' --
+          --skip validator::tests::validate_ref
+          --skip evaluation::tests::ref_siblings_produce_no_annotations
+          --skip keywords::discriminator::tests::draft7_ignores_pins_beside_a_reference
+          --skip keywords::discriminator::tests::unpinned_value_is_not_dispatched::test_case_3_const_beside_a_reference_in_draft_7
+          --skip tests::absolute_keyword_location_in_nested_resource::test_case_10_draft_7_id_beside_ref_names_no_resource
+          --skip tests::custom_meta_schema_preserves_underlying_draft_behavior
+        if: matrix.shard == 'core' # shard
+      - run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-infrastructure-redis --all-features redis_backend -- --ignored
+        if: matrix.shard == 'core' # shard
+      - run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-infrastructure-s3 --all-features s3_backend -- --ignored
+        if: matrix.shard == 'core' # shard
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @asyncapi/parser@3.6.3 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @types/ws@8.18.1 @types/node@26.6.5 cross-fetch@4.1.0 zod@4.6.5 ts-deepmerge@8.0.0 ws@8.22.0 @tanstack/react-query@5.104.2 @tanstack/query-core@5.104.2 react@19.2.4 @types/react@19.3.0
+      - run: node framework-rs/parity/rust_common_naming.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'core' # shard
+      - name: Smoke all six native runtime benchmarks
+        run: node framework-rs/parity/rust_benchmarks.mjs --debug --require-infra
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_BENCH_ITERATIONS: '20'
+          FORKLAUNCH_BENCH_WARMUP: '5'
+          FORKLAUNCH_BENCH_REDIS_URL: redis://127.0.0.1:6379/
+          FORKLAUNCH_BENCH_S3: '1'
+          FORKLAUNCH_BENCH_CREATE_BUCKET: '1'
+          S3_URL: http://127.0.0.1:9000
+          S3_REGION: us-east-1
+          S3_BUCKET: forklaunch-bench
+          S3_ACCESS_KEY_ID: parity-test-access
+          S3_SECRET_ACCESS_KEY: parity-test-secret-only
+          FORKLAUNCH_BENCH_OUTPUT: ${{ runner.temp }}/rust-benchmark-smoke.json
+        if: matrix.shard == 'core' # shard
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rust-benchmark-smoke
+          path: ${{ runner.temp }}/rust-benchmark-smoke.json
+        if: matrix.shard == 'core' # shard
+      - name: Remove isolated S3 storage
+        if: always()
+        run: docker rm -f forklaunch-rust-s3 || true
+      - run: node framework-rs/parity/rust_redis_queue_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_retention_hooks_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_json_cache_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_json_object_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_s3_environment_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_otlp_runtime.mjs
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_asyncapi_parity.mjs
+        env:
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_asyncapi_correlation.mjs
+        env:
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_mcp_body_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_query_transport_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: |
+          mkdir -p "$RUNNER_TEMP/fl-canonical-http"
+          cp framework-rs/parity/fixtures/canonical-iam/package*.json "$RUNNER_TEMP/fl-canonical-http/"
+          npm ci --prefix "$RUNNER_TEMP/fl-canonical-http" --ignore-scripts --no-audit --no-fund
+      - run: node framework-rs/parity/rust_canonical_http_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_router_origin_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_correlation_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_cors_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/typescript_cors_origin_delegate_http.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_CORS_DELEGATE_NATIVE: '1'
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_json_request_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_request_order_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_request_transform_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_request_fields_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_response_warning_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_response_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_default_errors_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_json_wire_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_zod_diagnostic_provenance.mjs
+        env:
+          FORKLAUNCH_DIAGNOSTIC_NATIVE: 1
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_json_wire_parity.mjs
+        env:
+          FORKLAUNCH_DIAGNOSTIC_NATIVE: 1
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_text_wire_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_request_parser_diagnostics.mjs
+        env:
+          FORKLAUNCH_VERSION_REQUEST_NATIVE: 1
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_optional_body_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_mcp_body_admission_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/ts_response_header_arrays.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_simple_query_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_version_query_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/ts_version_request_diagnostics.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_VERSION_DIAGNOSTICS_NATIVE: '1'
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/ts_version_request_diagnostics.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_VERSION_DIAGNOSTICS_NATIVE: '1'
+          FORKLAUNCH_VERSION_PREAUTH: '1'
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_zod_string_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_string_rules_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_string_formats_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_binary_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_ordered_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_record_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_absence_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_object_policy_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_tuple_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_json_composition_runtime.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - name: Pin Node and Ada for WHATWG URL compatibility checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.2.0'
+      # Node's ICU validates TZ against the host zoneinfo. Ubuntu moved legacy
+      # zone names (CET, EST5EDT, US/*, ...) to tzdata-legacy, and without
+      # them TZ=CET silently becomes UTC in the oracle.
+      - name: Install legacy zone names for the V8 date oracle
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tzdata-legacy
+      - run: node framework-rs/parity/rust_v8_date_parity.mjs
+        env:
+          CARGO_TARGET_DIR: framework-rs/target
+        if: matrix.shard == 'zod' # shard
+      - run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-canonical-http" --no-save --package-lock=false --ignore-scripts punycode@2.3.1
+      - run: node framework-rs/parity/rust_zod_uri_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_uri_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_factory_string_composition.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_FACTORY_STRING_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_uri_sdk.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: cargo test --locked --manifest-path framework-rs/Cargo.toml -p forklaunch-common --all-features
+        if: matrix.shard == 'zod' # shard
+      - run: cargo test --locked --manifest-path framework-rs/crates/vendor/regress/Cargo.toml --features utf16
+        if: matrix.shard == 'zod' # shard
+      - run: cargo test --locked --manifest-path framework-rs/crates/vendor/regress/Cargo.toml --no-default-features --features std,utf16 --lib --test forklaunch_budget
+        if: matrix.shard == 'zod' # shard
+      - name: Regex demand fails closed without its native feature
+        run: cargo test --locked --manifest-path framework-rs/Cargo.toml -p forklaunch-core --no-default-features --features schema-validation --lib regex
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_regex_profile.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_regex_consumers.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_regex_kernel_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - name: Exact numeric bounds in default mode
+        run: node framework-rs/parity/rust_zod_number_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_NUMBER_BOUNDS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Exact numeric bounds in arbitrary precision mode
+        run: node framework-rs/parity/rust_zod_number_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_NUMBER_BOUNDS_NATIVE: '1'
+          FORKLAUNCH_NUMBER_BOUNDS_ARBITRARY: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Extended UTF16 bounds in default mode
+        run: node framework-rs/parity/rust_zod_utf16_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_UTF16_BOUNDS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Extended UTF16 bounds in arbitrary precision mode
+        run: node framework-rs/parity/rust_zod_utf16_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_UTF16_BOUNDS_NATIVE: '1'
+          FORKLAUNCH_UTF16_BOUNDS_ARBITRARY: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Positioned UTF16 predicates in default mode
+        run: node framework-rs/parity/rust_zod_string_predicates_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_STRING_PREDICATES_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Positioned UTF16 predicates in arbitrary precision mode
+        run: node framework-rs/parity/rust_zod_string_predicates_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_STRING_PREDICATES_NATIVE: '1'
+          FORKLAUNCH_STRING_PREDICATES_ARBITRARY: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Pure discriminator dispatch conformance
+        run: node framework-rs/parity/rust_zod_discriminator_input_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_DISCRIMINATOR_INPUT_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Pure record key schema conformance
+        run: node framework-rs/parity/rust_zod_record_pure_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_RECORD_PURE_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Exact array cardinalities in default JSON mode
+        run: node framework-rs/parity/rust_zod_array_cardinality_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          FORKLAUNCH_CARDINALITY_PROBE_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - name: Exact array cardinalities in arbitrary precision JSON mode
+        run: node framework-rs/parity/rust_zod_array_cardinality_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          FORKLAUNCH_CARDINALITY_PROBE_NATIVE: '1'
+          FORKLAUNCH_CARDINALITY_PROBE_FEATURES: arbitrary
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_array_checks_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_string_float_length_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_case_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_discriminated_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_intersection_json_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_runtime_formats.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_RUNTIME_FORMATS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_emoji_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_format_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_checks_consumers.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - name: Zod format profile rejects URI without its native capability
+        run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-core --no-default-features --features zod-checks format_checks_are_ordered_bounded_and_uri_requires_its_capability
+        if: matrix.shard == 'zod' # shard
+      - name: Explicit feature-off URI schema rejection
+        run: cargo test --manifest-path framework-rs/Cargo.toml -p forklaunch-core --no-default-features
+        if: matrix.shard == 'zod' # shard
+      - name: Live HTTP, MCP and SDK URL compatibility
+        run: node framework-rs/parity/rust_json_composition_runtime.mjs
+        env:
+          FORKLAUNCH_COMPOSITION_URI: '1'
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - name: Restore Node for remaining framework checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node framework-rs/parity/rust_zod_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_union_openapi.mjs
+        env:
+          FORKLAUNCH_UNCONSTRAINED_NATIVE: '1'
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_never_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_record_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_portable_model_metadata.mjs
+        env:
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_ajv_own_properties.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_tuple_coercion.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_tuple_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_pure_input_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_jwt_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_ip_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_datetime_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_time_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_duration_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_date_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_identifier_checks.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_ZOD_CHECKS_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_native_enum_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_string_bounds_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_string_literals_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_STRING_LITERAL_NATIVE: '1'
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_fixed_tuple_models.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_SOCKET_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_builtin_type_names.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_reserved_type_names.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_variable_tuple_models.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_email_openapi.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_check_messages_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_number_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_multiple_of_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_float_bound_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_zod_array_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/typescript_response_status_validation.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_mcp_transport_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_multipart_extract_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_multipart_text_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/fixtures/rust_multipart_limits_reference.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_tanstack_query_parity.mjs
+        env:
+          FORKLAUNCH_TEST_TANSTACK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_native_sdk_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_sdk_body_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_ws_resources_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_schema_types_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'zod' # shard
+      - run: node framework-rs/parity/rust_versioned_wire_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_versioned_form_parity.mjs
+        env:
+          FORKLAUNCH_TEST_CANONICAL_DEPENDENCIES: ${{ runner.temp }}/fl-canonical-http
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_versioned_fields_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_versioned_api_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_schema_mixed_parity.mjs
+        env:
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_schema_dynamic_parity.mjs
+        env:
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_payload_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_jsonschema_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_metadata_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_typescript_sdk_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          FORKLAUNCH_TEST_WS_SDK_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          ASYNCAPI_PARSER_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/@asyncapi/parser
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_binary_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_binary_runtime.mjs
+        env:
+          FORKLAUNCH_TEST_BINARY_ASYNCAPI: '1'
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_asyncapi_dialects_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_json_encoding_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_sdk_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_ws_runtime.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_sse_emitter_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_sse_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_s3_post_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_rbac_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_basic_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_testing_environment_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_date_coercion.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_scalar_coercion.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_parse_errors_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_session_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_typescript_hmac_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'http' # shard
+      - run: bash framework-rs/parity/rust_typescript_authorization_runtime.sh
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_request_hmac_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - run: node framework-rs/parity/rust_field_encryption_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'http' # shard
+      - name: Save compiler cache
+        uses: ./.github/actions/rust-build-cache/save
+        if: always() # shard
+
+  blueprint:
+    name: blueprint (${{ matrix.shard }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [core, billing, modules, timing]
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: parity-test-only
+          POSTGRES_DB: parity
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d parity"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      FORKLAUNCH_TEST_REDIS_URL: redis://127.0.0.1:6379/
+      FORKLAUNCH_TEST_POSTGRES_URL: postgres://postgres:parity-test-only@127.0.0.1:5432/parity
+      FORKLAUNCH_TEST_KAFKA_BROKERS: 127.0.0.1:9092
+      # Required at startup since 7248a878d; the module HTTP tests exercise /mcp.
+      MCP_ENABLED: 'true'
+      # Loads .github/actions/rust-build-cache/stable-tmp/preload.cjs once the
+      # cache step has set FORKLAUNCH_STABLE_TMP_PRELOAD; a no-op before that.
+      # Set here because GitHub refuses NODE_OPTIONS through GITHUB_ENV.
+      NODE_OPTIONS: --import=data:text/javascript,if(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD){(await(import(%22node:module%22))).createRequire(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)(process.env.FORKLAUNCH_STABLE_TMP_PRELOAD)}
+    steps:
+      - uses: actions/checkout@v7
+      # The Kafka worker's rdkafka-sys builds librdkafka with curl and SASL.
+      - name: Install native build dependencies for the Kafka worker
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libcurl4-openssl-dev libsasl2-dev
+      # The runner context is not available in job-level env.
+      - run: |
+          # shellcheck disable=SC2129
+          echo "TSC_BIN=$RUNNER_TEMP/fl-rust-ts/node_modules/.bin/tsc" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_BETTER_AUTH_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_EXPRESS_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_SCALAR_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+          echo "FORKLAUNCH_TEST_ORM_DEPENDENCIES=$RUNNER_TEMP/fl-rust-ts" >> "$GITHUB_ENV"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Rust build cache
+        uses: ./.github/actions/rust-build-cache
+        with:
+          family: blueprint-rs-${{ matrix.shard }}
+          fallback-family: blueprint-rs-core
+          size: 1500M
+          free-disk: 'true'
+          stable-tmp: 'true'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 @types/node@26.6.5 @sinclair/typebox@0.34.52 stripe@22.6.2 zod@4.6.5 ts-deepmerge@8.0.0 bullmq@6.3.10 ioredis@6.0.0 better-auth@1.7.6 @better-auth/memory-adapter@1.7.6 @better-auth/core@1.7.6 @better-auth/utils@0.4.2 @opentelemetry/api@1.9.1 @mikro-orm/core@7.2.3 @mikro-orm/postgresql@7.2.3 @forklaunch/better-auth-mikro-orm-fork@0.5.11 express@5.2.1 @scalar/express-api-reference@0.10.25 esbuild@0.28.2 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 qs@6.16.0 @types/qs@6.15.1
+      - name: Check configured mapper and service source types
+        run: |
+          mkdir -p "$RUNNER_TEMP/fl-configured-mappers-types"
+          cp framework-rs/parity/fixtures/configured-mappers-types/package*.json "$RUNNER_TEMP/fl-configured-mappers-types/"
+          npm ci --prefix "$RUNNER_TEMP/fl-configured-mappers-types" --legacy-peer-deps --ignore-scripts --no-audit --no-fund
+          mkdir -p "$RUNNER_TEMP/fl-configured-mappers-runtime"
+          cp framework-rs/parity/fixtures/canonical-iam/package*.json "$RUNNER_TEMP/fl-configured-mappers-runtime/"
+          npm ci --prefix "$RUNNER_TEMP/fl-configured-mappers-runtime" --ignore-scripts --no-audit --no-fund
+          node framework-rs/parity/rust_configured_mappers_types.mjs
+          node framework-rs/parity/rust_configured_mappers_types.mjs --sdk
+        env:
+          FORKLAUNCH_CONFIGURED_TYPES_PREFIX: ${{ runner.temp }}/fl-configured-mappers-types
+          FORKLAUNCH_CONFIGURED_TYPES_RUNTIME_PREFIXES: '["${{ runner.temp }}/fl-configured-mappers-runtime","${{ runner.temp }}/fl-rust-ts"]'
+      - name: Install isolated Chromium relay fixture
+        run: |
+          npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-browser" --no-save --package-lock=false --ignore-scripts playwright-core@1.62.1
+          node "$RUNNER_TEMP/fl-rust-browser/node_modules/playwright-core/cli.js" install --with-deps chromium
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_oidc_relay.mjs
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_iam_oidc_browser_relay.mjs
+        env:
+          PLAYWRIGHT_CORE_PATH: ${{ runner.temp }}/fl-rust-browser/node_modules/playwright-core
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_worker_tenant_scope_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_cac_provider_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_stripe_services_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_stripe_webhook_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_preview_model_gateway.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_model_gateway.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_model_gateway_stream.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_model_gateway_dtos.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_instance_gateway_configuration.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_platform_events_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_email_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_voice_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_whatsapp_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_sms_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_payments_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_payments_fetch_capability.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_managed_stripe_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_stripe_client_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_configured_mappers.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_request_dates.mjs
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_date_artifacts.mjs
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_checkout_artifacts.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Checkout live HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_checkout_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Portal live HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_portal_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Plan read HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_plan_read_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Subscription read HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_subscription_read_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound PaymentLink read HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_payment_link_read_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound PaymentLink creation HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_payment_link_creation_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Plan creation HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_plan_creation_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Subscription recovery HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_subscription_recovery_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Configured Checkout and PaymentLink cached reads
+        run: |
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --test configured_cached_reads
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features bound-checkout --test http_configured_cached_reads -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Configured PaymentLink update preflight, coercion, HTTP and MCP
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        run: |
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --test configured_payment_link_update
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features bound-checkout,typescript-routing --test http_configured_payment_link_update -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Configured Subscription update preflight and HTTP dispatch
+        run: |
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --test configured_subscription_update
+          cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features bound-checkout --test http_configured_subscription_update -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Bound PaymentLink expiration recovery HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_payment_link_expiration_recovery_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound PaymentLink expiration HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_payment_link_expiration_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Subscription creation HTTP, MCP and both SDKs
+        run: node framework-rs/parity/rust_billing_bound_subscription_creation_runtime.mjs
+        if: matrix.shard == 'billing' # shard
+      - name: Stored Portal provenance and original-lifetime PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_portal_reads -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Stored Portal local expiration, immutable history and uncertain commit PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_portal_expiration -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Plan read provenance, provider and race PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_plan_reads -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: PaymentLink event-linked expiration recovery PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_payment_link_expiration_recovery -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: PaymentLink metadata expiration and migration PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_payment_link_expiration -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Created PaymentLink bounded list PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_created_payment_link_list -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Created PaymentLink read provenance and provider PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_created_payment_link_reads -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Bound Subscription read provenance and provider PostgreSQL checks
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features postgres-identity --test bound_subscription_creation bound_subscription_created_read_matrix -- --ignored --nocapture --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - name: Billing date HTTP, MCP and generated SDK profile
+        run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features http --test http_request_dates -- --ignored --test-threads=1
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_dto_types.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_portal_options.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_recurring_options.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_options.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_cache_update.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_update_preflight.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_plan_update_preflight.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_plan_create_preflight.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_creation_preflight.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_read_identity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_update_identity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_post_effect_identity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_creation_response_shape.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_update_result.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_portal_url_shape.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_plan_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_customer_registration_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_subscription_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_portal_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_checkout_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_subscription_recovery_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_subscription_target_gap.mjs
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_expiration_source.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_payment_link_expiration_recovery_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_payment_link_expiration_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_bound_creation_sdk.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_consumed_references.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/rust_billing_checkout_expiration_source.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/typescript_billing_cached_dates.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/typescript_billing_configured_get_http.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - run: node framework-rs/parity/typescript_billing_payment_link_update_http.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'billing' # shard
+      - name: Pin Node for configured HMAC date comparisons
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.2.0'
+      - run: node framework-rs/parity/rust_billing_hmac_dates_http.mjs
+        if: matrix.shard == 'modules' # shard
+      - name: Restore configured-module reference Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node framework-rs/parity/typescript_billing_hmac_http.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/typescript_billing_subscription_owner_http.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_VALIDATOR_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_subscription_update_preflight.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_payment_link_cache_reads.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_cached_session_identity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_subscription_party_types.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_checkout_uri.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_contracts_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_iam_filter_orm.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_ORM_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_retention.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_ORM_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_compliance.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+          FORKLAUNCH_TEST_ORM_DEPENDENCIES: ${{ runner.temp }}/fl-rust-ts
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_docs_sources.mjs
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_sdk_reference_coercion.mjs
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_iam_directory_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_iam_directory_grants.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_iam_mapper_extensions.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_billing_base_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_base_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_contracts_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_order_events_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_catalog_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_stripe_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_resume_guard.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_direct_context.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_scoped_capture.mjs
+        env:
+          STRIPE_SDK_PATH: ${{ runner.temp }}/fl-rust-ts/node_modules/stripe
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_paypal_scoped_context.mjs
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_paypal_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_pricing_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_import_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_webhook_ledger_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - run: node framework-rs/parity/rust_ecommerce_stripe_webhook_parity.mjs
+        env:
+          TSC_BIN: ${{ runner.temp }}/fl-rust-ts/node_modules/.bin/tsc
+        if: matrix.shard == 'modules' # shard
+      - name: Start isolated Kafka-compatible broker
+        run: |
+          docker run --detach --name forklaunch-rust-kafka-ci --memory 1536m --cpus 2 \
+            --publish 127.0.0.1:9092:9092 --tmpfs /var/lib/redpanda/data:rw,size=512m,mode=1777 \
+            redpandadata/redpanda@sha256:218469e5d088757bb2c3ff4c5e272f7eebdc4e94c933e6e15aff10b845cbcd07 \
+            redpanda start --overprovisioned --smp 1 --memory 768M --reserve-memory 0M \
+            --node-id 0 --check=false --kafka-addr 0.0.0.0:9092 --advertise-kafka-addr 127.0.0.1:9092
+          for _ in $(seq 1 60); do
+            if docker exec forklaunch-rust-kafka-ci rpk cluster health | grep -q 'Healthy:.*true'; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - run: python3 scripts/rust_format.py blueprint-rs/Cargo.toml
+        if: matrix.shard == 'core' # shard
+      - run: cargo clippy --manifest-path blueprint-rs/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+        if: matrix.shard == 'core' # shard
+      - run: cargo doc --manifest-path blueprint-rs/Cargo.toml --workspace --all-features --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+        if: matrix.shard == 'core' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml --workspace --all-features
+        if: matrix.shard == 'core' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-base --all-features --test services -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-base --all-features --test subscription_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_checkout -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_payment_link -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'timing' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_plan_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test customer_registration -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_subscription_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_portal_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test bound_checkout_creation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --all-features --test paused_effect -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-billing-stripe --features http --test http_router -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-base --all-features --test business_rules -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-base --all-features --test provider_bindings -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-base --all-features --test payment_resume -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-stripe --all-features --test bound_reads -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-stripe --all-features --test scoped_cancellation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-stripe --all-features --test scoped_capture -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-paypal --all-features --test bound_reads -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-paypal --all-features --test scoped_cancellation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-base --all-features --test reconciliation -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-ecommerce-stripe --all-features --test http_router -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features postgres_backend -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features postgres_jwt_sessions -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features provider_ -- --include-ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features encrypted_directory -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features directory_identity_binding -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-iam-base --all-features directory_unit_of_work_restricted -- --ignored --test-threads=1
+        if: matrix.shard == 'modules' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-worker-database --all-features postgres_worker -- --ignored --test-threads=1
+        if: matrix.shard == 'timing' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-worker-redis --all-features redis_worker -- --ignored --test-threads=1
+        if: matrix.shard == 'core' # shard
+      - run: cargo test --manifest-path blueprint-rs/Cargo.toml -p forklaunch-worker-kafka --all-features --test kafka_worker -- --ignored --test-threads=1
+        if: matrix.shard == 'core' # shard
+      - name: Stop isolated Kafka-compatible broker
+        if: always()
+        run: docker rm -f forklaunch-rust-kafka-ci || true
+      - name: Save compiler cache
+        uses: ./.github/actions/rust-build-cache/save
+        if: always() # shard
+

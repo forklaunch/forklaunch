@@ -43,8 +43,7 @@ export class BaseOrderService<
   SchemaValidator extends AnySchemaValidator,
   MapperEntities extends BaseOrderEntities,
   MapperDomains extends BaseOrderDtos = BaseOrderDtos
-> implements OrderService
-{
+> implements OrderService {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -115,7 +114,7 @@ export class BaseOrderService<
       ...(args[0] instanceof EntityManager ? args.slice(1) : args)
     );
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(order);
+      innerEm.persist(order);
     });
     return this.mappers.OrderMapper.toDto(order);
   }

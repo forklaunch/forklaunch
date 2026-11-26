@@ -10,7 +10,7 @@ fi
 mkdir -p output/delete-worker
 cd output/delete-worker
 
-RUST_BACKTRACE=1 $FL init application worker-test-node-application -p worker-test-node-application -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test worker" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application worker-test-node-application -p worker-test-node-application -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m billing-base -m iam-base -D "Test worker" -A "Rohin Bhargava" -L 'AGPL-3.0'
 RUST_BACKTRACE=1 $FL init worker wrk-test -t database -d postgresql -p worker-test-node-application/src/modules -D "Test worker"
 RUST_BACKTRACE=1 $FL delete worker wrk-test -p worker-test-node-application/src/modules -c
 

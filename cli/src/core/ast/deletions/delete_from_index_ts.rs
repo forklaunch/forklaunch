@@ -8,19 +8,11 @@ pub(crate) fn delete_from_index_ts_export<'a>(
     index_program: &mut Program<'a>,
     export_identifier: &str,
 ) -> Result<String> {
-    let mut new_body = Vec::new_in(allocator);
+    let mut new_body = Vec::new_in(&allocator);
     index_program.body.iter().for_each(|stmt| {
         let should_skip = match stmt {
-            Statement::ExportNamedDeclaration(expr) => {
-                if let Some(source) = &expr.source {
-                    source.value.as_str() == export_identifier
-                } else {
-                    false
-                }
-            }
-            Statement::ExportAllDeclaration(expr) => {
-                expr.source.value.as_str() == export_identifier
-            }
+            Statement::ExportFromDeclaration(expr) => expr.source.value == export_identifier,
+            Statement::ExportAllDeclaration(expr) => expr.source.value == export_identifier,
             _ => false,
         };
 

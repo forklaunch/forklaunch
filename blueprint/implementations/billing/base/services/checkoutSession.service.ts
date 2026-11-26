@@ -14,24 +14,24 @@ import { CheckoutSession } from '../persistence/entities';
 import { BaseCheckoutSessionDtos } from '../domain/types/baseBillingDto.types';
 import { BaseCheckoutSessionEntities } from '../domain/types/baseBillingEntity.types';
 import { CheckoutSessionMappers } from '../domain/types/checkoutSession.mapper.types';
+import { cachedSessionDto } from '../utils/cachedSessionDto';
 
 export class BaseCheckoutSessionService<
   SchemaValidator extends AnySchemaValidator,
   PaymentMethodEnum,
   CurrencyEnum,
   StatusEnum,
-  MapperEntities extends BaseCheckoutSessionEntities<
-    PaymentMethodEnum,
-    CurrencyEnum,
-    StatusEnum
-  >,
+  MapperEntities extends BaseCheckoutSessionEntities,
   MapperDomains extends BaseCheckoutSessionDtos<
     PaymentMethodEnum,
     CurrencyEnum,
     StatusEnum
   > = BaseCheckoutSessionDtos<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-> implements CheckoutSessionService<PaymentMethodEnum, CurrencyEnum, StatusEnum>
-{
+> implements CheckoutSessionService<
+  PaymentMethodEnum,
+  CurrencyEnum,
+  StatusEnum
+> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -132,12 +132,9 @@ export class BaseCheckoutSessionService<
       throw new Error('Session not found');
     }
 
-    return this.mappers.CheckoutSessionMapper.toDto(
-      await this.mappers.UpdateCheckoutSessionMapper.toEntity(
-        checkoutSessionDetails.value,
-        this.em
-      )
-    );
+    // Creation already mapped this DTO. A cache-only session has no database
+    // entity for the update mapper to load, and a read must not mutate one.
+    return cachedSessionDto(checkoutSessionDetails.value, id);
   }
 
   async expireCheckoutSession({ id }: IdDto): Promise<void> {

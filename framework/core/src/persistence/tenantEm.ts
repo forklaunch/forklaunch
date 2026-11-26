@@ -1,5 +1,5 @@
 import type { EntityManager } from '@mikro-orm/core';
-import { setEncryptionTenantId, withEncryptionContext } from './encryptedType';
+import { assertBindableTenantId, withEncryptionContext } from './encryptedType';
 
 /**
  * Wrap a tenant-scoped MikroORM `EntityManager` so that every operation on
@@ -50,41 +50,80 @@ import { setEncryptionTenantId, withEncryptionContext } from './encryptedType';
  * }
  * ```
  *
- * If `tenantId` is `undefined` or empty, the original EM is returned
- * unwrapped — useful for super-admin / lookup paths that need an
- * unscoped query before they know the tenant.
+ * # The empty tenant is not a tenant
+ *
+ * `''` is rejected: it throws `EmptyTenantError`. It used to mean "bind the
+ * no-tenant key", which is how global rows (a billing plan, a trial, a
+ * template) were encrypted — and it made a deliberate global row and a tenant
+ * nobody resolved the same key. A path that forgot to bind wrote perfectly
+ * readable rows under `''`, and the mistake surfaced later, somewhere else, as
+ * the owning tenant's "Failed to decrypt encrypted column value".
+ *
+ * Global rows need an id you can name and search for. Pick a constant no
+ * organization can collide with — the platform uses `'_internal'` — and bind
+ * it like any other tenant.
+ *
+ * `undefined` still means "do not wrap": the EM is returned as is and inherits
+ * whatever context is already bound. That is right only for a lookup that has
+ * not resolved a tenant yet and reads no encrypted column; anything that
+ * touches one now fails with `UnboundTenantError` rather than quietly using
+ * the empty key.
  *
  * @param em        a freshly forked `EntityManager` from `orm.em.fork(...)`
- * @param tenantId  the org/tenant id to bind for filter params + ALS;
- *                  pass `undefined` to skip wrapping entirely
+ * @param tenantId  the org/tenant id to bind; `''` throws;
+ *                  `undefined` skips wrapping entirely
+ * @throws EmptyTenantError when `tenantId` is `''`
  */
 export function wrapEmWithTenantContext(
   em: EntityManager,
   tenantId: string | undefined
 ): EntityManager {
-  if (!tenantId) {
+  if (tenantId === undefined) {
     return em;
   }
 
-  // Apply MikroORM tenant filter (used for row-level org isolation in
-  // queries) and seed AsyncLocalStorage as a best-effort for any
-  // synchronous code paths that read the tenant before invoking an EM
-  // method. The Proxy below is the load-bearing part for async / pg pool
-  // paths.
-  em.setFilterParams('tenant', { tenantId });
-  setEncryptionTenantId(tenantId);
+  assertBindableTenantId(tenantId, 'wrapEmWithTenantContext');
 
-  return new Proxy(em, {
+  em.setFilterParams('tenant', { tenantId });
+
+  // No `setEncryptionTenantId` here on purpose: `enterWith` mutates the
+  // caller's async resource and leaks the tenant into everything that runs
+  // on it afterwards. The Proxy binds the tenant for every EM call, which is
+  // the only place hydration and flush read it.
+  const proxy: EntityManager = new Proxy(em, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (typeof value !== 'function') {
         return value;
       }
       return function tenantBoundMethod(...args: unknown[]) {
-        return withEncryptionContext(tenantId, () =>
+        const result = withEncryptionContext(tenantId, () =>
           (value as (...a: unknown[]) => unknown).apply(target, args)
         );
+        return rebind(result, target, proxy);
       };
     }
   }) as EntityManager;
+  return proxy;
+}
+
+/**
+ * Keep a chained call inside the tenant. `persist()`, `remove()` and the
+ * other fluent methods return the entity manager itself, and they return
+ * the *raw* one, so `em.persist(row).flush()` would run `flush` outside the
+ * context and encrypt under whatever tenant the caller happened to be in.
+ * The manager comes back as the proxy instead.
+ *
+ * A `fork()` is deliberately left alone: a fork is a new manager, and the
+ * established idiom for stepping out of the tenant is exactly
+ * `getSuperAdminContext(em).fork()` inside an explicit
+ * `withEncryptionContext(other, …)`. Binding the fork would make that
+ * explicit context lose to the tenant the parent was created with.
+ */
+function rebind(
+  result: unknown,
+  target: EntityManager,
+  proxy: EntityManager
+): unknown {
+  return result === target ? proxy : result;
 }

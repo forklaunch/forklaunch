@@ -1,10 +1,32 @@
 ---
 name: cli
-description: "CLI: init, change, delete, deploy, environment, release, sync, sdk, openapi."
+description: "CLI: init, change, delete, deploy, environment, release, org, sync, sdk, openapi; what is dashboard-only; deploy exit codes."
 user-invokable: true
 ---
 
 # ForkLaunch CLI Skill
+
+## Frontend domain controls
+
+With a CLI version supporting website domain actions, use the website command
+for the static frontend; `app domain` continues to configure application/service
+DNS. Every action is scoped to an environment and region:
+
+```bash
+fl app website --environment production --region us-east-2
+fl app website --environment production --region us-east-2 --enable
+fl app website --environment production --region us-east-2 --domain study.example.com
+fl app website --environment production --region us-east-2 --check-domain
+fl app website --environment production --region us-east-2 --remove-domain
+```
+
+The read returns the published URL, pending change, DNS validation records, and
+certificate status. Connect/remove stage changes; deploy a saved release after
+validation to publish them. The CLI first reads current revisions and includes
+both in the write. On conflicts or ambiguous write failures, read status before
+retrying. Custom frontend domains require Pro or Enterprise. `--disable` is only
+available before the first website publication. CLI 1.33.0 predates the domain
+flags; check `fl app website --help` before using them.
 
 ## Prerequisites
 
@@ -111,6 +133,7 @@ Studio CLI command blocks are scaffold-only. They may contain:
 - `forklaunch init application ...`
 - `forklaunch init service ...`
 - `forklaunch init worker ...`
+- `forklaunch init agent ...`
 - `forklaunch init library ...`
 - `forklaunch init router ...`
 - exactly one package install command after all init commands: `pnpm install` for Node runtime or `bun install` for Bun runtime
@@ -177,7 +200,7 @@ Use these lessons when repairing or planning generated ForkLaunch Studio apps:
 | `--validator` | Yes | `zod`, `typebox` |
 | `--http-framework` | Yes | `express`, `hyper-express` |
 | `--formatter` | Yes | `prettier`, `biome` |
-| `--linter` | Yes | `eslint`, `oxlint` |
+| `--linter` | Yes | `oxlint` (`eslint` rejected: no TypeScript 7 support) |
 | `--test-framework` | Yes | `vitest`, `jest` |
 | `--license` | Yes | `MIT`, `Apache-2.0`, `none`, etc. |
 | `--author` | Yes | Author name string |
@@ -214,6 +237,22 @@ Adds an isolated module under `src/modules/<name>/` with:
 
 Same as service but with BullMQ/Kafka worker infrastructure instead of HTTP routes.
 
+### `forklaunch init agent`
+
+Adds an AI agent: a service with `variant = "agent"` that serves
+`GET /api/v1/agent/tools`, `POST /api/v1/agent/tasks` and `/tasks/stream`,
+plus `agent.config.ts` and a `tools/` folder. Needs IAM in the app.
+
+```bash
+forklaunch init agent assistant --path ./src/modules \
+  --description "Order assistant" --instructions "You help staff with orders." \
+  --service orders --mcp linear=https://mcp.linear.app/mcp
+```
+
+`--service` and `--mcp` repeat. See `/agents` for adding tools.
+`--language rust` generates a Rust agent on the framework agent runtime
+instead: tools live in `agent/tools/` and sources in `agent/mod.rs`.
+
 ### `forklaunch init library`
 
 Adds a shared library under `src/modules/<name>/` — no server, just exports.
@@ -230,12 +269,14 @@ forklaunch init module <name> --path <app-path> --module <module-type> --databas
 # billing-stripe  — Stripe billing implementation
 # iam-base        — IAM authorization only (no auth provider)
 # iam-better-auth — Better Auth implementation for IAM
-# relay           — Managed-mode relay callback listener. Scaffolds a signed,
-#                   universal callback-acceptor endpoint into the app's iam
-#                   service: the platform relay forwards a verified provider
-#                   callback (Epic OAuth today; any per-instance event) to it,
-#                   and it replay-guards, dispatches, and hands back a session.
-#                   Injects into iam, so no -d/--database. See the /managed-relay skill.
+# relay           — Managed-mode relay callback listener. Scaffolds the signed
+#                   forward-mode endpoint into the app's iam service: the
+#                   platform relay HMAC-POSTs a verified provider callback to
+#                   it, and it replay-guards, dispatches, and hands back a
+#                   session. Only needed for `forward` routes and the legacy
+#                   confidential-client path — a `redirect` route is served by
+#                   the app's own component. Injects into iam, so no
+#                   -d/--database. See the /managed-relay skill.
 
 # Example:
 forklaunch init module billing --path ./src/modules --module billing-stripe --database postgresql
@@ -303,7 +344,8 @@ The Forklaunch CLI provides these commands:
 | `change`      | Modify existing projects                                        |
 | `delete`      | Remove projects                                                 |
 | `deploy`      | Deploy applications to cloud                                    |
-| `environment` | Manage environments                                             |
+| `environment` | Create, delete and configure environments; branch matrix, approvals |
+| `org`         | Organization members, invitations, domain verification          |
 | `release`     | Create and manage releases                                      |
 | `integrate`   | Integrate with external services                                |
 | `openapi`     | Generate OpenAPI specifications                                 |
@@ -313,9 +355,61 @@ The Forklaunch CLI provides these commands:
 | `depcheck`    | Check dependency alignment                                      |
 | `eject`       | Eject from Forklaunch management                                |
 | `login`       | Authenticate with platform                                      |
+| `account`     | Keep several logins and choose which one a command uses         |
 | `logout`      | Log out from platform                                           |
 | `whoami`      | Show current user                                               |
 | `version`     | Show CLI version                                                |
+
+## What the CLI can do, and what only the dashboard can
+
+The CLI and the dashboard are not at parity, and hunting for a command that does
+not exist wastes a session. This is the map as of CLI 1.18.
+
+**CLI can do, dashboard cannot** — the release pipeline and operator primitives:
+cut a release and upload its artifacts (`release create`), push a whole config
+file (`config push`), preview a deploy (`deploy create --dry-run`), roll back
+(`deploy rollback`), pause/resume/restart a worker (`worker pause|resume|restart`),
+set an application's placement (`app hosting`), and the managed-instance
+lifecycle (`managed ...`).
+
+**Both can do** — environments and their branch matrix and approval gate, custom
+domains, readiness reports, deploy cancel, notifier configs, organization
+members and invitations, GitHub connection, resources (`infra`), alerts.
+
+**Dashboard only — do not look for a CLI command:**
+
+| Area | Why |
+| ---- | --- |
+| Chat threads, code upload | Interactive; the CLI is not the surface |
+| Data explorer (Redis keys, Kafka topics, SQL) | Browsing, not scripting. `forklaunch data db\|redis\|kafka` opens a session but does not manage objects |
+| Billing: checkout, billing portal, plan changes, cancelling a subscription | Stripe redirect flows |
+| Your own profile, password, notification preferences | Account settings, not platform state |
+| Compliance templates (create/apply/set-default) | Dashboard-only today |
+| Component infrastructure detail: cpu/memory, autoscaling bounds, bridge networking | `app resize` covers instance size; the rest is dashboard-only |
+| Platform admin (`/admin`): substrate force-unlock/teardown, migration retry, org plan changes | Staff console |
+
+**Neither surface reaches these** (the API has the route; nothing calls it):
+worker `config` and `template-config`, app-level observability environment
+config, `createService`/`updateService`. If you need one, it is an API call, not
+a command.
+
+**A command that 404s is not always your mistake.** Two shipped commands
+called routes the platform does not mount (`github connect|disconnect|status`,
+and `release create`'s duplicate-version pre-check), and in both cases the
+error surfaced as something else — a generic failure, or a guard that silently
+never fired. If a command fails in a way that does not match its arguments,
+check the URL against the platform's routes before assuming the arguments are
+wrong:
+
+```bash
+node scripts/check-cli-routes.mjs --platform ../forklaunch-platform
+```
+
+That check compares URLs to mounted routes and nothing else. It cannot see an
+HMAC signature computed over the wrong path (the framework verifies against
+`req.path`, with the router basePath stripped), an operationId that moved
+because `sdk.ts` was reordered, or a response status code added to an existing
+operation — all three fail with the URL perfectly correct.
 
 ## Core Commands
 
@@ -335,9 +429,9 @@ forklaunch init app <app_name>
 --http-framework <type>  # express, hyper-express (bun forces express)
 --test-framework <type>  # vitest, jest
 --formatter <type>       # prettier, biome
---linter <type>          # eslint, oxlint
+--linter <type>          # oxlint
 --modules <module>       # billing-base, billing-stripe, iam-base, iam-better-auth,
-                         # ecommerce-stripe, messaging-base, messaging-twilio, cac-base
+                         # ecommerce-stripe, cac-base, mlse-base
 --path <path>            # REQUIRED in practice — see below
 --modules-path <path>    # src/modules | modules
 
@@ -439,7 +533,7 @@ forklaunch change application [--path <app_root>]
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 -N <name>                # Rename the application
@@ -451,6 +545,59 @@ forklaunch change application [--path <app_root>]
 forklaunch change application --runtime bun --formatter biome --dryrun
 forklaunch change application --runtime bun --formatter biome
 ```
+
+#### Add or remove a capability: `forklaunch infra add|remove`
+
+The way to give a service object storage, a cache or a managed gateway
+capability (email, sms, whatsapp, voice, payments, models). Managed gateway
+capabilities work in any ForkLaunch app, a managed instance or an app deployed
+with `forklaunch deploy create`. It writes the registration
+in `registrations.ts`, the local stand-in in docker-compose, `.env.local`,
+`package.json`, the manifest resource and the test utilities (for a
+capability: its `/platform-events` handler and the router mount in
+`server.ts`), and it edits those files in place: only the lines the resource
+needs are added, in the file's own indentation and quote style, and comments,
+key order and the rest of the file are left alone. `infra remove` takes exactly
+those lines out. Settings the service already had (its own gateway entries in
+`registrations.ts`, an env value in docker-compose) are kept and left on
+remove.
+(`change service --infrastructure` regenerates the files instead, which
+reformats a customized service; prefer `infra add|remove`.) It takes one change:
+
+```bash
+forklaunch infra add <service> object-store   # or: s3
+forklaunch infra add <service> cache          # or: redis
+forklaunch infra add <service> email          # managed gateway: email (SES); see /integrations
+forklaunch infra add <service> sms            # managed gateway: texts; see /integrations
+forklaunch infra add <service> whatsapp       # managed gateway: WhatsApp (see /integrations)
+forklaunch infra add <service> voice          # managed gateway: outbound calls (Amazon Connect)
+forklaunch infra add <service> payments       # managed gateway: Stripe Connect, no Stripe key
+forklaunch infra add <service> models         # managed gateway: AI models, no provider key
+forklaunch infra add <worker> sms             # any managed gateway capability may go on a worker
+forklaunch infra remove <service> object-store
+forklaunch infra add <service> object-store --dryrun
+forklaunch score --offline                    # afterwards: the wiring checks should pass
+```
+
+Run it from the app root (or pass `-p <app-root>`). It refuses a type the
+project already has, a type it lacks on remove, and projects that aren't
+services — except the managed gateway capabilities, which a worker may also
+hold (its worker and server containers both get the gateway settings). A
+worker can send, call or charge; events (delivery receipts, replies, call and
+payment events) are delivered over HTTP to `/platform-events/<capability>`,
+never to the worker process. When no HTTP service holds the capability, `infra
+add <worker>` prints a note saying so: add it to an HTTP service as well if the
+app needs the events. `models` has no events.
+
+`models` registers `ModelGatewayClient` (`createModelGatewayClient()`, keyless)
+and the gateway settings; an existing OpenAI or Anthropic client, its key and
+its dependency are left as they are, so calls move over one at a time. See
+`/integrations` (*Models*).
+
+`voice` is a managed gateway capability: it registers `VoiceClient`
+(`createVoiceClient()`, keyless), writes `api/platformEvents/voice.ts` for call
+events, and adds the local `gateway-mock` to docker-compose. See
+`/integrations` (*Voice calls*).
 
 #### Change Service
 
@@ -472,6 +619,13 @@ forklaunch change service [--path <service_directory>]
 forklaunch change service --path ./src/modules/my-service --database postgresql --dryrun
 forklaunch change service --path ./src/modules/email --to worker --type bullmq --dryrun
 ```
+
+`--database` rewrites `mikro-orm.config.ts`: to `mongodb` it writes
+`clientUrl: getEnvVar('DB_URL') || <local URL>` and `dbName` from `DB_NAME`
+(deployed, the platform's `DB_URL` reaches DocumentDB with `tls=true` and
+`retryWrites=false`); away from `mongodb` it removes them and writes back the
+separate `DB_HOST`/`DB_PORT`/`DB_USER`/`DB_PASSWORD`/`DB_NAME` settings. See
+`/development-guidelines` (*How each engine connects*).
 
 ##### `--to worker` ADDS a worker. It does not remove the HTTP surface.
 
@@ -651,7 +805,31 @@ forklaunch deploy logs                   # logs of the latest deployment for thi
 forklaunch deploy logs <id> --all        # the whole log for one deployment
 forklaunch deploy logs -l error          # only the error lines — start here on a failed deploy
 forklaunch deploy destroy ...            # tear down application infrastructure
+forklaunch deploy cancel <id>            # stop a running deployment
+forklaunch deploy approvals list         # deployments parked behind the approval gate
+forklaunch deploy approvals approve <approval-id>
 ```
+
+**Exit codes from `deploy create` — read these before retrying.** A wrapper that
+treats every non-zero exit as "the deploy failed" will retry or roll back a
+deploy that is merely waiting:
+
+| Exit | Meaning | What to do |
+| ---- | ------- | ---------- |
+| 0 | Completed | Nothing |
+| 1 | Failed, cancelled, or rolled back | Read the reason on stdout; `deploy logs -l error` |
+| 2 | Parked awaiting approval — **not a failure** | `deploy approvals list`, then an admin approves |
+| 3 | Still running when the CLI stopped waiting (`--timeout`, default 45 min) | `deploy info --deployment <id>`; the deploy continues |
+
+`--no-wait` always exits 0 and says nothing about the outcome; follow it with
+`deploy info --deployment <id>`.
+
+**`deploy create` refuses the wrong checkout.** It prints
+`Deploying <app> (<repo>) release <v> -> <env>/<region>` before any write, and
+stops if the checkout's git origin is not the application's repository (pass
+`--force` to override). An environment the application does not have needs
+`--create-environment`, or an explicit yes at the prompt — it will not be created
+as a side effect of deploying.
 
 **The first deploy asks where the app should run.** The first deployment of an
 application to a given environment × region is gated: the platform answers `428`
@@ -700,37 +878,58 @@ covers both.
 
 ### 5. Environment Commands (`environment`)
 
-Manage application environments.
+An environment is the control-plane record a deploy targets: a name, the regions
+it runs in, the git branch it autodeploys from, and whether its deploys need an
+approval. Every subcommand below reads the application id from
+`.forklaunch/manifest.toml` in the current directory, so run them from the
+application's checkout (or pass `-p <path>`).
 
 ```bash
-# Create environment
-forklaunch environment create <name>
+# Create / remove
+forklaunch environment create -e staging --region us-west-1
+forklaunch environment delete -e staging            # prompts; --yes for scripts
 
-# Options:
---region <region>      # AWS region
---description "Environment description"
+# The branch deployment matrix — which branch autodeploys to which environment
+forklaunch environment branch list                  # what each environment tracks
+forklaunch environment branch set -e production -b main
+forklaunch environment branch clear -e production   # back to the suggested default
 
-# List environments
-forklaunch environment list
+# The deployment-approval gate
+forklaunch environment approval require -e production
+forklaunch environment approval waive   -e staging
+forklaunch environment approval reset   -e production   # back to the default
 
-# Delete environment
-forklaunch environment delete <name>
-
-# Show environment details
-forklaunch environment show <name>
-
-# Examples:
-forklaunch environment create staging --region us-west-2
-forklaunch environment list
-forklaunch environment show production
+# Variables (local workspace, not the control plane)
+forklaunch environment status                       # which vars still need a person
+forklaunch environment validate
+forklaunch environment sync
 ```
+
+**Branch precedence for autodeploy**, highest first:
+
+1. the environment's tracked branch (`environment branch set`)
+2. the repository-level `branchMapping` (set when connecting the repo)
+3. the suggested default — `main` for a `production`/`prod` environment, otherwise a branch named after the environment
+
+So a push to `main` does **not** deploy `staging` unless `staging` tracks `main`.
+This is the single most common "autodeploy isn't firing" cause: check
+`environment branch list` first.
+
+**`environment delete` does not tear down infrastructure.** It removes the
+environment record and its stored configuration. Run `forklaunch deploy destroy`
+first if the environment still has running services, or you strand them.
+
+**Approval is tri-state.** `require`/`waive` set an explicit override; `reset`
+returns to the default, which is "required for production-named environments".
+A deploy that parks behind the gate exits **2** (not a failure) — see
+`deploy approvals`.
 
 ### 6. Release Commands (`release`)
 
 Create and manage application releases.
 
-`release` has four subcommands: `create`, `info`, `list`, `eject`. There is no
-`release show` or `release rollback` — rollback lives on
+`release` has five subcommands: `create`, `info`, `list`, `eject`, `set-current`.
+There is no `release show`, and no `release rollback` — rollback lives on
 `forklaunch deploy rollback`. (`release list` is recent; older CLIs have only
 the first two and `eject`. Check `forklaunch release --help` if unsure.)
 
@@ -750,6 +949,10 @@ forklaunch release create --version <version> --local --yes
 forklaunch release info                  # details for a release
 forklaunch release list                  # releases for this application
 forklaunch release eject                 # emit the Pulumi IaC a release would deploy
+
+# Mark which release the dashboard, variable defaults and readiness read from.
+# This does NOT deploy — use `deploy create -r <version>` for that.
+forklaunch release set-current 1.2.3
 ```
 
 **Non-interactive callers must pass a mode and `--yes`.** With neither `--local`
@@ -822,6 +1025,21 @@ access. Print the link, wait, then confirm with `status`.
 `--auto-deploy` spends money on every push with no further confirmation. Get
 explicit agreement before enabling it on a production branch.
 
+**Connecting a repo is not enough to make a push deploy.** `--auto-deploy` sets
+the mode; which branch reaches which environment is the branch matrix. After
+connecting, set it explicitly:
+
+```bash
+forklaunch github connect --repo https://github.com/acme/portal --auto-deploy
+forklaunch environment branch set -e production -b main
+forklaunch environment branch list          # confirm
+```
+
+Leaving the matrix unset means each environment tracks a branch named after
+itself (except `production`/`prod`, which default to `main`) — which is why a
+repo can be connected, auto-deploy on, and a push to `main` still deploy
+nothing.
+
 ### 7b. Application Commands (`app`)
 
 Create and inspect the **platform** application record — the control-plane object
@@ -830,8 +1048,20 @@ your local checkout links to.
 ```bash
 forklaunch app create [options]     # create + integrate in one step
 forklaunch app services             # list services and workers
-forklaunch app domain               # inspect the custom domain
+forklaunch app domain status        # inspect the custom domain
+forklaunch app domain set app.example.com        # attach one
+forklaunch app domain subdomain add shop -s <service-id>
+forklaunch app domain email set -e production --from hello --name "Acme" [--subdomain mail]   # Pro: send from the custom domain
+forklaunch app domain email status [-e production] [--json]   # status + DNS records to publish
+forklaunch app domain email remove -e production [-y]         # back to no-reply@<platform domain>
+forklaunch app readiness show       # readiness schedule + latest run
+forklaunch app readiness run        # start a report now
 forklaunch app resize ...           # resize components (cuts a release + deploys)
+forklaunch app compute -e <env> -r <region>      # each service: scale to zero or always on, why, and what traffic suggests
+forklaunch app compute -e <env> -r <region> --service api=always-on --reason "..."   # change; applies on the next deploy
+forklaunch app schedule -e <env> -r <region>     # calls the platform makes to services at set times
+forklaunch app schedule -e <env> -r <region> -s notifications \
+  --set sweep --schedule "rate(15 minutes)" --call /internal/sweep   # add/replace; --remove <name> removes
 forklaunch app route <id>           # route details
 forklaunch app controller <id>      # controller details
 ```
@@ -870,6 +1100,45 @@ blank by default.
 
 There is no `app delete`. Removing an application record is a dashboard action.
 
+### 7c. Organization Commands (`org`)
+
+Administer the organization the signed-in session belongs to. There is no
+`--organization` flag: these routes act on your own organization and nothing
+else. Everything except `show` and the `list`s needs the **admin** role, and a
+403 says so rather than "request failed".
+
+```bash
+forklaunch org show                         # name, id, domain, region, team size
+forklaunch org show --json
+forklaunch org show --name "Main Street"    # rename
+
+forklaunch org members list                 # email, role, user id
+forklaunch org members invite dev@acme.com --role member   # admin | member | viewer
+forklaunch org members role <user-id> admin
+forklaunch org members remove <user-id>     # prompts; --yes for scripts
+
+forklaunch org invitations list             # pending invitations
+forklaunch org invitations resend <invitation-id>
+forklaunch org invitations cancel <invitation-id>
+
+forklaunch org domain verify                # prints the TXT record to publish
+forklaunch org domain check                 # has it propagated?
+forklaunch org domain auto-join on          # anyone with a verified-domain email joins
+```
+
+**Onboarding a teammate, end to end:**
+
+```bash
+forklaunch org members invite dev@acme.com --role member
+forklaunch org invitations list             # confirm it is pending
+# ...they accept...
+forklaunch org members list                 # confirm they landed, with the right role
+```
+
+`members role` and `members remove` take a **user id**, not an email — read it
+from `org members list`. Role values are validated before the request, so a typo
+fails locally instead of round-tripping to IAM.
+
 ### 8. OpenAPI Commands (`openapi`)
 
 Export OpenAPI specifications from your code. There is no `generate` or `validate` subcommand —
@@ -881,7 +1150,8 @@ forklaunch openapi export
 
 # Options:
 -p, --path <base_path>  # Path to application root (optional)
--o, --output <output>   # Output directory (default: .forklaunch/openapi)
+-o, --output <output>   # Also write <output>/<service>/openapi.json (default: each service's
+                        # registered artifact, e.g. src/<service>/sdk/typescript/openapi.json)
 
 # Examples:
 forklaunch openapi export
@@ -992,25 +1262,23 @@ forklaunch config push  ... -i worker.env                                     # 
 ```
 
 This caused a multi-hour production outage on 2026-08-09. The blast radius went well past the
-config store, because a deploy regenerates infrastructure from it:
+config store, because a deploy regenerates the app's live infrastructure from it:
 
 1. Every other service's env vars were dropped from the config store.
-2. **SSM parameters were deleted** for keys no longer present (secret VALUES are unrecoverable
-   unless they exist in SSM parameter *history* or an old `production.env`).
-3. Existing SSM parameters were **overwritten by value** — e.g. `iam-better-auth-secret` was
-   replaced, so better-auth could no longer decrypt its stored JWKS private key and every
-   `get-session` returned 500 (which then looks like auth rate-limiting, because clients retry
-   the device-code flow, which polls).
-4. The next deploy **regenerated the exec-role IAM policies** from the narrowed config, revoking
-   `ssm:GetParameters` on the dropped parameters, so tasks died with `AccessDeniedException`.
-5. The next deploy also **regenerated task definitions**, silently reverting any manual ECS
-   rollback. Recovery does not stick until the config store itself is correct.
+2. Secret values tied to the dropped keys became unrecoverable outside of history/backups.
+3. Secrets still present but changed in value broke any service relying on the old value (e.g. an
+   auth secret rotating out from under a running service breaks session validation for every
+   client, which can look like unrelated rate-limiting).
+4. The next deploy regenerated infrastructure permissions from the narrowed config, so services
+   lost access to secrets they still needed.
+5. The next deploy also regenerated running service definitions, silently reverting any manual
+   fix applied directly against the infrastructure. Recovery does not stick until the config store
+   itself is correct.
 
-The underlying AWS account belongs to ForkLaunch, never the customer, regardless of cluster type —
-an agent working in a customer's project has no AWS credentials for it, full stop. None of the
-`aws ecs`/`aws ssm` commands below are ever runnable from that context; they exist only as an
-internal ForkLaunch-operator runbook (this is the actual playbook used to resolve the outage
-above), not something to suggest to a customer or run on their behalf.
+The customer never has direct access to the underlying cloud infrastructure, regardless of cluster
+type — an agent working in a customer's project has no cloud credentials for it, full stop, and
+must never suggest cloud-provider CLI commands to a customer or claim to run them on the
+customer's behalf.
 
 **Rules**
 
@@ -1019,33 +1287,17 @@ above), not something to suggest to a customer or run on their behalf.
 - Before any push, diff the input against a full `config pull` of the same environment and confirm
   no service loses keys.
 - Treat `push` as a destructive, environment-wide replace. Take a full unfiltered pull first and
-  keep it as the rollback artifact — this is the only recovery path available to a customer-facing
-  agent; everything below this point is ForkLaunch-internal only.
+  keep it as the rollback artifact — this is the only recovery path available to this skill.
 
 **If it has already happened**
 
-- Customer-facing agent: restore from the full unfiltered `config pull` taken before the push (see
-  Rules above) via `config push`, then redeploy. If no such backup exists, this is a ForkLaunch
-  support escalation — don't guess at secret values or fabricate a replacement config, and don't
-  suggest AWS CLI commands to the customer.
-- ForkLaunch operator only, with real AWS access to ForkLaunch's own account: before any push,
-  cross-check the running task definitions —
-  `aws ecs describe-task-definition --task-definition <td> --query 'taskDefinition.containerDefinitions[0].environment[*].name'`
-  — and verify SSM before/after a push:
-  `aws ssm get-parameters-by-path --path /<env-prefix> --query 'length(Parameters)'`. If damage has
-  already happened, task definitions hold the correct secret ARNs and non-secret env values — use
-  them to identify which keys and versions need restoring (`aws ecs describe-task-definition`).
-  For any container env entry that is itself a secret ARN reference, restore by ARN/version, not by
-  reading the plaintext value. Overwritten (not deleted) parameters are recoverable from history:
-  first list versions without decrypting (`aws ssm get-parameter-history --name <param>`, which
-  returns every version but never decrypts any of them) and match the version number by
-  `LastModifiedDate` around the push. `--with-decryption` on `get-parameter-history` decrypts the
-  WHOLE history at once, not just one version — instead fetch only the identified version with
-  `aws ssm get-parameter --name <param>:<version> --with-decryption` (colon-suffixed version
-  label), and never paste the decrypted value into chat, logs, or a
-  committed file — pipe it straight into the restore command.
+- Restore from the full unfiltered `config pull` taken before the push (see Rules above) via
+  `config push`, then redeploy. If no such backup exists, this is a ForkLaunch support escalation —
+  don't guess at secret values or fabricate a replacement config, and don't suggest
+  cloud-provider CLI commands to the customer. Recovery of the underlying infrastructure itself is
+  handled by ForkLaunch operators through an internal runbook, not through this skill.
 - Fix the config store BEFORE deploying again, or the deploy will re-apply the damaged state and
-  undo any ECS/IAM repair.
+  undo any infrastructure-level repair done on ForkLaunch's side.
 
 Behavioral asymmetry to know: `config pull` fails with "Environment not found" if the environment doesn't exist yet, but `config push` **auto-creates** the environment. On a never-deployed app, push first, then pull.
 
@@ -1135,6 +1387,41 @@ forklaunch whoami
 forklaunch whoami
 ```
 
+#### Multiple accounts (the keyring)
+
+A machine can hold one login per organization. **Before any `release`, `deploy`, `config`, `environment`, `infra` or `managed` command, confirm the login is the one that owns the application** — the wrong one answers "Application not found", or acts on a different organization.
+
+```bash
+forklaunch account current --json   # which login a command run HERE would use, and why
+forklaunch account list --json      # every login on this machine, with email and organization id
+```
+
+A command uses, in order: `--account <name>`, `FORKLAUNCH_ACCOUNT`, the account bound to the application it runs in, then the default login.
+
+```bash
+# Per command: safe when several agents work at once (nothing global changes)
+forklaunch release create --version 1.4.0 --account acme
+FORKLAUNCH_ACCOUNT=acme forklaunch deploy create --release 1.4.0 --environment staging --region us-east-1
+
+# Once per application: every clone and worktree then resolves to it on its own
+forklaunch account bind acme
+
+# Add a login (leaves the others alone); headless with an API key
+forklaunch login --account acme
+forklaunch login --account acme --token flk_...
+
+# Keep an existing single login under a name
+forklaunch account save personal
+```
+
+Rules for agents:
+
+- **Never run `forklaunch login` without `--account`** on a machine that has a keyring: it replaces the default login.
+- **Prefer `--account` or `FORKLAUNCH_ACCOUNT` over `forklaunch account use`.** `use` changes the machine-wide default and can pull the login out from under another session.
+- If `account current --json` reports `"loggedIn": false`, stop and ask for `forklaunch login --account <name>`; a browser login needs a person.
+- **A project pinned (`cli_version`) to a CLI from before accounts still runs as the resolved account.** The CLI hands the older version the right login for the duration. Commands for *different* accounts in such projects run one at a time; if you see "Waiting: a project-pinned older forklaunch CLI is running as account …", another session is mid-command, so wait, do not kill it.
+- A pinned version is cached at `~/.forklaunch/bin/forklaunch-<version>`; the first use of a version asks to install it (answer `y`), later uses do not ask.
+
 ### 15. Version Command
 
 ```bash
@@ -1160,7 +1447,7 @@ forklaunch change application
 --runtime bun|node
 --http-framework express|hyper-express
 --formatter prettier|biome
---linter eslint|oxlint
+--linter oxlint
 --test-framework vitest|jest
 --validator zod|typebox
 --dry-run              # Preview changes without applying
@@ -1580,8 +1867,11 @@ Forklaunch auto-generates:
 
 Specs are available at:
 
-- `.forklaunch/openapi/<module>/openapi.json`
-- `.forklaunch/openapi/<module>/asyncapi.json`
+- each service's SDK folder (`<service>/sdk/typescript/` for Rust services, `<service>/sdk/` for
+  TypeScript services with a service-owned SDK): `contract.json`, `openapi.json`, `asyncapi.json`
+- `.forklaunch/openapi/<module>/openapi.json` for TypeScript services without a service-owned SDK
+
+`.forklaunch/` itself holds only `manifest.toml`.
 
 ## Handler Contract Details & Typed req/res
 
@@ -1956,7 +2246,7 @@ Still present in v1.3.3 — apply these workarounds:
 - **One platform app links ONE local app** — `integrate` refuses a second local app ("already integrated with another local app"); there is no CLI unlink and no CLI command to create a platform app (dashboard-only).
 - **`deploy create` can drop into a real interactive prompt that no flag or piped input can skip.** If required env vars (e.g. `ENCRYPTION_KEY`) aren't already stored for the target environment, it writes a template file to a deterministic path (`/var/folders/.../forklaunch-env-<env>-<region>.env` on macOS) and blocks waiting for an actual keypress on a real TTY — piping `\n` via stdin fails with `Error: IO error: not a terminal` because it checks for a genuine terminal, not just readable input. The file is regenerated from scratch on every invocation (edits made before starting a new run are wiped), so there is no way to pre-fill it. If running non-interactively, ask the user to run the command themselves in a real terminal, or use the dashboard's environment-variables "Save & Deploy" flow instead. Note: `FORKLAUNCH_MODE` can show up in this template as a variable that "needs configuration" — this is a false positive from the variable scanner picking up `process.env.FORKLAUNCH_MODE` references in generated code; leave it as `NONE`/unset, since a real deployed service must never have it set (setting it to `openapi` makes the live server write a spec file and exit instead of serving traffic).
 
-- **"User Supplied" env vars permanently override "Platform Injected" ones — never hand-supply a placeholder for an infra-derived var, on the CLI or the dashboard.** Both the CLI's env-var template file (from the interactive prompt above) and the dashboard's Manage → Environment Variables panel write to the same underlying config store, and that store treats anything you set as authoritative forever — it is never overwritten by the real Pulumi-provisioned value, even after the resource exists and reports healthy. This bites hardest on vars that only make sense once real infra exists: `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_SSL`, `PGSSLMODE`, `REDIS_URL`, `CORS_ORIGINS`, `NODE_ENV`, `JWKS_PUBLIC_KEY_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `BETTER_AUTH_URL`. Typing a placeholder for one of these (e.g. `DB_HOST=placeholder`) unblocks whichever gate is asking for it, but Pulumi will go on to provision the real RDS/ElastiCache/ALB endpoints successfully (confirm under the app's Resources page, status "Running") while the ECS task keeps launching with the literal placeholder string — the service crash-loops forever (0/1 replicas, "Degraded") with zero logs ever reaching the OTel/Loki pipeline, since it dies before the app can log anything. (Exception: on the shared data plane the partition's generated `DB_*`/`REDIS_*` connection-var set is authoritative over user-supplied values at deploy time, so stale dedicated-era placeholders for those keys no longer reach the running task even if the store still lists them as "User Supplied".) Verified against a healthy sibling app: once fully deployed, all such vars should show as "Platform Injected" with real masked values and zero "User Supplied" entries for them — that's the target state, regardless of which tool you deployed with. Fix: in Manage → Environment Variables, delete the placeholder entries for the infra-derived keys above (they move to an "Unset" bucket, which is expected and fine pre-deploy) and redeploy; a second deploy against existing infra only updates the ECS task definition and finishes in a couple of minutes rather than the ~10 the first one takes. Keep as genuine "User Supplied" only the vars with no platform-managed equivalent: app secrets (`ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`), anything with no default in code, and `FORKLAUNCH_MODE=NONE` (see the false-positive note above — never anything else). Optional integrations with a safe code fallback (e.g. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` behind `?? ''`) still need *some* non-empty value to pass a "missing vars" gate even though the app treats them as disabled when unset — an obvious placeholder string is fine there since the app never uses it unless the feature is actually enabled.
+- **"User Supplied" env vars permanently override "Platform Injected" ones — never hand-supply a placeholder for an infra-derived var, on the CLI or the dashboard.** Both the CLI's env-var template file (from the interactive prompt above) and the dashboard's Manage → Environment Variables panel write to the same underlying config store, and that store treats anything you set as authoritative forever — it is never overwritten by the real Pulumi-provisioned value, even after the resource exists and reports healthy. This bites hardest on vars that only make sense once real infra exists: `DB_URL`, `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_SSL`, `PGSSLMODE`, `REDIS_URL`, `CORS_ORIGINS`, `NODE_ENV`, `JWKS_PUBLIC_KEY_URL`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `BETTER_AUTH_URL`. Typing a placeholder for one of these (e.g. `DB_HOST=placeholder`) unblocks whichever gate is asking for it, but Pulumi will go on to provision the real RDS/ElastiCache/ALB endpoints successfully (confirm under the app's Resources page, status "Running") while the ECS task keeps launching with the literal placeholder string — the service crash-loops forever (0/1 replicas, "Degraded") with zero logs ever reaching the OTel/Loki pipeline, since it dies before the app can log anything. (Exception: on the shared data plane the partition's generated `DB_*`/`REDIS_*` connection-var set is authoritative over user-supplied values at deploy time, so stale dedicated-era placeholders for those keys no longer reach the running task even if the store still lists them as "User Supplied".) Verified against a healthy sibling app: once fully deployed, all such vars should show as "Platform Injected" with real masked values and zero "User Supplied" entries for them — that's the target state, regardless of which tool you deployed with. Fix: in Manage → Environment Variables, delete the placeholder entries for the infra-derived keys above (they move to an "Unset" bucket, which is expected and fine pre-deploy) and redeploy; a second deploy against existing infra only updates the ECS task definition and finishes in a couple of minutes rather than the ~10 the first one takes. Keep as genuine "User Supplied" only the vars with no platform-managed equivalent: app secrets (`ENCRYPTION_KEY`, `BETTER_AUTH_SECRET`), anything with no default in code, and `FORKLAUNCH_MODE=NONE` (see the false-positive note above — never anything else). Optional integrations with a safe code fallback (e.g. `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` behind `?? ''`) still need *some* non-empty value to pass a "missing vars" gate even though the app treats them as disabled when unset — an obvious placeholder string is fine there since the app never uses it unless the feature is actually enabled.
 
 - **Generated `mikro-orm.config.ts` derives `ssl` from `NODE_ENV` instead of the platform's injected `DB_SSL`/`PGSSLMODE`, breaking real deploys made with `--node-env development`** (verified on a real deploy, CLI v1.3.3). The scaffold ships `driverOptions: { ssl: NODE_ENV !== 'development' }` — so `ssl` is only `false` when `NODE_ENV` is literally `'development'`, `true` for anything else including `production`. That's fine if you deploy with `--node-env production`, but the CLI's own `deploy create` example (`--node-env development`) sets `NODE_ENV=development` on a real ECS task talking to a real RDS instance that requires SSL, and the connection fails: `DriverException: no pg_hba.conf entry for host "...", user "...", no encryption`. This surfaces specifically on better-auth's JWT plugin (`/api/auth/jwks`) because MikroORM only opens its connection (and runs the one-time `ensureDatabase` check) lazily on the first real query — in this scaffold that's whichever request touches the DB first, not app boot, so `/health` and the boot logs look clean while auth endpoints 500. Fix in `src/modules/<iam|billing>/mikro-orm.config.ts`, keyed off the platform's real value instead of the environment name:
   ```typescript
@@ -1977,7 +2267,7 @@ Still present in v1.3.3 — apply these workarounds:
 - **`migrate:down` never works on the initial migration**: generated migrations ship without a `down()` implementation ("This migration cannot be reverted").
 - **Dockerfile pnpm drift**: `RUN npm install -g pnpm` (unpinned) pulls pnpm 11, whose default `minimumReleaseAge` policy rejects lockfile entries published recently. This breaks BOTH local `docker compose build` AND real platform deploys — the same error (`ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`) shows up in AWS CodeBuild logs and fails `forklaunch deploy create` after all the infrastructure has already been provisioned. Fix: pin the Dockerfile to the host's version, e.g. `RUN npm install -g pnpm@10.12.1`, before releasing/deploying.
 - **`change worker --type` is destructive — avoid it**: it rewrites code but does NOT update the manifest (variant/resources keep the old type), and it silently DELETES the `minio:` service from docker-compose while `minio-init`/`tempo` still depend on it, leaving an invalid compose project that `sync all` cannot heal. Prefer deleting and re-creating the worker with the new type; if you must convert, restore the minio block and fix the manifest by hand afterwards.
-- **`change service --infrastructure redis` also drops the `minio:` compose service** — same failure mode as `change worker --type` above, just triggered by a different command. After running it, check `docker compose config --quiet` before `docker compose up`; if it errors with `service "minio-init" depends on undefined service "minio"`, the `minio:` block needs to be restored by hand (copy it from another scaffolded app's `docker-compose.yaml`, or reconstruct: `image: minio/minio:RELEASE.2025-04-22T22-12-26Z`, ports `9000:9000`/`9001:9001`, env `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` both `minioadmin`, healthcheck `mc ready local`).
+- **`change service --infrastructure` no longer drops `minio:` or `redis:` while something still uses them** (fixed alongside `infra add`). Compose cleanup now keeps any service another service depends on or addresses by host, so the telemetry stack's `minio-init` keeps MinIO. On an older CLI, check `docker compose config --quiet` after the command; if it reports `service "minio-init" depends on undefined service "minio"`, restore the `minio:` block by hand.
 - **`change service --infrastructure redis` wires a `TtlCache` factory that doesn't compile** — it adds a `TtlCache` registration to `registrations.ts` whose factory destructures `{ REDIS_URL, OtelCollector, ENCRYPTION_KEY }` and calls `new FieldEncryptor(ENCRYPTION_KEY)`, but neither `ENCRYPTION_KEY` (in the `environmentConfig` chain) nor the `FieldEncryptor` import (`from '@forklaunch/core/persistence'`) get added. Fails with "Unable to resolve dependency ENCRYPTION_KEY" at runtime. Add both manually after running the command.
 - **Service/worker conversions (`--to worker` / `--to service`) strand compose entries** of the old type; grep docker-compose for the module name after converting (and after deleting a converted module).
 - **`eject` is unusable** (panics or misparses every path form; error path exits 0). Eject manually if needed.

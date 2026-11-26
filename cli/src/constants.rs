@@ -50,11 +50,20 @@ pub(crate) fn is_dev_build() -> bool {
         .unwrap_or(false)
 }
 
-// Manifest schema 1.1.0 adds `optional` to each environment variable
-// requirement. The platform's ingestion rejects a schema version it does not
-// know rather than degrading, so this must not move ahead of the platform —
-// forklaunch-platform#389 landed 1.1.0 support before this bump.
-pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.1.0";
+// Manifest schema 1.1.0 added `optional` to each environment variable
+// requirement; 1.2.0 adds `usedBy` (the projects that read it). The platform's
+// ingestion rejects a schema version it does not know rather than degrading,
+// so this must not move ahead of the platform — forklaunch-platform#389 landed
+// 1.1.0 support, and forklaunch-platform#929 (the platform PR that accepts
+// 1.2.0) must land before this bump ships.
+pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.2.0";
+
+// The Bun release generated images (`oven/bun:<BUN_VERSION>`) and generated CI
+// (`setup-bun`) use. A bun.lock written by a newer Bun can be unreadable by an
+// older one ("Unknown lockfile version"), so the image, CI and the developer's
+// local Bun must move together. `.github/workflows/e2e_tests.yml` pins the same
+// release; a unit test in core::github_configs keeps the two in step.
+pub(crate) const BUN_VERSION: &str = "1.4.2";
 
 pub(crate) fn get_platform_management_api_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL").unwrap_or_else(|_| {
@@ -397,6 +406,11 @@ choice! {
             description: Some("computer-assisted coding hooks only"),
             exclusive_files: Some(&["cac-base"]),
         },
+        BaseMlse = Choice {
+            id: "mlse-base",
+            description: Some("medical literature search (evidence search, cited answers, procedure walkthroughs)"),
+            exclusive_files: Some(&["mlse-base"]),
+        },
         Relay = Choice {
             id: "relay",
             description: Some("managed-apps OAuth relay session-ingest endpoint (adds to an existing iam service)"),
@@ -589,12 +603,41 @@ pub(crate) fn get_service_module_name(service_type: &Module) -> String {
         Module::StripeEcommerce => "ecommerce".to_string(),
         Module::BaseMessaging | Module::TwilioMessaging => "messaging".to_string(),
         Module::BaseCac => "cac".to_string(),
+        Module::BaseMlse => "mlse".to_string(),
         // Relay does not scaffold its own service - it injects the
         // session-ingest endpoint into the existing iam service (see
         // init/relay.rs). This name is only used for conflict detection, so it
         // gets its own class rather than colliding with "iam".
         Module::Relay => "relay".to_string(),
     }
+}
+
+/// Modules that are no longer generated. Messaging goes through the managed
+/// gateway in both languages; existing applications keep their services.
+pub(crate) const RETIRED_MODULES: [&str; 2] = ["messaging-base", "messaging-twilio"];
+
+pub(crate) fn offered_modules() -> Vec<&'static str> {
+    Module::VARIANTS
+        .into_iter()
+        .filter(|module| !RETIRED_MODULES.contains(module))
+        .collect()
+}
+
+/// Accepts every module id so a retired one gets a directed error, but lists
+/// only the offered ones.
+pub(crate) fn module_value_parser() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(Module::VARIANTS.map(|module| {
+        clap::builder::PossibleValue::new(module).hide(RETIRED_MODULES.contains(&module))
+    }))
+}
+
+pub(crate) fn ensure_module_offered(module: &Module) -> anyhow::Result<()> {
+    if matches!(module, Module::BaseMessaging | Module::TwilioMessaging) {
+        anyhow::bail!(
+            "The messaging module is retired: send email and SMS through the managed gateway with `forklaunch infra add <service> email` or `forklaunch infra add <service> sms`"
+        );
+    }
+    Ok(())
 }
 
 pub(crate) fn get_service_module_description(name: &str, service_type: &Module) -> String {
@@ -608,6 +651,7 @@ pub(crate) fn get_service_module_description(name: &str, service_type: &Module) 
             Module::StripeEcommerce => "ecommerce service APIs",
             Module::BaseMessaging | Module::TwilioMessaging => "messaging service APIs",
             Module::BaseCac => "computer-assisted coding service APIs",
+            Module::BaseMlse => "medical literature search service APIs",
             Module::Relay => "the managed-apps OAuth relay session-ingest endpoint",
         }
     )
@@ -616,12 +660,17 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
     match service_type {
         Module::BaseBilling | Module::StripeBilling => Some(Infrastructure::Redis.to_string()),
         // The messaging blueprint's registrations wire a RedisTtlCache.
-        Module::BaseMessaging | Module::TwilioMessaging => {
-            Some(Infrastructure::Redis.to_string())
-        }
+        Module::BaseMessaging | Module::TwilioMessaging => Some(Infrastructure::Redis.to_string()),
         // The ecommerce blueprint reads REDIS_URL at startup for both the cart
         // cache and the order-event queue, and exits if it is unset.
         Module::StripeEcommerce => Some(Infrastructure::Redis.to_string()),
+        // The mlse blueprint caches live source responses in Redis and runs
+        // corpus ingestion on a Redis-backed worker queue.
+        Module::BaseMlse => Some(Infrastructure::Redis.to_string()),
+        // cac-base's registrations wire a RedisTtlCache (caches IAM
+        // permission/role lookups) and its config validator throws at
+        // startup without REDIS_URL.
+        Module::BaseCac => Some(Infrastructure::Redis.to_string()),
         _ => None,
     }
 }
@@ -630,6 +679,8 @@ pub(crate) fn get_service_module_cache(service_type: &Module) -> Option<String> 
 pub(crate) const DIRS_TO_IGNORE: &[&str] = &[
     "node_modules",
     "assets",
+    // No longer generated (the yargonaut patch went away with MikroORM 7), but
+    // apps created by older CLI versions still have this folder.
     "patches",
     ".git",
     ".github",
@@ -654,6 +705,8 @@ mod tests {
             Module::BaseMessaging,
             Module::TwilioMessaging,
             Module::StripeEcommerce,
+            Module::BaseMlse,
+            Module::BaseCac,
         ] {
             assert_eq!(
                 get_service_module_cache(&module),
@@ -671,6 +724,21 @@ mod tests {
         assert_eq!(get_service_module_cache(&Module::BaseIam), None);
         assert_eq!(get_service_module_cache(&Module::BetterAuthIam), None);
     }
+
+    #[test]
+    fn messaging_modules_are_retired_but_still_parse() {
+        for module in RETIRED_MODULES {
+            let parsed = module.parse::<Module>().unwrap();
+            assert!(
+                ensure_module_offered(&parsed)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("managed gateway")
+            );
+            assert!(!offered_modules().contains(&module));
+        }
+        assert!(ensure_module_offered(&Module::BaseCac).is_ok());
+    }
 }
 
 /// Studio orchestrator, which owns the analysis + report-card endpoints. Mirrors
@@ -685,4 +753,56 @@ pub(crate) fn get_studio_orchestrator_api_url() -> String {
         }
         .to_string()
     })
+}
+
+/// Linters a new application may select. Generated TypeScript apps compile
+/// with TypeScript 7, and typescript-eslint cannot load under TypeScript 7 (it
+/// throws "typescript-eslint does not support TS 7.0" until upstream ships
+/// support, tracked in typescript-eslint#10940). ESLint stays a parseable
+/// manifest value so existing applications keep working, but it is no longer
+/// offered for new selections.
+pub(crate) const SELECTABLE_LINTERS: [&str; 1] = ["oxlint"];
+
+/// Accepts every linter id so a retired choice reaches
+/// `ensure_selectable_linter` and its explanation, but lists only the
+/// selectable ones in `--help`.
+pub(crate) fn linter_value_parser() -> clap::builder::PossibleValuesParser {
+    clap::builder::PossibleValuesParser::new(Linter::VARIANTS.map(|linter| {
+        clap::builder::PossibleValue::new(linter).hide(!SELECTABLE_LINTERS.contains(&linter))
+    }))
+}
+
+/// Reject a linter that cannot lint a TypeScript 7 application, with a message
+/// that says why and what to use instead.
+pub(crate) fn ensure_selectable_linter(linter: &str) -> anyhow::Result<()> {
+    if SELECTABLE_LINTERS.contains(&linter) {
+        return Ok(());
+    }
+    anyhow::bail!(
+        "The '{linter}' linter cannot lint TypeScript 7 applications: typescript-eslint \
+         does not support TypeScript 7 yet (https://github.com/typescript-eslint/typescript-eslint/issues/10940). \
+         Use --linter oxlint, which runs type-aware rules on TypeScript 7 through oxlint-tsgolint."
+    )
+}
+
+#[cfg(test)]
+mod selectable_linter_tests {
+    use super::{Linter, SELECTABLE_LINTERS, ensure_selectable_linter};
+
+    #[test]
+    fn oxlint_is_the_only_selectable_linter() {
+        assert_eq!(SELECTABLE_LINTERS, ["oxlint"]);
+        assert!(ensure_selectable_linter("oxlint").is_ok());
+    }
+
+    #[test]
+    fn eslint_is_rejected_with_the_typescript_7_reason_but_still_parses() {
+        let error = ensure_selectable_linter("eslint").unwrap_err().to_string();
+        assert!(
+            error.contains("TypeScript 7") && error.contains("--linter oxlint"),
+            "{error}"
+        );
+        // Existing manifests that recorded eslint must keep loading.
+        assert!("eslint".parse::<Linter>().is_ok());
+    }
 }

@@ -53,8 +53,7 @@ export class TwilioSmsService<
   SchemaValidator extends AnySchemaValidator,
   Entities extends TwilioSmsEntities = TwilioSmsEntities,
   Dto extends TwilioSmsDtos = TwilioSmsDtos
-> implements SmsService<typeof SmsStatusEnum>
-{
+> implements SmsService<typeof SmsStatusEnum> {
   private evaluatedTelemetryOptions: {
     logging?: boolean;
     metrics?: boolean;
@@ -154,7 +153,7 @@ export class TwilioSmsService<
     }
 
     await (em ?? this.em).transactional(async (innerEm) => {
-      await innerEm.persist(smsRecord);
+      innerEm.persist(smsRecord);
     });
 
     return this.mappers.SmsRecordMapper.toDto(

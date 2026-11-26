@@ -4,7 +4,7 @@ export const Organization = defineComplianceEntity({
   name: 'Organization',
   properties: {
     id: fp.string().primary().compliance('none'),
-    status: fp.enum().compliance('none')
+    status: fp.enum<string[]>().compliance('none')
   }
 });
 

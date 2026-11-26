@@ -1,4 +1,6 @@
-import { SchemaValidator, schemaValidator } from '@forklaunch/blueprint-core';
+import { SchemaValidator } from '@forklaunch/validator/typebox';
+const schemaValidator = SchemaValidator();
+type SchemaValidator = ReturnType<typeof SchemaValidator>;
 import { mapServiceSchemas } from '@forklaunch/core/mappers';
 import {
   BaseOrganizationServiceSchemas,

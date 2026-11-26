@@ -193,6 +193,8 @@ pub(crate) struct ProjectDependencies {
     pub(crate) forklaunch_interfaces_messaging: Option<String>,
     pub(crate) forklaunch_implementation_cac_base: Option<String>,
     pub(crate) forklaunch_interfaces_cac: Option<String>,
+    pub(crate) forklaunch_implementation_mlse_base: Option<String>,
+    pub(crate) forklaunch_interfaces_mlse: Option<String>,
     pub(crate) forklaunch_implementation_worker_bullmq: Option<String>,
     pub(crate) forklaunch_implementation_worker_redis: Option<String>,
     pub(crate) forklaunch_implementation_worker_database: Option<String>,
@@ -226,7 +228,7 @@ pub(crate) struct ProjectDependencies {
     pub(crate) pino: Option<String>,
     pub(crate) ioredis: Option<String>,
 
-    pub(crate) additional_deps: HashMap<String, String>,
+    pub(crate) additional_deps: indexmap::IndexMap<String, String>,
 }
 
 impl Serialize for ProjectDependencies {
@@ -314,6 +316,12 @@ impl Serialize for ProjectDependencies {
         if let Some(ref v) = self.forklaunch_interfaces_cac {
             map.serialize_entry("@forklaunch/interfaces-cac", v)?;
         }
+        if let Some(ref v) = self.forklaunch_implementation_mlse_base {
+            map.serialize_entry("@forklaunch/implementation-mlse-base", v)?;
+        }
+        if let Some(ref v) = self.forklaunch_interfaces_mlse {
+            map.serialize_entry("@forklaunch/interfaces-mlse", v)?;
+        }
         if let Some(ref v) = self.forklaunch_implementation_worker_bullmq {
             map.serialize_entry("@forklaunch/implementation-worker-bullmq", v)?;
         }
@@ -347,17 +355,27 @@ impl Serialize for ProjectDependencies {
         if let Some(ref v) = self.mikro_orm_core {
             map.serialize_entry("@mikro-orm/core", v)?;
         }
+        // One migrations package per kind (SQL, MongoDB), not one per
+        // database: two SQL databases used to write the key twice. Drivers
+        // follow in name order; the set itself is unordered.
+        let mut databases: Vec<&Database> = self.databases.iter().collect();
+        databases.sort_by_key(|database| database.to_string());
         if let Some(ref v) = self.mikro_orm_migrations {
-            for database in &self.databases {
-                if database == &Database::MongoDB {
-                    map.serialize_entry("@mikro-orm/migrations-mongodb", v)?;
-                } else {
-                    map.serialize_entry("@mikro-orm/migrations", v)?;
-                }
+            if databases
+                .iter()
+                .any(|database| **database != Database::MongoDB)
+            {
+                map.serialize_entry("@mikro-orm/migrations", v)?;
+            }
+            if databases
+                .iter()
+                .any(|database| **database == Database::MongoDB)
+            {
+                map.serialize_entry("@mikro-orm/migrations-mongodb", v)?;
             }
         }
         if let Some(ref v) = self.mikro_orm_database {
-            for database in &self.databases {
+            for database in &databases {
                 map.serialize_entry(&format!("@mikro-orm/{}", database.to_string()), v)?;
             }
         }
@@ -526,14 +544,17 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         }
                         continue;
                     }
-                    if key.starts_with("@mikro-orm") && key.ends_with("sqlite") {
-                        deps.databases.insert(Database::SQLite);
+                    // Before the plain `sqlite` check, which `better-sqlite`
+                    // also ends with (it read as SQLite, so deleting the last
+                    // better-sqlite project could not drop its driver).
+                    if key.starts_with("@mikro-orm") && key.ends_with("better-sqlite") {
+                        deps.databases.insert(Database::BetterSQLite);
                         deps.mikro_orm_database = Some(value);
                         continue;
                     }
-                    if key.starts_with("@mikro-orm") && key.ends_with("better-sqlite") {
-                        deps.databases.insert(Database::BetterSQLite);
-                        deps.better_sqlite3 = Some(value);
+                    if key.starts_with("@mikro-orm") && key.ends_with("sqlite") {
+                        deps.databases.insert(Database::SQLite);
+                        deps.mikro_orm_database = Some(value);
                         continue;
                     }
                     if key.starts_with("@mikro-orm") && key.ends_with("libsql") {
@@ -601,6 +622,12 @@ impl<'de> Deserialize<'de> for ProjectDependencies {
                         }
                         "@forklaunch/interfaces-cac" => {
                             deps.forklaunch_interfaces_cac = Some(value)
+                        }
+                        "@forklaunch/implementation-mlse-base" => {
+                            deps.forklaunch_implementation_mlse_base = Some(value)
+                        }
+                        "@forklaunch/interfaces-mlse" => {
+                            deps.forklaunch_interfaces_mlse = Some(value)
                         }
                         "@forklaunch/implementation-worker-bullmq" => {
                             deps.forklaunch_implementation_worker_bullmq = Some(value)
@@ -687,6 +714,8 @@ pub(crate) struct ProjectDevDependencies {
     pub(crate) eslint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) oxlint: Option<String>,
+    #[serde(rename = "oxlint-tsgolint", skip_serializing_if = "Option::is_none")]
+    pub(crate) oxlint_tsgolint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) prettier: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -701,7 +730,7 @@ pub(crate) struct ProjectDevDependencies {
     pub(crate) typescript_eslint: Option<String>,
 
     #[serde(flatten)]
-    pub(crate) additional_deps: HashMap<String, String>,
+    pub(crate) additional_deps: indexmap::IndexMap<String, String>,
 }
 
 impl<'de> Deserialize<'de> for ProjectDevDependencies {
@@ -733,13 +762,14 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                     types_ioredis: None,
                     eslint: None,
                     oxlint: None,
+                    oxlint_tsgolint: None,
                     prettier: None,
                     tsx: None,
                     pino: None,
                     ioredis: None,
                     typedoc: None,
                     typescript_eslint: None,
-                    additional_deps: HashMap::new(),
+                    additional_deps: indexmap::IndexMap::new(),
                 };
 
                 while let Some((key, value)) = access.next_entry::<String, String>()? {
@@ -754,6 +784,7 @@ impl<'de> Deserialize<'de> for ProjectDevDependencies {
                         "@types/ioredis" => deps.types_ioredis = Some(value),
                         "eslint" => deps.eslint = Some(value),
                         "oxlint" => deps.oxlint = Some(value),
+                        "oxlint-tsgolint" => deps.oxlint_tsgolint = Some(value),
                         "prettier" => deps.prettier = Some(value),
                         "tsx" => deps.tsx = Some(value),
                         "pino" => deps.pino = Some(value),
@@ -857,6 +888,8 @@ impl<'de> Deserialize<'de> for ProjectPackageJson {
                     additional_entries: HashMap::new(),
                 };
 
+                let mut dependencies_value = None;
+
                 while let Some((key, value)) = access.next_entry::<String, serde_json::Value>()? {
                     match key.as_str() {
                         "name" => {
@@ -920,22 +953,7 @@ impl<'de> Deserialize<'de> for ProjectPackageJson {
                             )
                         }
                         "dependencies" => {
-                            package.dependencies = Some(
-                                serde_json::from_value::<ProjectDependencies>(
-                                    serde_json::to_value(ProjectDependenciesWithProjectName {
-                                        project_dependencies_value: value,
-                                        app_name: package
-                                            .name
-                                            .clone()
-                                            .unwrap()
-                                            .split('/')
-                                            .collect::<Vec<&str>>()[0]
-                                            .to_string(),
-                                    })
-                                    .map_err(serde::de::Error::custom)?,
-                                )
-                                .map_err(serde::de::Error::custom)?,
-                            )
+                            dependencies_value = Some(value);
                         }
                         "devDependencies" => {
                             package.dev_dependencies = Some(
@@ -953,10 +971,55 @@ impl<'de> Deserialize<'de> for ProjectPackageJson {
                     }
                 }
 
+                if let Some(value) = dependencies_value {
+                    let name = package.name.as_deref().ok_or_else(|| {
+                        serde::de::Error::custom("package.json dependencies require a package name")
+                    })?;
+                    package.dependencies = Some(
+                        serde_json::from_value::<ProjectDependencies>(
+                            serde_json::to_value(ProjectDependenciesWithProjectName {
+                                project_dependencies_value: value,
+                                app_name: name.split('/').next().unwrap_or(name).to_string(),
+                            })
+                            .map_err(serde::de::Error::custom)?,
+                        )
+                        .map_err(serde::de::Error::custom)?,
+                    );
+                }
+
                 Ok(package)
             }
         }
 
         deserializer.deserialize_map(ProjectPackageJsonVisitor)
+    }
+}
+
+#[cfg(test)]
+mod package_order_tests {
+    use super::*;
+
+    #[test]
+    fn dependencies_can_precede_package_name() {
+        let package: ProjectPackageJson = serde_json::from_str(
+            r#"{"dependencies":{"better-auth":"custom-version"},"name":"@fixture/client-sdk"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            package.dependencies.unwrap().better_auth.as_deref(),
+            Some("custom-version")
+        );
+    }
+
+    #[test]
+    fn dependencies_without_name_return_an_error() {
+        let result = serde_json::from_str::<ProjectPackageJson>(r#"{"dependencies":{}}"#);
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("require a package name")
+        );
+        assert!(serde_json::from_str::<ProjectPackageJson>("{}").is_ok());
     }
 }

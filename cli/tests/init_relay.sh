@@ -13,7 +13,7 @@ cd output/init-relay
 # The relay module injects the managed-apps OAuth session-ingest endpoint into
 # an existing better-auth iam service, so scaffold that first, then add relay
 # with `init module -m relay` and prove the injected TypeScript typechecks.
-RUST_BACKTRACE=1 $FL init application relay-node -p relay-node -o src/modules -d postgresql -f prettier -l eslint -v zod -F express -r node -t vitest -m iam-better-auth -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
+RUST_BACKTRACE=1 $FL init application relay-node -p relay-node -o src/modules -d postgresql -f prettier -l oxlint -v zod -F express -r node -t vitest -m iam-better-auth -D "Test library" -A "Rohin Bhargava" -L 'AGPL-3.0'
 
 RUST_BACKTRACE=1 $FL init module -m relay -p relay-node
 

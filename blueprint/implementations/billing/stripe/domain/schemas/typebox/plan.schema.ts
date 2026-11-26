@@ -25,7 +25,7 @@ export const CreatePlanSchema = {
   cadence: enum_(PlanCadenceEnum),
   currency: enum_(CurrencyEnum),
   features: optional(array(string)),
-  stripeFields: type<StripeCreatePlanDto['stripeFields']>(),
+  stripeFields: optional(type<StripeCreatePlanDto['stripeFields']>()),
   externalId: string,
   billingProvider: enum_(BillingProviderEnum),
   active: boolean

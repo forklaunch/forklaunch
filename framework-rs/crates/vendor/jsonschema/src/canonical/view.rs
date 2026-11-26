@@ -1,0 +1,454 @@
+use std::collections::BTreeMap;
+
+use serde_json::{Number, Value};
+
+use crate::{
+    canonical::{
+        ir::{
+            ArrayLeaf, BoundCardinality, BoundInteger, BoundNumber, BoundRational, CanonicalJson,
+            Divisors, ExcludedDivisors, IntegerLeaf, NumberLeaf, ObjectLeaf, ObjectViolation,
+            SchemaKind, StringLeaf,
+        },
+        CanonicalSchema,
+    },
+    JsonType, JsonTypeSet,
+};
+
+pub use crate::canonical::ir::{CanonicalKind, Distinctness, RawReason};
+
+impl CanonicalKind {
+    /// Stable `snake_case` label of this kind (e.g. `"multi_type"`, `"raw"`).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+}
+
+impl Distinctness {
+    /// Stable `snake_case` label of this state (e.g. `"all_distinct"`).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+}
+
+impl RawReason {
+    /// Stable `snake_case` label of this reason (e.g. `"unknown_dialect"`).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        self.into()
+    }
+}
+
+/// A canonical node: one arm per IR variant.
+///
+/// Exhaustive on purpose: a new variant must break every consumer that maps views, the bindings
+/// included, rather than reaching a runtime fallback.
+#[derive(Debug, Clone, PartialEq)]
+pub enum CanonicalView {
+    /// A value matches iff its JSON type is in the set.
+    MultiType(JsonTypeSet),
+    /// A value matches iff its JSON type is `ty` *and* it satisfies `body`; other types do not match.
+    TypedGroup(TypedGroupView),
+    /// A string value within a length window.
+    String(StringView),
+    /// An integer value within a range.
+    Integer(IntegerView),
+    /// A number value within a real interval.
+    Number(NumberView),
+    /// An array value whose length is within a window.
+    Array(ArrayView),
+    /// An object value within its constraints.
+    Object(ObjectView),
+    Const(Value),
+    Enum(Vec<Value>),
+    /// The exact negation of an opaque schema, keeping the references it names symbolic.
+    Not(Box<CanonicalSchema>),
+    /// A value matches iff every opaque branch matches.
+    AllOf(Vec<CanonicalSchema>),
+    /// A value matches iff at least one branch matches.
+    AnyOf(Vec<CanonicalSchema>),
+    /// A value matches iff exactly one branch matches.
+    OneOf(Vec<CanonicalSchema>),
+    Reference(String),
+    True,
+    False,
+    Raw(RawView),
+}
+
+/// Payload of [`CanonicalView::Raw`]: the document kept verbatim, what stopped the run, and the
+/// subschema it stopped on.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RawView {
+    pub schema: Value,
+    pub reason: RawReason,
+    /// JSON Pointer into the document this node was read against; the empty string names its root.
+    pub pointer: Option<String>,
+}
+
+/// Payload of [`CanonicalView::TypedGroup`]: JSON type `ty` and a `body` schema constraining its values.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TypedGroupView {
+    pub ty: JsonType,
+    pub body: CanonicalSchema,
+}
+
+/// Payload of [`CanonicalView::String`]: the `minLength`/`maxLength` bounds and the required and
+/// barred facets on a string value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringView {
+    pub min_length: Option<Number>,
+    pub max_length: Option<Number>,
+    pub patterns: Vec<String>,
+    /// Patterns the string must not match.
+    pub excluded_patterns: Vec<String>,
+    pub formats: Vec<String>,
+    /// Formats the string must fail.
+    pub excluded_formats: Vec<String>,
+    pub content_media_types: Vec<String>,
+    pub content_encodings: Vec<String>,
+    /// Values the string must differ from.
+    pub excluded: Vec<String>,
+}
+
+/// Payload of [`CanonicalView::Number`]: the interval bounds on a number value, each with whether
+/// the bound itself is admitted, and the divisor every admitted value is a multiple of.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NumberView {
+    pub minimum: Option<Number>,
+    pub exclusive_minimum: bool,
+    pub maximum: Option<Number>,
+    pub exclusive_maximum: bool,
+    pub multiple_of: Vec<Number>,
+    /// Divisors no admitted value is a multiple of.
+    pub not_multiple_of: Vec<Number>,
+    /// No admitted value is one of the draft's integers (Draft 4 only; later drafts write this
+    /// as a barred divisor of one).
+    pub excludes_integers: bool,
+}
+
+/// Payload of [`CanonicalView::Array`]: the constraints on an array value.
+// The fields carry the keywords they came from, whose names share the suffix.
+#[allow(clippy::struct_field_names)]
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayView {
+    pub min_items: Option<Number>,
+    pub max_items: Option<Number>,
+    /// What the array requires of its elements: all distinct, some repeated, or neither.
+    pub distinctness: Distinctness,
+    /// Per-index schemas: the element at position `i` satisfies `prefix_items[i]`.
+    pub prefix_items: Vec<CanonicalSchema>,
+    /// The schema every element from `prefix_items.len()` onward satisfies.
+    pub items: Option<CanonicalSchema>,
+    /// How many elements must match each `contains` schema.
+    pub contains: Vec<ContainsView>,
+}
+
+/// One `contains` requirement of an array. An absent minimum means the default of one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContainsView {
+    pub schema: CanonicalSchema,
+    pub min_contains: Option<Number>,
+    pub max_contains: Option<Number>,
+}
+
+/// Payload of [`CanonicalView::Object`]: the constraints on an object value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectView {
+    pub min_properties: Option<Number>,
+    pub max_properties: Option<Number>,
+    pub required: Vec<String>,
+    /// The schema every key satisfies, narrowed to the string domain.
+    pub property_names: Option<CanonicalSchema>,
+    /// The schema each named key satisfies when the object carries it.
+    pub properties: BTreeMap<String, CanonicalSchema>,
+    /// The schema every key matching the pattern satisfies when the object carries it.
+    pub pattern_properties: BTreeMap<String, CanonicalSchema>,
+    /// The schema every key `properties` does not name satisfies.
+    pub additional_properties: Option<CanonicalSchema>,
+    /// The object must break each of these rules: negation stores the rule itself, so emitting
+    /// wraps it in `not` verbatim.
+    pub violations: Vec<ObjectViolationView>,
+}
+
+/// One demand produced by negation: the object must hold at least one entry that breaks the
+/// stored rule.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ObjectViolationView {
+    /// Some key's name fails the schema.
+    NameFails(CanonicalSchema),
+    /// Some key outside `names` and matching none of `patterns` has a value failing `additional`.
+    UndeclaredValueFails {
+        names: Vec<String>,
+        patterns: Vec<String>,
+        additional: CanonicalSchema,
+    },
+    /// Some key matching `pattern` has a value failing `schema`.
+    PatternValueFails {
+        pattern: String,
+        schema: CanonicalSchema,
+    },
+}
+
+/// Payload of [`CanonicalView::Integer`]: the interval bounds and divisor on an integer value.
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntegerView {
+    pub minimum: Option<Number>,
+    pub maximum: Option<Number>,
+    pub multiple_of: Vec<Number>,
+    /// Divisors no admitted value is a multiple of.
+    pub not_multiple_of: Vec<Number>,
+}
+
+impl CanonicalSchema {
+    /// This node's structural view.
+    #[must_use]
+    pub fn view(&self) -> CanonicalView {
+        match self.schema_kind() {
+            SchemaKind::MultiType(set) => CanonicalView::MultiType(*set),
+            SchemaKind::TypedGroup { ty, body } => CanonicalView::TypedGroup(TypedGroupView {
+                ty: *ty,
+                body: self.wrap_child(body),
+            }),
+            SchemaKind::String(leaf) => CanonicalView::String(string_view(leaf.get())),
+            SchemaKind::Integer(bounds) => CanonicalView::Integer(integer_view(bounds.get())),
+            SchemaKind::Number(leaf) => CanonicalView::Number(number_view(leaf.get())),
+            SchemaKind::Array(leaf) => CanonicalView::Array(array_view(
+                leaf.get(),
+                leaf.get()
+                    .prefix
+                    .iter()
+                    .map(|schema| self.wrap_child(schema))
+                    .collect(),
+                leaf.get()
+                    .items
+                    .as_ref()
+                    .map(|items| self.wrap_child(items)),
+                leaf.get()
+                    .contains
+                    .iter()
+                    .map(|facet| ContainsView {
+                        schema: self.wrap_child(&facet.schema),
+                        min_contains: facet.minimum.as_ref().map(BoundCardinality::to_number),
+                        max_contains: facet.maximum.as_ref().map(BoundCardinality::to_number),
+                    })
+                    .collect(),
+            )),
+            SchemaKind::Object(leaf) => CanonicalView::Object(object_view(
+                leaf.get(),
+                leaf.get()
+                    .property_names
+                    .as_ref()
+                    .map(|names| self.wrap_child(names)),
+                leaf.get()
+                    .properties
+                    .iter()
+                    .map(|(key, schema)| (key.to_string(), self.wrap_child(schema)))
+                    .collect(),
+                leaf.get()
+                    .pattern_properties
+                    .iter()
+                    .map(|(pattern, schema)| (pattern.to_string(), self.wrap_child(schema)))
+                    .collect(),
+                leaf.get()
+                    .additional
+                    .as_ref()
+                    .map(|additional| self.wrap_child(additional)),
+                leaf.get()
+                    .violations
+                    .iter()
+                    .map(|violation| match violation {
+                        ObjectViolation::NameFails(violated) => {
+                            ObjectViolationView::NameFails(self.wrap_child(violated))
+                        }
+                        ObjectViolation::UndeclaredValueFails {
+                            names,
+                            patterns,
+                            additional,
+                        } => ObjectViolationView::UndeclaredValueFails {
+                            names: names.iter().map(ToString::to_string).collect(),
+                            patterns: patterns.iter().map(ToString::to_string).collect(),
+                            additional: self.wrap_child(additional),
+                        },
+                        ObjectViolation::PatternValueFails { pattern, schema } => {
+                            ObjectViolationView::PatternValueFails {
+                                pattern: pattern.to_string(),
+                                schema: self.wrap_child(schema),
+                            }
+                        }
+                    })
+                    .collect(),
+            )),
+            SchemaKind::Const(value) => CanonicalView::Const(value.to_value()),
+            SchemaKind::Enum(values) => CanonicalView::Enum(
+                values
+                    .as_slice()
+                    .iter()
+                    .map(CanonicalJson::to_value)
+                    .collect(),
+            ),
+            SchemaKind::Not(schema) => CanonicalView::Not(Box::new(self.wrap_child(schema))),
+            SchemaKind::AllOf(branches) => CanonicalView::AllOf(
+                branches
+                    .as_slice()
+                    .iter()
+                    .map(|branch| self.wrap_child(branch))
+                    .collect(),
+            ),
+            SchemaKind::AnyOf(branches) => CanonicalView::AnyOf(
+                branches
+                    .as_slice()
+                    .iter()
+                    .map(|branch| self.wrap_child(branch))
+                    .collect(),
+            ),
+            SchemaKind::OneOf(branches) => CanonicalView::OneOf(
+                branches
+                    .iter()
+                    .map(|branch| self.wrap_child(branch))
+                    .collect(),
+            ),
+            SchemaKind::Reference(uri) => CanonicalView::Reference(uri.to_string()),
+            SchemaKind::True => CanonicalView::True,
+            SchemaKind::False => CanonicalView::False,
+            SchemaKind::Raw(raw) => CanonicalView::Raw(RawView {
+                schema: self.to_json_schema(),
+                reason: raw.reason(),
+                pointer: raw.pointer().map(ToOwned::to_owned),
+            }),
+        }
+    }
+
+    /// This node's structural kind.
+    #[must_use]
+    pub fn kind(&self) -> CanonicalKind {
+        self.schema_kind().into()
+    }
+}
+
+fn number_view(leaf: &NumberLeaf) -> NumberView {
+    NumberView {
+        minimum: leaf.minimum.as_ref().map(BoundNumber::to_number),
+        exclusive_minimum: leaf.minimum.as_ref().is_some_and(|b| !b.is_inclusive()),
+        maximum: leaf.maximum.as_ref().map(BoundNumber::to_number),
+        exclusive_maximum: leaf.maximum.as_ref().is_some_and(|b| !b.is_inclusive()),
+        multiple_of: divisor_numbers(&leaf.multiple_of),
+        not_multiple_of: excluded_divisor_numbers(&leaf.not_multiple_of),
+        excludes_integers: leaf.excludes_integers,
+    }
+}
+
+fn integer_view(leaf: &IntegerLeaf) -> IntegerView {
+    IntegerView {
+        minimum: leaf.bounds.minimum.as_ref().map(BoundInteger::to_number),
+        maximum: leaf.bounds.maximum.as_ref().map(BoundInteger::to_number),
+        multiple_of: divisor_numbers(&leaf.multiple_of),
+        not_multiple_of: excluded_divisor_numbers(&leaf.not_multiple_of),
+    }
+}
+
+fn excluded_divisor_numbers(barred: &ExcludedDivisors) -> Vec<Number> {
+    barred
+        .as_slice()
+        .iter()
+        .map(BoundRational::to_number)
+        .collect()
+}
+
+// The element-schema children need the schema-level wrapping only the caller can do, so they arrive
+// already wrapped instead of being read off the leaf.
+fn array_view(
+    leaf: &ArrayLeaf,
+    prefix_items: Vec<CanonicalSchema>,
+    items: Option<CanonicalSchema>,
+    contains: Vec<ContainsView>,
+) -> ArrayView {
+    ArrayView {
+        prefix_items,
+        items,
+        contains,
+        min_items: leaf
+            .lengths
+            .minimum
+            .as_ref()
+            .map(BoundCardinality::to_number),
+        max_items: leaf
+            .lengths
+            .maximum
+            .as_ref()
+            .map(BoundCardinality::to_number),
+        distinctness: leaf.distinctness,
+    }
+}
+
+// The nested children need the schema-level wrapping only the caller can do, so they arrive already
+// wrapped instead of being read off the leaf.
+fn object_view(
+    leaf: &ObjectLeaf,
+    property_names: Option<CanonicalSchema>,
+    properties: BTreeMap<String, CanonicalSchema>,
+    pattern_properties: BTreeMap<String, CanonicalSchema>,
+    additional_properties: Option<CanonicalSchema>,
+    violations: Vec<ObjectViolationView>,
+) -> ObjectView {
+    ObjectView {
+        min_properties: leaf.sizes.minimum.as_ref().map(BoundCardinality::to_number),
+        max_properties: leaf.sizes.maximum.as_ref().map(BoundCardinality::to_number),
+        required: leaf.required.iter().map(ToString::to_string).collect(),
+        property_names,
+        properties,
+        pattern_properties,
+        additional_properties,
+        violations,
+    }
+}
+
+fn string_view(leaf: &StringLeaf) -> StringView {
+    StringView {
+        min_length: leaf
+            .lengths
+            .minimum
+            .as_ref()
+            .map(BoundCardinality::to_number),
+        max_length: leaf
+            .lengths
+            .maximum
+            .as_ref()
+            .map(BoundCardinality::to_number),
+        patterns: leaf.patterns.iter().map(ToString::to_string).collect(),
+        excluded_patterns: leaf
+            .excluded_patterns
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        formats: leaf
+            .formats
+            .iter()
+            .map(|format| format.as_str().to_owned())
+            .collect(),
+        excluded_formats: leaf
+            .excluded_formats
+            .iter()
+            .map(|format| format.as_str().to_owned())
+            .collect(),
+        content_media_types: leaf
+            .content_media_types
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        content_encodings: leaf
+            .content_encodings
+            .iter()
+            .map(ToString::to_string)
+            .collect(),
+        excluded: leaf.excluded.iter().map(ToString::to_string).collect(),
+    }
+}
+
+fn divisor_numbers(divisors: &Divisors) -> Vec<Number> {
+    divisors
+        .as_slice()
+        .iter()
+        .map(BoundRational::to_number)
+        .collect()
+}

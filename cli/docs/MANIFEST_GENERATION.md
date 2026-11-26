@@ -84,7 +84,7 @@ struct EnvironmentVariableComponent {
 
 - Scans all service projects in the manifest
 - Generates OpenAPI 3.0 specifications for each service
-- Saves specs to `.forklaunch/openapi/{service-name}/openapi.json`
+- Saves specs to a temporary `.forklaunch/openapi/{service-name}/openapi.json` export folder that is removed after the release manifest is built
 - Loads the generated specs into memory for inclusion in the manifest
 
 ### Step 3: Environment Variable Detection

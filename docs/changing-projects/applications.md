@@ -24,7 +24,7 @@ forklaunch change application [options]
 | `--http-framework <framework>` | `express`,`hyper-express` | Change HTTP framework          | Current framework      |
 | `--validator <validator>`      | `zod`,`typebox`           | Change validation library      | Current validator      |
 | `--formatter <formatter>`      | `prettier`,`biome`        | Change code formatter          | Current formatter      |
-| `--linter <linter>`            | `eslint`,`oxlint`         | Change linter                  | Current linter         |
+| `--linter <linter>`            | `oxlint`                  | Change linter                  | Current linter         |
 | `--test-framework <framework>` | `vitest`,`jest`           | Change testing framework       | Current test framework |
 
 ## Batch Changes
@@ -86,7 +86,7 @@ Align with team preferences:
 # Standardize on specific tools
 forklaunch change application \
   --formatter prettier \
-  --linter eslint \
+  --linter oxlint \
   --test-framework jest
 ```
 

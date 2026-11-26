@@ -51,9 +51,8 @@ fn collect_import_replacements(
 
     for stmt in program.body.iter() {
         if let Statement::ImportDeclaration(import_decl) = stmt {
-            if implementation_regex.is_match(&import_decl.source.value) {
-                let implementation_package = import_decl.source.value.as_str();
-
+            let implementation_package = import_decl.source.value.as_str().unwrap_or_default();
+            if implementation_regex.is_match(implementation_package) {
                 if !ejectable_dependencies.contains(&implementation_package.to_string()) {
                     continue;
                 }

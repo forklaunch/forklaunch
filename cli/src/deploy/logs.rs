@@ -399,8 +399,18 @@ mod tests {
     fn accepts_the_filter_and_window_flags() {
         let matches = logs_cmd()
             .try_get_matches_from([
-                "logs", "-e", "staging", "-r", "us-west-2", "-n", "50", "-l", "error", "-s",
-                "KMS", "--all",
+                "logs",
+                "-e",
+                "staging",
+                "-r",
+                "us-west-2",
+                "-n",
+                "50",
+                "-l",
+                "error",
+                "-s",
+                "KMS",
+                "--all",
             ])
             .unwrap();
         assert_eq!(

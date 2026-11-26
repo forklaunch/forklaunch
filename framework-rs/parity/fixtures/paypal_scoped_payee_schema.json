@@ -1,0 +1,35 @@
+{
+  "source": "https://developer.paypal.com/api/orders/v2/schema.json",
+  "sourceSha256": "5bcb2242a4158a307dceff74f74352a078777f9afb9b0fb407ce10e392ee96b7",
+  "account_id": {
+    "title": "PayPal Account Identifier",
+    "description": "The account identifier for a PayPal account.",
+    "type": "string",
+    "minLength": 13,
+    "maxLength": 13,
+    "pattern": "^[2-9A-HJ-NP-Z]{13}$"
+  },
+  "payee": {
+    "title": "payee",
+    "description": "The merchant who receives the funds and fulfills the order. The merchant is also known as the payee.",
+    "type": "object",
+    "allOf": [
+      {
+        "$ref": "#/components/schemas/payee_base"
+      },
+      {
+        "type": "object"
+      }
+    ]
+  },
+  "payeeMerchantId": {
+    "allOf": [
+      {
+        "$ref": "#/components/schemas/account_id"
+      },
+      {
+        "description": "The encrypted PayPal account ID of the merchant."
+      }
+    ]
+  }
+}

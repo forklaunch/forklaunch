@@ -1,4 +1,4 @@
-import { getCurrentTenantId } from '@forklaunch/core/persistence';
+import { getBoundTenantId } from '@forklaunch/core/persistence';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createEncryptionAwareOrm,
@@ -23,11 +23,11 @@ import {
  * the input to key derivation.
  */
 
-const buildOrm = (seen: { method: string; tenant: string }[]) => {
+const buildOrm = (seen: { method: string; tenant: string | undefined }[]) => {
   const record =
     (method: string) =>
     async (..._args: unknown[]) => {
-      seen.push({ method, tenant: getCurrentTenantId() });
+      seen.push({ method, tenant: getBoundTenantId() });
       return null;
     };
 
@@ -114,7 +114,7 @@ describe('createEncryptionAwareOrm', () => {
     'findAll',
     'findAndCount'
   ] as const)('runs %s under the latched tenant', async (method) => {
-    const seen: { method: string; tenant: string }[] = [];
+    const seen: { method: string; tenant: string | undefined }[] = [];
     const orm = buildOrm(seen);
     const wrapped = createEncryptionAwareOrm(orm);
 
@@ -134,17 +134,17 @@ describe('createEncryptionAwareOrm', () => {
   });
 
   it('leaves reads outside a Better Auth request untouched', async () => {
-    const seen: { method: string; tenant: string }[] = [];
+    const seen: { method: string; tenant: string | undefined }[] = [];
     const orm = buildOrm(seen);
     const wrapped = createEncryptionAwareOrm(orm);
 
     await wrapped.em.findOne('account', { id: 'a1' });
 
-    expect(seen).toEqual([{ method: 'findOne', tenant: '' }]);
+    expect(seen).toEqual([{ method: 'findOne', tenant: undefined }]);
   });
 
   it('applies nothing before a tenant is known', async () => {
-    const seen: { method: string; tenant: string }[] = [];
+    const seen: { method: string; tenant: string | undefined }[] = [];
     const orm = buildOrm(seen);
     const wrapped = createEncryptionAwareOrm(orm);
 
@@ -152,11 +152,11 @@ describe('createEncryptionAwareOrm', () => {
       await wrapped.em.findOne('account', { id: 'a1' });
     });
 
-    expect(seen).toEqual([{ method: 'findOne', tenant: '' }]);
+    expect(seen).toEqual([{ method: 'findOne', tenant: undefined }]);
   });
 
   it('passes writes and unit-of-work methods straight through', async () => {
-    const seen: { method: string; tenant: string }[] = [];
+    const seen: { method: string; tenant: string | undefined }[] = [];
     const orm = buildOrm(seen);
     const wrapped = createEncryptionAwareOrm(orm);
 

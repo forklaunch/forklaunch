@@ -42,7 +42,9 @@ use crate::{
         },
         rendered_template::{RenderedTemplate, RenderedTemplatesCache, write_rendered_templates},
     },
+    init::rust_project,
     prompt::{ArrayCompleter, prompt_for_confirmation, prompt_with_validation},
+    sdk::generate::regenerate_sdk_outputs_if_present,
 };
 
 #[derive(Debug)]
@@ -56,7 +58,7 @@ impl RouterCommand {
 
 impl CliCommand for RouterCommand {
     fn command(&self) -> Command {
-        command("router", "Initialize a new router")
+        command("router", "Delete a router")
             .alias("rtr")
             .alias("controller")
             .arg(Arg::new("name").help("The name of the router"))
@@ -70,7 +72,7 @@ impl CliCommand for RouterCommand {
                 Arg::new("continue")
                     .short('c')
                     .long("continue")
-                    .help("Continue the eject operation")
+                    .help("Delete without asking for confirmation")
                     .action(ArgAction::SetTrue),
             )
     }
@@ -82,6 +84,39 @@ impl CliCommand for RouterCommand {
 
         let (app_root_path, project_name) = find_app_root_path(matches, RequiredLocation::Project)?;
         let manifest_path = app_root_path.join(".forklaunch").join("manifest.toml");
+
+        let selected_project = project_name
+            .as_deref()
+            .context("Project path is required for router deletion")?;
+        if rust_project::is_rust_project(&app_root_path, selected_project)? {
+            let project_name = selected_project;
+            let router_name = prompt_with_validation(
+                &mut line_editor,
+                &mut stdout,
+                "name",
+                matches,
+                "router name",
+                None,
+                |input: &str| !input.trim().is_empty(),
+                |_| "Router name cannot be empty".to_string(),
+            )?;
+
+            if !matches.get_flag("continue") {
+                let continue_delete = prompt_for_confirmation(
+                    &mut line_editor,
+                    "This operation is irreversible. Do you want to continue? (y/N) ",
+                )?;
+                if !continue_delete {
+                    log_error!(stdout, "Deletion cancelled");
+                    return Ok(());
+                }
+            }
+
+            rust_project::delete_rust_router(&app_root_path, &project_name, &router_name)?;
+            regenerate_sdk_outputs_if_present(&app_root_path, &mut stdout)?;
+            log_ok!(stdout, "{} deleted successfully!", router_name);
+            return Ok(());
+        }
 
         let existing_manifest_data: RouterManifestData = toml::from_str(
             &read_to_string(&manifest_path).with_context(|| ERROR_FAILED_TO_READ_MANIFEST)?,
@@ -155,6 +190,10 @@ impl CliCommand for RouterCommand {
         let file_paths = [
             router_base_path
                 .join("api")
+                .join("contracts")
+                .join(format!("{}.contract.ts", camel_case_name)),
+            router_base_path
+                .join("api")
                 .join("controllers")
                 .join(format!("{}.controller.ts", camel_case_name)),
             router_base_path
@@ -193,12 +232,6 @@ impl CliCommand for RouterCommand {
                 .join("__test__")
                 .join(format!("{}.test.ts", camel_case_name)),
         ];
-
-        for path in file_paths {
-            if exists(path.clone())? {
-                remove_file(path)?;
-            }
-        }
 
         let allocator = Allocator::default();
         let entities_path = router_base_path
@@ -351,6 +384,13 @@ impl CliCommand for RouterCommand {
             false,
             &mut stdout,
         )?;
+
+        // Validate every rewrite before removing router-owned source files.
+        for path in file_paths {
+            if exists(path.clone())? {
+                remove_file(path)?;
+            }
+        }
 
         log_ok!(stdout, "{} deleted successfully!", router_name);
 

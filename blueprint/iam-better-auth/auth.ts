@@ -1,4 +1,7 @@
-import { mikroOrmAdapter } from '@forklaunch/better-auth-mikro-orm-fork';
+import { resolveBetterAuthBaseUrl } from './domain/utils/betterAuthBaseUrl.util';
+import { betterAuthMikroOrmAdapter } from './domain/utils/betterAuthAdapter.util';
+import { organizationRoleStatements } from './domain/utils/organizationRoleStatements.util';
+import { withAuthEncryptionPolicy } from './domain/utils/authEncryptionPolicy.util';
 import { logBetterAuthApiError } from './domain/utils/betterAuthErrorLogging.util';
 import { PERMISSIONS, ROLES } from '@forklaunch/blueprint-core';
 import { Metrics } from '@forklaunch/blueprint-monitoring';
@@ -15,25 +18,11 @@ const statement = {
 
 const ac = createAccessControl(statement);
 
-const ownerRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const adminRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const editorRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
-
-const viewerRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ]
-});
-
-const systemRole = ac.newRole({
-  platform: [PERMISSIONS.PLATFORM_READ, PERMISSIONS.PLATFORM_WRITE]
-});
+const ownerRole = ac.newRole(organizationRoleStatements.owner);
+const adminRole = ac.newRole(organizationRoleStatements[ROLES.ADMIN]);
+const editorRole = ac.newRole(organizationRoleStatements[ROLES.EDITOR]);
+const viewerRole = ac.newRole(organizationRoleStatements[ROLES.VIEWER]);
+const systemRole = ac.newRole(organizationRoleStatements[ROLES.SYSTEM]);
 
 const plugins = [
   jwt({
@@ -46,6 +35,7 @@ const plugins = [
         session: Record<string, unknown>;
       }) => ({
         sub: user.id,
+        sessionId: session.id,
         email: user.email,
         activeOrganizationId: (session.activeOrganizationId as string) ?? null
       })
@@ -58,7 +48,7 @@ const plugins = [
     allowUserToCreateOrganization: true,
     creatorRole: 'owner',
     membershipLimit: 100,
-    invitationExpiresIn: 48 * 60 * 60 * 1000,
+    invitationExpiresIn: 48 * 60 * 60, // Better Auth expects seconds.
     teams: { enabled: true },
     dynamicAccessControl: { enabled: true },
     ac,
@@ -139,13 +129,20 @@ export const betterAuthConfig = ({
       google: {
         clientId: getEnvVar('GOOGLE_CLIENT_ID') ?? '',
         clientSecret: getEnvVar('GOOGLE_CLIENT_SECRET') ?? '',
-        redirectURI: `${baseURL}${BETTER_AUTH_BASE_PATH}/callback/google`,
+        redirectURI: `${resolveBetterAuthBaseUrl(baseURL, BETTER_AUTH_BASE_PATH)}/callback/google`,
+        mapProfileToUser: (profile) => ({
+          firstName:
+            typeof profile.given_name === 'string' ? profile.given_name : '',
+          lastName:
+            typeof profile.family_name === 'string' ? profile.family_name : ''
+        }),
         enabled: !!(
           getEnvVar('GOOGLE_CLIENT_ID') && getEnvVar('GOOGLE_CLIENT_SECRET')
         )
       }
     },
-    database: mikroOrmAdapter(orm, {
+    database: betterAuthMikroOrmAdapter(orm, {
+      operationContext: withAuthEncryptionPolicy,
       options: {
         advanced: {
           database: {

@@ -1,0 +1,254 @@
+{
+  "formatVersion": 1,
+  "title": "Realtime",
+  "version": "1.0.0",
+  "sockets": {
+    "chat": {
+      "path": "/chat",
+      "clientMessages": {
+        "request": {
+          "shape": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "serverMessages": {
+        "reply": {
+          "shape": {
+            "type": "object",
+            "properties": {
+              "accepted": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "accepted"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "ping": {
+        "shape": {
+          "type": "object",
+          "properties": {
+            "ts": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "ts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "pong": {
+        "shape": {
+          "type": "object",
+          "properties": {
+            "ts": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "ts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "closeReason": {
+        "reason": {
+          "shape": {
+            "type": "object",
+            "properties": {
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "tree": {
+      "path": "/tree",
+      "serverMessages": {
+        "tree": {
+          "shape": {
+            "$ref": "#/$defs/Node~1~0%20%E6%B0%B4",
+            "$defs": {
+              "Node/~ 水": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "integer"
+                  },
+                  "next": {
+                    "$ref": "#/$defs/Node~1~0%20%E6%B0%B4"
+                  }
+                },
+                "required": [
+                  "value"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        }
+      }
+    },
+    "empty": {
+      "path": "/empty"
+    },
+    "draft6": {
+      "path": "/draft-six",
+      "clientMessages": {
+        "legacy_request": {
+          "shape": {
+            "$schema": "http://json-schema.org/draft-06/schema#",
+            "type": "string",
+            "minLength": 1,
+            "if": {
+              "id": "https://example.invalid/ignored",
+              "$id": "https://example.invalid/ignored"
+            },
+            "then": {
+              "id": "https://example.invalid/ignored",
+              "$id": "https://example.invalid/ignored"
+            },
+            "prefixItems": [
+              "literal"
+            ]
+          }
+        }
+      },
+      "serverMessages": {
+        "legacy_values": {
+          "shape": {
+            "$schema": "http://json-schema.org/draft-06/schema#",
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "contains": {
+              "minimum": 2
+            }
+          }
+        }
+      }
+    },
+    "draft4": {
+      "path": "/draft-four",
+      "clientMessages": {
+        "draft_four_request": {
+          "shape": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true,
+            "maximum": 10,
+            "exclusiveMaximum": true
+          }
+        }
+      },
+      "serverMessages": {
+        "draft_four_reply": {
+          "shape": {
+            "$schema": "http://json-schema.org/draft-04/schema#",
+            "type": "string",
+            "const": "ignored",
+            "minLength": 1,
+            "if": {
+              "id": "https://example.invalid/ignored",
+              "$id": "https://example.invalid/ignored"
+            },
+            "then": {
+              "id": "https://example.invalid/ignored",
+              "$id": "https://example.invalid/ignored"
+            },
+            "prefixItems": [
+              "literal"
+            ]
+          }
+        }
+      }
+    },
+    "literal": {
+      "path": "/literal",
+      "clientMessages": {
+        "request": {
+          "shape": {
+            "type": "object",
+            "required": [
+              "item"
+            ],
+            "properties": {
+              "item": {
+                "$ref": "#/definitions/Storage/const"
+              }
+            },
+            "definitions": {
+              "Storage": {
+                "const": {
+                  "type": "string",
+                  "minLength": 2
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "channel": "literal-request",
+          "operation": "literal-request"
+        }
+      },
+      "serverMessages": {
+        "tree": {
+          "shape": {
+            "type": "object",
+            "required": [
+              "value"
+            ],
+            "properties": {
+              "value": {
+                "type": "integer"
+              },
+              "next": {
+                "$ref": "#/default"
+              }
+            },
+            "default": {
+              "type": "object",
+              "required": [
+                "value"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer"
+                }
+              },
+              "additionalProperties": false
+            },
+            "additionalProperties": false
+          },
+          "channel": "literal-tree",
+          "operation": "literal-tree"
+        }
+      }
+    }
+  }
+}
