@@ -16,7 +16,8 @@
  * so everything imported here is sellable on the clone.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const args = process.argv.slice(2);
 const base = (args[0] || '').replace(/\/$/, '');
@@ -27,7 +28,7 @@ if (!/^https?:\/\//.test(base)) {
 const shopPath = args.find((a, i) => i > 0 && a.startsWith('/')) || '/shop';
 const outIdx = args.indexOf('--out');
 const host = new URL(base).host.replace(/^www\./, '');
-const outDir = outIdx >= 0 ? args[outIdx + 1] : join('data', host.replace(/\./g, '-'));
+const outDir = outIdx >= 0 ? args[outIdx + 1] : join(dirname(fileURLToPath(import.meta.url)), 'data', host.replace(/\./g, '-'));
 
 const UA = 'Mozilla/5.0 (Macintosh) storefront-migrate/0.1';
 const MAX_JSON_BYTES = 20 * 1024 * 1024; // one page of a commerce collection is well under this

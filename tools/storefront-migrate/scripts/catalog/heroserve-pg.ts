@@ -10,7 +10,8 @@
  * function: add-to-cart, cart, checkout, order state machine, pay, inventory.
  */
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { PgStore } from './pgstore.ts';
 import { orderView } from './views.ts';
 import type { Brand } from './brand.ts';
@@ -29,7 +30,7 @@ const port = Number(process.argv[4] ?? 4600);
 const pgUrl = process.argv[5] ?? 'postgres://localhost/forklaunch_migration_scaffold';
 
 const store = await new PgStore(pgUrl).init();
-const brandPath = join('data', slug, 'brand.json');
+const brandPath = join(dirname(fileURLToPath(import.meta.url)), 'data', slug, 'brand.json');
 const brand: Brand | null = existsSync(brandPath) ? JSON.parse(readFileSync(brandPath, 'utf8')) : null;
 
 let demoCart: number | null = null;

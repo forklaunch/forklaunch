@@ -11,13 +11,19 @@
  *   import <normalized.json>     Load the normalized catalog into a real
  *                                 ecommerce-stripe server via /catalog-import.
  *
- * Run with: bun src/cli.ts <command> [args]
+ * Run with: bun catalog/cli.ts <command> [args] (from scripts/; any directory works)
  */
 import { createHmac, randomUUID, createHash } from 'node:crypto';
 import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { normalizeShopify } from './normalize.ts';
 import { extractBrand } from './brand.ts';
+
+// Pulled and normalized data always lands next to this script, in
+// catalog/data/<slug>/, whatever directory the command is run from. The
+// pipeline (migrate.mjs, manifest.js, heroserve) reads it from there.
+export const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), 'data');
 import type { GapNote, NormalizedCatalog, NormalizedProduct, NormalizedVariant } from './model.ts';
 
 function shopSlug(url: string): string {
@@ -45,7 +51,7 @@ async function cmdPull(shopUrl: string) {
     if (products.length < 250) break;
   }
   const payload = { __pulledAt: new Date().toISOString(), products: all };
-  const path = join('data', slug, 'raw.json');
+  const path = join(DATA_DIR, slug, 'raw.json');
   out(path, JSON.stringify(payload, null, 2));
   console.log(`pulled ${all.length} products from ${base}`);
   console.log(`  -> ${path}`);
@@ -66,7 +72,7 @@ function cmdNormalize(rawPath: string) {
   const slug = shopSlug(base);
   const { catalog, gaps } = normalizeShopify(raw, slug, base);
 
-  const dir = join('data', slug);
+  const dir = join(DATA_DIR, slug);
   out(join(dir, 'normalized.json'), JSON.stringify(catalog, null, 2));
 
   const counts = groupCounts(gaps);
@@ -100,7 +106,7 @@ function cmdNormalize(rawPath: string) {
 async function cmdBrand(shopUrl: string) {
   const slug = shopSlug(shopUrl);
   const brand = await extractBrand(shopUrl);
-  const path = join('data', slug, 'brand.json');
+  const path = join(DATA_DIR, slug, 'brand.json');
   out(path, JSON.stringify(brand, null, 2));
   console.log(`brand: ${brand.name ?? '(no name found)'}${brand.markSrc ? ', mark found' : ', no mark found'}${brand.primaryColor ? `, color ${brand.primaryColor}` : ''}${brand.heroImageSrc ? ', hero image found' : ''}${brand.fontFamily ? `, font ${brand.fontFamily}` : ''}`);
   console.log(`  -> ${path}`);
@@ -483,7 +489,7 @@ async function cmdPullAdmin(shopUrl: string, token: string) {
     },
     products,
   };
-  const path = join('data', shopSlug(shopUrl), 'normalized.json');
+  const path = join(DATA_DIR, shopSlug(shopUrl), 'normalized.json');
   out(path, JSON.stringify(cat, null, 2));
   const totalV = products.reduce((s, p) => s + p.variants.length, 0);
   const withStock = products.reduce((s, p) => s + p.variants.filter((v) => v.inventoryQuantity != null).length, 0);
@@ -583,9 +589,12 @@ if (import.meta.main) {
   try {
   if (cmd === 'pull' && arg) await cmdPull(arg);
   else if (cmd === 'pull-admin' && arg) {
-    const tokenIdx = process.argv.indexOf('--token');
-    const token = (tokenIdx > -1 ? process.argv[tokenIdx + 1] : '') || process.env.SHOPIFY_ADMIN_TOKEN || '';
-    if (!token) { console.error('pull-admin needs --token <access-token> or SHOPIFY_ADMIN_TOKEN env'); process.exit(1); }
+    if (process.argv.some((t) => t === '--token' || t.startsWith('--token='))) {
+      console.error('pull-admin: --token is not accepted. Export SHOPIFY_ADMIN_TOKEN instead, so the token never appears in a process listing or shell history.');
+      process.exit(2);
+    }
+    const token = process.env.SHOPIFY_ADMIN_TOKEN || '';
+    if (!token) { console.error('pull-admin needs SHOPIFY_ADMIN_TOKEN in the environment'); process.exit(1); }
     await cmdPullAdmin(arg, token);
   }
   else if (cmd === 'normalize' && arg) cmdNormalize(arg);
@@ -620,13 +629,14 @@ if (import.meta.main) {
   }
   else {
     console.log('usage:');
-    console.log('  bun src/cli.ts pull <shop-url>');
-    console.log('  bun src/cli.ts pull-admin <shop-url> --token <admin-access-token>   (real inventory + SKUs)');
-    console.log('  bun src/cli.ts normalize <raw.json> <shop-url>');
-    console.log('  bun src/cli.ts brand <shop-url>');
-    console.log('  bun src/cli.ts rehost <normalized.json> [--out <dir>] [--base <url>]');
-    console.log('  bun src/cli.ts verify <source-normalized.json> <module-readback.json>');
-    console.log('  bun src/cli.ts import <normalized.json> [server-url] [hmac-secret]');
+    console.log('  bun catalog/cli.ts pull <shop-url>');
+    console.log('  SHOPIFY_ADMIN_TOKEN=... bun catalog/cli.ts pull-admin <shop-url>   (real inventory + SKUs)');
+    console.log('  bun catalog/cli.ts normalize <raw.json> <shop-url>');
+    console.log('  bun catalog/cli.ts brand <shop-url>');
+    console.log('  bun catalog/cli.ts rehost <normalized.json> [--out <dir>] [--base <url>]');
+    console.log('  bun catalog/cli.ts verify <source-normalized.json> <module-readback.json>');
+    console.log('  HMAC_SECRET_KEY=... bun catalog/cli.ts import <normalized.json> [server-url]');
+    console.log(`Output goes to ${DATA_DIR}/<shop-domain-with-dashes>/.`);
     process.exit(1);
   }
   } catch (e: any) {

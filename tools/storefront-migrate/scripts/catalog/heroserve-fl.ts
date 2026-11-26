@@ -10,7 +10,10 @@
  * the module's own HMAC scheme (@forklaunch/core's createHmacToken, reproduced
  * here so the skill stays self-contained).
  *
- *   bun heroserve-fl.ts <site-dir> <port> <module-url> <hmac-secret>
+ *   HMAC_SECRET_KEY=... bun heroserve-fl.ts <site-dir> <port> <module-url>
+ *
+ * The module secret comes only from HMAC_SECRET_KEY in the environment; a
+ * secret passed as an argument is refused.
  *
  * The captured product page keeps its native Shopify add-to-cart form, whose
  * hidden `id` input is the source-platform (Shopify) variant id. The module
