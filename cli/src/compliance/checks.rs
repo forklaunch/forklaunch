@@ -1036,8 +1036,9 @@ pub(crate) fn static_storage_credentials(sources: &str) -> Vec<String> {
     if sources.contains("S3_ACCESS_KEY_ID") && !sources.contains("s3ClientConfig(") {
         found.push("S3_ACCESS_KEY_ID".to_string());
     }
+    let code = super::tenancy::strip_comments(sources);
     for key in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"] {
-        if reads_env_key(sources, key) {
+        if reads_env_key(&code, key) {
             found.push(key.to_string());
         }
     }
@@ -1049,7 +1050,7 @@ pub(crate) fn static_storage_credentials(sources: &str) -> Vec<String> {
 /// or `accessKeyId: KEY`.
 fn reads_env_key(code: &str, key: &str) -> bool {
     regex::Regex::new(&format!(
-        r#"\benv(?:\.{key}\b|\[\s*['"`]{key}['"`]\s*\])|getEnvVar\(\s*['"`]{key}['"`]|\{{[^{{}}]*\b{key}\b[^{{}}]*\}}\s*=\s*(?:process\.)?env\b|(?:accessKeyId|secretAccessKey)\s*:\s*(?:\w+\.)*{key}\b"#
+        r#"\benv\s*(?:\??\.\s*{key}\b|\[\s*['"`]{key}['"`]\s*\])|getEnvVar\s*\(\s*['"`]{key}['"`]|\{{[^{{}}]*\b{key}\b[^{{}}]*\}}\s*=\s*(?:process\.)?env\b|(?:accessKeyId|secretAccessKey)\s*:\s*(?:\w+\.)*{key}\b"#
     ))
     .expect("env key read pattern")
     .is_match(code)
@@ -1110,7 +1111,9 @@ pub(crate) fn unbounded_presigned_uploads(sources: &str) -> Vec<String> {
 
 const PUT_COMMAND: &str = "new PutObjectCommand(";
 
-fn has_unbounded_presigned_put(code: &str) -> bool {
+fn has_unbounded_presigned_put(sources: &str) -> bool {
+    // Brackets inside strings and comments are not code.
+    let code = &code_shape(sources);
     static CALL: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let call = CALL
         .get_or_init(|| regex::Regex::new(r"\bgetSignedUrl\s*\(").expect("presign call pattern"));
@@ -1131,8 +1134,13 @@ fn has_unbounded_presigned_put(code: &str) -> bool {
 /// nested expression, such as `...(prepared ? { ContentLength } : {})`, bounds
 /// only some of the grants.
 fn signs_length(code: &str, at: usize) -> bool {
-    let arguments = super::tenancy::strip_comments(parenthesised(code, at + PUT_COMMAND.len() - 1));
-    arguments.match_indices("ContentLength").any(|(i, _)| {
+    static PROPERTY: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let property = PROPERTY.get_or_init(|| {
+        regex::Regex::new(r"\bContentLength\s*[:,}]").expect("content length pattern")
+    });
+    let arguments = parenthesised(code, at + PUT_COMMAND.len() - 1);
+    property.find_iter(arguments).any(|m| {
+        let i = m.start();
         let depth = arguments[..i]
             .bytes()
             .fold(0usize, |depth, byte| match byte {
@@ -1143,6 +1151,58 @@ fn signs_length(code: &str, at: usize) -> bool {
         // `(` of the call, then `{` of the command input.
         depth == 2
     })
+}
+
+/// `source` with the contents of comments and string literals blanked out,
+/// byte for byte, so offsets still line up and only code is left to scan.
+fn code_shape(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    let mut in_block = false;
+    let mut in_line = false;
+    let mut in_string: Option<char> = None;
+    let blank = |out: &mut String, c: char| {
+        if c == '\n' {
+            out.push('\n');
+        } else {
+            out.extend(std::iter::repeat_n(' ', c.len_utf8()));
+        }
+    };
+    while let Some(c) = chars.next() {
+        if in_block {
+            blank(&mut out, c);
+            if c == '*' && chars.peek() == Some(&'/') {
+                chars.next();
+                out.push(' ');
+                in_block = false;
+            }
+        } else if in_line {
+            blank(&mut out, c);
+            in_line = c != '\n';
+        } else if let Some(quote) = in_string {
+            if c == quote {
+                out.push(c);
+                in_string = None;
+            } else {
+                blank(&mut out, c);
+                if c == '\\'
+                    && let Some(next) = chars.next()
+                {
+                    blank(&mut out, next);
+                }
+            }
+        } else if c == '/' && matches!(chars.peek(), Some('*') | Some('/')) {
+            in_block = chars.next() == Some('*');
+            in_line = !in_block;
+            out.push_str("  ");
+        } else {
+            if matches!(c, '\'' | '"' | '`') {
+                in_string = Some(c);
+            }
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// The text from an opening parenthesis to its closing one.
@@ -3786,6 +3846,8 @@ mod object_store_tests {
             "const DENIED = ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY'];",
             "if (requirement.name === 'AWS_SECRET_ACCESS_KEY') continue;",
             "lines.push('{ name: \"AWS_ACCESS_KEY_ID\", value: \"test\" },');",
+            "// Do not use process.env.AWS_ACCESS_KEY_ID here: the task role signs.",
+            "/* const { AWS_ACCESS_KEY_ID } = process.env; */",
         ] {
             assert!(
                 static_storage_credentials(mentioned).is_empty(),
@@ -3796,6 +3858,8 @@ mod object_store_tests {
             "const id = process.env.AWS_ACCESS_KEY_ID;",
             "const id = process.env['AWS_ACCESS_KEY_ID'];",
             "value: getEnvVar('AWS_ACCESS_KEY_ID')",
+            "value: getEnvVar ( 'AWS_ACCESS_KEY_ID' )",
+            "const id = process.env?.AWS_ACCESS_KEY_ID;",
             "const { AWS_ACCESS_KEY_ID, AWS_REGION } = process.env;",
             "new S3Client({ credentials: { accessKeyId: config.AWS_ACCESS_KEY_ID } });",
             "new S3Client({ credentials: { accessKeyId: AWS_ACCESS_KEY_ID } });",
@@ -3846,6 +3910,24 @@ mod object_store_tests {
         );
         let typed = "const command: PutObjectCommand = new PutObjectCommand({ Bucket, Key, ContentType, ContentLength: approval.sourceBytes, ChecksumSHA256: Buffer.from(sum, 'hex').toString('base64') });\nconst url = await getSignedUrl(s3, command, { expiresIn: 900 });";
         assert!(unbounded_presigned_uploads(typed).is_empty());
+        for unbounded in [
+            // Object metadata is not the signed body length.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, Metadata: { ContentLength: String(n) } }))",
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLengthHint: n }))",
+            // A bracket in a string does not end the call early.
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key: '(' }), { expiresIn: 60 });\nconst note = 'ContentLength: n';",
+        ] {
+            assert_eq!(
+                unbounded_presigned_uploads(unbounded),
+                vec!["getSignedUrl(PutObjectCommand)"],
+                "{unbounded}"
+            );
+        }
+        let quoted_brace =
+            "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key: '{', ContentLength: n }))";
+        assert!(unbounded_presigned_uploads(quoted_brace).is_empty());
+        let shorthand = "getSignedUrl(s3, new PutObjectCommand({ Bucket, Key, ContentLength }))";
+        assert!(unbounded_presigned_uploads(shorthand).is_empty());
         // The nearest command of that name is the one signed.
         let reassigned = "let command = new PutObjectCommand({ Bucket, Key, ContentLength: n });\nawait getSignedUrl(s3, command);\ncommand = new PutObjectCommand({ Bucket, Key });\nawait getSignedUrl(s3, command);";
         assert_eq!(
