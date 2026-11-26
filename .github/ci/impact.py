@@ -121,6 +121,9 @@ INERT = [
     # copied into generated projects and the skill pack ships in the binary.
     Rule(['**/*.md', '**/LICENSE', 'cli/docs/**'],
          exclude=['cli/src/templates/**', 'cli/assets/**']),
+    # The storefront-migrate skill: standalone scripts and docs. No CI job
+    # builds or runs them, and nothing else in the repo imports them.
+    Rule(['tools/storefront-migrate/**']),
     # Changesets only feed the release workflows.
     Rule(['framework/.changeset/**', 'blueprint/.changeset/**']),
     # Workflows that are not pull-request checks, or filter themselves.
