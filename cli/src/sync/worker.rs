@@ -128,6 +128,8 @@ pub(crate) fn sync_worker_with_cache(
                         object_store: None,
                         redis_partition: None,
                         capabilities: None,
+                        object_store_bucket: None,
+                        object_store_prefixes: None,
                     }
                 });
                 resources.database = Some(db.to_string());
@@ -153,6 +155,8 @@ pub(crate) fn sync_worker_with_cache(
                                 object_store: None,
                                 redis_partition: None,
                                 capabilities: None,
+                                object_store_bucket: None,
+                                object_store_prefixes: None,
                             }
                         });
                         resources.cache = Some(infra.metadata().id.to_string());
@@ -174,6 +178,8 @@ pub(crate) fn sync_worker_with_cache(
                                 object_store: None,
                                 redis_partition: None,
                                 capabilities: None,
+                                object_store_bucket: None,
+                                object_store_prefixes: None,
                             }
                         });
                         resources.object_store = Some(infra.metadata().id.to_string());

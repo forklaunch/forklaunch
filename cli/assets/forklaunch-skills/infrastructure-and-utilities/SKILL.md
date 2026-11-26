@@ -203,7 +203,23 @@ into docker-compose, local settings into `.env.local`, the
 `@forklaunch/infrastructure-s3` dependency, the manifest resource
 (`object_store = "s3"`) and the test utilities. Hand-written wiring drifts from
 what the platform provisions, and the report card flags it
-(`object-store-wiring`).
+(`object-store-wiring`). A worker takes an object store the same way
+(`forklaunch infra add <worker> object-store`): both of its deployed
+components, `<name>-service` and `<name>-worker`, get the resource.
+
+A service that already registers its own `ObjectStore` is only declared: the
+manifest gains `object_store = "s3"` and nothing else changes. For storage in
+a bucket that already exists, declare it with the bucket and the key prefixes
+the project may use:
+
+```bash
+forklaunch infra add <service> object-store --existing-bucket <bucket> --prefix uploads/ --prefix exports/
+```
+
+A platform that supports existing buckets then creates no bucket and grants
+the task role those prefixes only. Until a deploy shows that grant, keep the
+bucket settings and credentials the environment already has. See `/cli` for
+what the command prints about new environment variables.
 
 ### How it is configured
 

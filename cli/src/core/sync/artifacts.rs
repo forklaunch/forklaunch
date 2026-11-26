@@ -82,6 +82,8 @@ impl ProjectSyncMetadata {
                 object_store,
                 redis_partition: None,
                 capabilities: None,
+                object_store_bucket: None,
+                object_store_prefixes: None,
             })
         } else {
             None

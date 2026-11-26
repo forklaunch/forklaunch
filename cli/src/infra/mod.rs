@@ -4,6 +4,7 @@ use clap::{ArgMatches, Command};
 use crate::{CliCommand, core::command::command};
 
 pub(crate) mod capabilities;
+mod compose_edit;
 mod config_set;
 mod delete;
 mod in_place;

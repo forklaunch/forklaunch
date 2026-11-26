@@ -107,6 +107,16 @@ pub(crate) struct ResourceInventory {
     pub(crate) cache: Option<String>,
     pub(crate) queue: Option<String>,
     pub(crate) object_store: Option<String>,
+    /// With `object_store`: the store is this bucket, which already exists
+    /// (`forklaunch infra add <project> object-store --existing-bucket`).
+    /// The platform creates no bucket for it; it grants the project's task
+    /// role access to `object_store_prefixes` of this one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) object_store_bucket: Option<String>,
+    /// The key prefixes of `object_store_bucket` the project may read and
+    /// write (`--prefix`, at least one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) object_store_prefixes: Option<Vec<String>>,
     pub(crate) redis_partition: Option<u32>,
     /// Platform-held capabilities this project uses through the managed
     /// gateway (payments, email, sms, whatsapp, voice, models), added with

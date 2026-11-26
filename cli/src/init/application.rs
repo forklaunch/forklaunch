@@ -828,6 +828,8 @@ impl CliCommand for ApplicationCommand {
                 object_store: None,
                 redis_partition: None,
                 capabilities: None,
+                object_store_bucket: None,
+                object_store_prefixes: None,
             }),
             routers: get_routers_from_standard_package(package),
             metadata: None,

@@ -340,6 +340,8 @@ impl CliCommand for ModuleCommand {
                 object_store: None,
                 redis_partition: None,
                 capabilities: None,
+                object_store_bucket: None,
+                object_store_prefixes: None,
             }),
             get_routers_from_standard_package(module.clone()),
             None,

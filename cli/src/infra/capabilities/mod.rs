@@ -491,26 +491,27 @@ impl CapabilityEdit {
     }
 
     /// Change docker-compose.yaml through its model, writing it only when
-    /// something changed. Serializing drops comments, so the file's leading
-    /// comment block is kept.
+    /// something changed. A file that is no longer what the model serializes
+    /// to (comments, anchors, merge keys, its own layout) is edited line by
+    /// line instead, or left alone with the change printed (`compose_edit`).
     fn update_compose(
         &mut self,
         change: impl FnOnce(&mut DockerCompose) -> Result<()>,
     ) -> Result<()> {
+        use super::compose_edit::{ComposeRewrite, rewrite};
+
         let path = self.app_root.join("docker-compose.yaml");
         let Some(text) = self.read(&path)? else {
             return Ok(());
         };
         let mut compose: DockerCompose = serde_yml::from_str(&text)?;
-        let before = serde_yml::to_string(&compose)?;
         change(&mut compose)?;
-        let after = serde_yml::to_string(&compose)?;
-        if after != before {
-            let header: String = text
-                .split_inclusive('\n')
-                .take_while(|l| l.starts_with('#') || l.trim().is_empty())
-                .collect();
-            self.write(path, format!("{header}{after}"));
+        match rewrite(&text, &compose)? {
+            ComposeRewrite::Unchanged => {}
+            ComposeRewrite::Edited(updated) => self.write(path, updated),
+            ComposeRewrite::Manual { reason, snippet } => {
+                eprint!("{}", super::local::manual_compose_note(&reason, &snippet));
+            }
         }
         Ok(())
     }

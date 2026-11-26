@@ -574,16 +574,55 @@ forklaunch infra add <service> voice          # managed gateway: outbound calls 
 forklaunch infra add <service> payments       # managed gateway: Stripe Connect, no Stripe key
 forklaunch infra add <service> models         # managed gateway: AI models, no provider key
 forklaunch infra add <worker> sms             # any managed gateway capability may go on a worker
+forklaunch infra add <worker> object-store    # an object store may go on a worker too
+forklaunch infra add <service> object-store --existing-bucket <bucket> --prefix <prefix>   # a bucket that already exists
 forklaunch infra remove <service> object-store
 forklaunch infra add <service> object-store --dryrun
 forklaunch score --offline                    # afterwards: the wiring checks should pass
 ```
 
 Run it from the app root (or pass `-p <app-root>`). It refuses a type the
-project already has, a type it lacks on remove, and projects that aren't
-services — except the managed gateway capabilities, which a worker may also
-hold (its worker and server containers both get the gateway settings). A
-worker can send, call or charge; events (delivery receipts, replies, call and
+project already has (except an object store given `--existing-bucket`, which
+updates the declaration; see below), a type it lacks on remove, and a
+library. A worker may
+hold an object store and every managed gateway capability (its worker and
+server containers both get the settings); a TypeScript worker's cache is its
+queue backend, which `forklaunch change worker --type` sets, so `infra add
+<worker> cache` is for Rust workers only.
+
+The files the application shares keep everything the command does not set.
+`.forklaunch/manifest.toml` gains or loses only the resource keys: comments,
+key order and keys the CLI does not know stay. `docker-compose.yaml` that has
+been edited by hand (comments, anchors, `<<: *shared` merge keys, its own
+layout) is changed line by line: settings are added at the end of the
+service's own `environment:` block, MinIO or the gateway mock at the end of
+`services:`, and a setting the service already has (its own or merged in) is
+left alone. When a change cannot be placed that way, or would reach another
+service through a shared anchor, the file is not written; the command prints
+the YAML to add by hand. `infra remove` takes out only what `infra add` wrote:
+a value you changed in docker-compose or `.env.local`, and an environment
+entry in `registrations.ts` that other code still reads, stay.
+
+When the registration is new, the command lists the environment variables it
+introduced and which deployed scopes read them (a worker is two:
+`<name>-service` and `<name>-worker`). A production release is held on a
+variable nobody has decided, so set or explicitly unset each one per scope
+before releasing. A service that already registers its own `ObjectStore` is
+only declared in the manifest: its registration, variables, tests, env files
+and compose settings are not touched, and nothing new is introduced.
+
+`--existing-bucket <bucket> --prefix <prefix>` (repeat `--prefix`) declares
+the object store on a bucket that already exists. The manifest records
+`object_store_bucket` and `object_store_prefixes` beside `object_store =
+"s3"`; the release carries them as the resource's `existingBucket` and
+`prefixes`. A platform that supports existing buckets then creates no bucket
+and grants the project's task role those prefixes only. The command only
+records the declaration: keep the bucket settings and credentials the
+environment has (`S3_BUCKET`, any stored S3 keys) until a deploy shows the
+task-role grant in place. Run it again with other prefixes to change them. At
+least one prefix is required: the whole bucket is never granted.
+
+A worker can send, call or charge; events (delivery receipts, replies, call and
 payment events) are delivered over HTTP to `/platform-events/<capability>`,
 never to the worker process. When no HTTP service holds the capability, `infra
 add <worker>` prints a note saying so: add it to an HTTP service as well if the

@@ -270,6 +270,8 @@ fn add_worker_to_artifacts(
                 None
             },
             capabilities: None,
+            object_store_bucket: None,
+            object_store_prefixes: None,
         }),
         Some(vec![manifest_data.worker_name.clone()]),
         Some(ProjectMetadata {
