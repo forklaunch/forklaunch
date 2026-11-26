@@ -42,7 +42,7 @@
     "@forklaunch/core": "workspace:^",
     "@forklaunch/validator": "workspace:^",
     "@modelcontextprotocol/sdk": "^1.32.2",
-    "@scalar/express-api-reference": "^0.10.39",
+    "@scalar/express-api-reference": "^0.10.41",
     "@types/multer": "^2.3.0",
     "body-parser": "^2.4.0",
     "busboy": "^1.6.0",
@@ -57,7 +57,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/body-parser": "^1.19.6",
-    "@types/bun": "^1.4.4",
+    "@types/bun": "^1.4.5",
     "@types/busboy": "^1.5.5",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

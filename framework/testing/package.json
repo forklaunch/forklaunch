@@ -41,13 +41,13 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "ioredis": "^6.0.0",
+    "ioredis": "^6.1.0",
     "jose": "6.2.18",
     "testcontainers": "^12.2.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@mikro-orm/core": "^7.2.10",
+    "@mikro-orm/core": "^7.2.11",
     "@types/node": "^26.6.6",
     "globals": "^17.14.0",
     "prettier": "^3.10.1",
