@@ -63,7 +63,31 @@ pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.2.0";
 // older one ("Unknown lockfile version"), so the image, CI and the developer's
 // local Bun must move together. `.github/workflows/e2e_tests.yml` pins the same
 // release; a unit test in core::github_configs keeps the two in step.
-pub(crate) const BUN_VERSION: &str = "1.4.2";
+pub(crate) const BUN_VERSION: &str = "1.4.5";
+
+// The final (runtime) stage of every generated production image is Wolfi
+// (`cgr.dev/chainguard/wolfi-base`), a glibc rolling distribution whose images
+// scan clean, where Debian final stages always carry unfixed findings. Builder
+// stages stay on Debian; Wolfi's glibc is newer, so their output runs on it.
+// See core::runtime_image for the stages built from these pins.
+//
+// To bump: run `cli/scripts/wolfi-runtime-pins.sh` and copy its output here.
+// WOLFI_BASE_DIGEST is the multi-arch index digest of `wolfi-base:latest`.
+// Package pins are `<version>-r<n>` builds present on both x86_64 and aarch64
+// (Wolfi keeps old builds, so a pin keeps resolving). WOLFI_BUN must be a build
+// of BUN_VERSION: bump them together. Unedited generated Dockerfiles pick the
+// new pins up on the next command that regenerates images.
+pub(crate) const WOLFI_BASE_IMAGE: &str = "cgr.dev/chainguard/wolfi-base";
+pub(crate) const WOLFI_BASE_DIGEST: &str =
+    "sha256:43f53fe2a02ba1a9484cc560ccf188da32f4a4b38055752514d78a3923ff05c8";
+pub(crate) const WOLFI_NODEJS_22: &str = "22.23.2-r1";
+pub(crate) const WOLFI_BUN: &str = "1.4.5-r0";
+pub(crate) const WOLFI_CA_CERTIFICATES: &str = "20261020-r1";
+pub(crate) const WOLFI_CURL: &str = "8.23.0-r4";
+pub(crate) const WOLFI_LIBSTDCXX: &str = "16.2.0-r5";
+// Rust binaries built on Debian bookworm link OpenSSL 3 (libssl.so.3); Wolfi's
+// default OpenSSL is 4.
+pub(crate) const WOLFI_OPENSSL_3_LIBS: &str = "3.6.5-r7";
 
 pub(crate) fn get_platform_management_api_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL").unwrap_or_else(|_| {

@@ -299,7 +299,8 @@ pub(super) fn plan(root: &Path) -> Result<(String, Vec<String>, Vec<String>)> {
         ));
     }
     docker.push_str("ENV SQLX_OFFLINE=true\nARG CARGO_BUILD_JOBS=2\nRUN cargo build --locked --release --workspace --bins");
-    docker.push_str("\nFROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\n");
+    docker.push('\n');
+    docker.push_str(&crate::core::runtime_image::rust_runtime_stage());
     // Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
     docker.push_str(&format!(
         "ADD --chmod=0644 {RDS_CA_BUNDLE_URL} {RDS_CA_BUNDLE_PATH}\n"
@@ -404,6 +405,8 @@ fn reconcile_images(root: &Path) -> Result<()> {
     super::typescript_image::reconcile(root)?;
     let manifest = read_manifest_value(&root.join(".forklaunch/manifest.toml"))?;
     if manifest.get("language").and_then(Value::as_str) != Some("mixed") {
+        // A single-language Rust application keeps the template Dockerfile.
+        super::refresh_rust_dockerfile(root)?;
         return Ok(());
     }
     let destination = root.join("Dockerfile.rust");
@@ -581,23 +584,33 @@ mod tests {
             edited
         );
     }
-    /// An unstamped copy of the Rust template from before the runtime stage
-    /// upgraded OS packages is still CLI-owned: it is replaced by the shared
-    /// image. An edited unstamped file stays the user's.
+    /// Unstamped copies of the Rust template from before the runtime stage
+    /// upgraded OS packages, and from its Debian runtime stage, are still
+    /// CLI-owned: they are replaced by the shared image, which runs on Wolfi.
+    /// An edited unstamped file stays the user's.
     #[test]
     fn previous_unstamped_template_is_regenerated_and_edits_are_kept() {
         let previous = super::super::rust_dockerfile_previous();
+        let bookworm = super::super::rust_dockerfile_bookworm();
         let current = render_static_rust_template("rust/application/Dockerfile");
-        assert_ne!(previous, current);
+        assert_ne!(previous, bookworm);
+        assert_ne!(bookworm, current);
         assert!(!previous.contains("apt-get upgrade -y"));
-        assert!(current.contains("apt-get upgrade -y"));
+        assert!(bookworm.contains("FROM debian:bookworm-slim\n\nWORKDIR /app\nRUN apt-get update \\\n    && apt-get upgrade -y"));
+        assert!(!current.contains("debian") && !current.contains("apt-get upgrade"));
 
-        let root = fixture();
-        write(root.path().join("Dockerfile.rust"), &previous).unwrap();
-        reconcile(root.path()).unwrap();
-        let docker = read_to_string(root.path().join("Dockerfile.rust")).unwrap();
-        assert_eq!(forklaunch_state::stamped(&docker), Some(true));
-        assert!(docker.contains("FROM debian:bookworm-slim AS runtime\nWORKDIR /app\nRUN apt-get update && apt-get upgrade -y && apt-get install"));
+        for legacy in [&previous, &bookworm] {
+            let root = fixture();
+            write(root.path().join("Dockerfile.rust"), legacy).unwrap();
+            reconcile(root.path()).unwrap();
+            let docker = read_to_string(root.path().join("Dockerfile.rust")).unwrap();
+            assert_eq!(forklaunch_state::stamped(&docker), Some(true));
+            assert!(docker.contains(&format!(
+                "\n{}",
+                crate::core::runtime_image::rust_runtime_stage()
+            )));
+            assert!(!docker.contains("debian:bookworm-slim"));
+        }
 
         let root = fixture();
         let edited = previous.replace("FROM debian:bookworm-slim", "FROM debian:bookworm-custom");
@@ -607,6 +620,27 @@ mod tests {
             read_to_string(root.path().join("Dockerfile.rust")).unwrap(),
             edited
         );
+    }
+
+    /// The shared Rust image builds on Debian and runs on the pinned Wolfi
+    /// base as the non-root account wolfi-base ships.
+    #[test]
+    fn shared_rust_image_runs_on_pinned_wolfi() {
+        let root = fixture();
+        let (docker, _, _) = plan(root.path()).unwrap();
+        assert!(docker.contains("FROM rust:1.98.0-slim-bookworm AS builder\n"));
+        let runtime = &docker[docker
+            .find("\nFROM cgr.dev/chainguard/wolfi-base@")
+            .unwrap()
+            + 1..];
+        assert!(runtime.starts_with(&crate::core::runtime_image::rust_runtime_stage()));
+        assert_eq!(runtime.matches("\nFROM ").count(), 0, "{runtime}");
+        assert!(runtime.contains(&format!(
+            "openssl-3.6-libssl={}",
+            crate::constants::WOLFI_OPENSSL_3_LIBS
+        )));
+        assert!(runtime.contains("RUN chmod 0755 /app/certs\n"));
+        assert!(runtime.ends_with("USER 65532:65532\n"));
     }
     #[test]
     fn local_framework_checkout_is_a_named_build_context_not_an_escape() {

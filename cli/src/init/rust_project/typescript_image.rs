@@ -1051,9 +1051,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
         docker.push_str("RUN mkdir -p /out/.certs && cp core/certs/aws-rds-global-bundle.pem /out/.certs/aws-rds-global-bundle.pem\n");
     }
     if bun {
-        docker.push_str(&format!("FROM oven/bun:{BUN_VERSION} AS runtime\nUSER root\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"));
+        docker.push_str(&crate::core::runtime_image::bun_runtime_stage());
     } else {
-        docker.push_str("FROM node:22-bookworm-slim AS runtime\nRUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\nCOPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n");
+        docker.push_str(&crate::core::runtime_image::node_runtime_stage());
     }
     if has_ca_bundle {
         docker.push_str("ENV NODE_EXTRA_CA_CERTS=/app/.certs/aws-rds-global-bundle.pem\n");
@@ -1499,7 +1499,7 @@ mod tests {
         write(path.join("Dockerfile.typescript"), template).unwrap();
         reconcile(path).unwrap();
         let docker = read_to_string(path.join("Dockerfile.typescript")).unwrap();
-        assert!(docker.contains(&format!(
+        assert!(!docker.contains(&format!(
             "FROM oven/bun:{} AS runtime",
             crate::constants::BUN_VERSION
         )));
@@ -1508,10 +1508,10 @@ mod tests {
             crate::constants::BUN_VERSION
         )));
         assert!(docker.contains("bun install --production --frozen-lockfile --ignore-scripts"));
-        assert!(docker.contains(&format!(
-            "FROM oven/bun:{} AS runtime\nUSER root\nRUN apt-get update && apt-get upgrade -y && apt-get install",
-            crate::constants::BUN_VERSION
-        )));
+        // The runtime is the pinned Wolfi base with Wolfi's build of the same Bun.
+        assert!(docker.contains(&crate::core::runtime_image::bun_runtime_stage()));
+        assert!(docker.contains(&format!("bun={}", crate::constants::WOLFI_BUN)));
+        assert!(!docker[docker.find(" AS runtime").unwrap()..].contains("apt-get"));
         assert!(
             docker.contains(
                 "cp .forklaunch/universal-sdk/package.json /out/.forklaunch/universal-sdk/"
@@ -1772,9 +1772,13 @@ mod tests {
                 && docker.contains("--prod deploy --frozen-lockfile")
                 && !docker.contains("--offline")
         );
-        assert!(docker.contains(
-            "FROM node:22-bookworm-slim AS runtime\nRUN apt-get update && apt-get upgrade -y && apt-get install"
-        ));
+        // Built on Debian, run on the pinned Wolfi base as `node` (uid 1000).
+        assert!(docker.contains("FROM node:22-bookworm-slim AS builder\n"));
+        assert!(!docker.contains("FROM node:22-bookworm-slim AS runtime"));
+        let runtime = &docker[docker.find("FROM cgr.dev/chainguard/wolfi-base@").unwrap()..];
+        assert!(runtime.starts_with(&crate::core::runtime_image::node_runtime_stage()));
+        assert_eq!(runtime.matches("\nFROM ").count(), 0, "{runtime}");
+        assert!(!runtime.contains("apt-get"));
         assert!(docker.contains("USER node"));
         let compose: JsonValue =
             serde_yml::from_str(&read_to_string(root.path().join("docker-compose.yaml")).unwrap())

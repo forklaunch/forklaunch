@@ -534,6 +534,7 @@ impl CliCommand for SyncAllCommand {
 
         crate::core::github_configs::reconcile_github_configs(&app_root_path)?;
         if manifest_data.runtime == "tokio" {
+            rust_project::refresh_unedited_images(&app_root_path)?;
             writeln!(stdout)?;
             log_header!(stdout, Color::Green, "Sync all completed");
             return Ok(());
@@ -573,6 +574,8 @@ impl CliCommand for SyncAllCommand {
             .collect();
 
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
+        // Unedited generated images follow the current CLI (runtime stage, pins).
+        rust_project::refresh_unedited_images(&app_root_path)?;
         if rust_project::is_rust_app_root(&app_root_path)? {
             regenerate_native_app_sdks_after_sync(&app_root_path, &manifest_data, &mut stdout)?;
         }

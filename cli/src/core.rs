@@ -41,6 +41,7 @@ pub(crate) mod relative_path;
 pub(crate) mod removal_template;
 pub(crate) mod rendered_template;
 pub(crate) mod report_card;
+pub(crate) mod runtime_image;
 pub(crate) mod static_analysis;
 pub(crate) mod storefront;
 pub(crate) mod string;

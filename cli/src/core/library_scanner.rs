@@ -718,13 +718,7 @@ impl ImportScanner {
     fn parse_node_version_from_dockerfile(modules_root: &Path) -> Option<String> {
         let dockerfile_path = modules_root.join("Dockerfile");
         let content = fs::read_to_string(&dockerfile_path).ok()?;
-        let from_re = Regex::new(r"(?i)^FROM\s+node:(\d+)").ok()?;
-        for line in content.lines() {
-            if let Some(cap) = from_re.captures(line.trim()) {
-                return cap.get(1).map(|m| m.as_str().to_string());
-            }
-        }
-        None
+        node_version_from_dockerfile(&content)
     }
 
     fn resolve_local_import(&self, param_dir: &Path, import_path: &str) -> Option<PathBuf> {
@@ -760,6 +754,25 @@ impl ImportScanner {
 
         None
     }
+}
+
+/// Node.js major version a Dockerfile runs: the first `FROM node:<major>`
+/// (`FROM node:25-trixie-slim` is "25"), or a Wolfi runtime stage's
+/// `apk add ... nodejs-<major>=<version>` when no stage is a Node image.
+fn node_version_from_dockerfile(content: &str) -> Option<String> {
+    let from_re = Regex::new(r"(?i)^FROM\s+node:(\d+)").ok()?;
+    let from_node = content.lines().find_map(|line| {
+        from_re
+            .captures(line.trim())
+            .and_then(|cap| cap.get(1))
+            .map(|m| m.as_str().to_string())
+    });
+    from_node.or_else(|| {
+        content
+            .lines()
+            .find_map(crate::core::runtime_image::wolfi_node_major)
+            .map(str::to_string)
+    })
 }
 
 /// Parsed route extracted from a .routes.ts file
@@ -845,6 +858,34 @@ pub fn parse_route_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn node_version_reads_node_images_and_wolfi_runtime_installs() {
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM node:25-trixie-slim\nRUN true\n"),
+            Some("25".to_string())
+        );
+        let wolfi = format!(
+            "{} AS runtime\nRUN apk add --no-cache nodejs-24=24.1.0-r0 curl=8.0.0-r0\n",
+            crate::core::runtime_image::wolfi_from()
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile(&wolfi),
+            Some("24".to_string())
+        );
+        let generated = format!(
+            "FROM node:22-bookworm-slim AS builder\n{}",
+            crate::core::runtime_image::node_runtime_stage()
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile(&generated),
+            Some("22".to_string())
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM oven/bun:1.4\n"),
+            None
+        );
+    }
 
     #[test]
     fn test_scan_worker_controller_topology() {

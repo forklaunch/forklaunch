@@ -635,6 +635,7 @@ fn owns_native_dockerfile(native_dockerfile: &Path) -> Result<bool> {
     }
     for content in [
         super::rust_project::render_static_rust_template("rust/application/Dockerfile"),
+        super::rust_project::rust_dockerfile_bookworm(),
         super::rust_project::rust_dockerfile_previous(),
     ] {
         let marked = crate::core::watermark::apply_watermark(

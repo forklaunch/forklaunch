@@ -22,14 +22,7 @@ COPY . .
 ENV SQLX_OFFLINE=true
 RUN cargo build --release --workspace --bins
 
-FROM debian:bookworm-slim
-
-WORKDIR /app
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
-
+{{{runtime_stage}}}
 COPY --from=builder /app/target/release /app/target/release
 # Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
 ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
