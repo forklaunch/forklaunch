@@ -462,7 +462,7 @@ fn stage_typescript(
             "main":"./dist/index.js","types":"./dist/index.d.ts","exports":{".":{"types":"./dist/index.d.ts","import":"./dist/index.js"}},
             "scripts":{"build":"tsc --project tsconfig.json","typecheck":"tsc --project tsconfig.json --noEmit"},
             "dependencies":{"ws":"^8.22.0","ajv":"^8.20.0","ajv-draft-04":"^1.0.0","ajv-formats":"^3.0.1"},
-            "devDependencies":{"typescript":"^5.9.3","@types/ws":"^8.18.1","@types/node":"^22.0.0"}
+            "devDependencies":{"typescript":"^5.9.3","@types/ws":"^8.18.1","@types/node":crate::core::package_json::package_json_constants::TYPES_NODE_VERSION}
         }))?,
     )?;
     let config = format!("{directory}/tsconfig.json");

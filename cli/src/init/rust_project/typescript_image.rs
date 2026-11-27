@@ -2,7 +2,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::*;
-use crate::constants::BUN_VERSION;
+use crate::constants::PNPM_VERSION;
+
+/// HyperExpress's Git-distributed uWebSockets peer needs pnpm 10's dependency
+/// policy (pnpm 11 and later block exotic transitive dependencies).
+const HYPER_EXPRESS_PNPM_PIN: &str = "pnpm@10.33.2";
+/// Pins earlier CLI releases generated; their images keep that pnpm.
+const PREVIOUS_PNPM_PINS: &[&str] = &["pnpm@11.28.7"];
 use crate::core::forklaunch_state;
 
 /// Where the generated image writes the production bundler and its plan.
@@ -386,9 +392,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     // existing project policy or changing the ordinary Express toolchain.
     let default_pnpm_pin =
         if manifest.get("http_framework").and_then(Value::as_str) == Some("hyper-express") {
-            "pnpm@10.33.2"
+            HYPER_EXPRESS_PNPM_PIN.to_owned()
         } else {
-            "pnpm@11.28.7"
+            format!("pnpm@{PNPM_VERSION}")
         };
 
     let runtime_kind = if bun {
@@ -826,7 +832,7 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     package["devDependencies"]["esbuild"] = json!("0.25.12");
     let mut pnpm_pin = package["packageManager"]
         .as_str()
-        .unwrap_or(default_pnpm_pin)
+        .unwrap_or(&default_pnpm_pin)
         .to_owned();
     // pnpm 11.1.0 was the generated pin before 11.28.7. Its post-build
     // injected-dependency sync hard-links module symlinks (.prettierrc and
@@ -837,7 +843,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     }
     if !bun {
         anyhow::ensure!(
-            matches!(pnpm_pin.as_str(), "pnpm@10.33.2" | "pnpm@11.28.7"),
+            pnpm_pin == HYPER_EXPRESS_PNPM_PIN
+                || pnpm_pin == format!("pnpm@{PNPM_VERSION}")
+                || PREVIOUS_PNPM_PINS.contains(&pnpm_pin.as_str()),
             "Custom package manager version requires a custom Dockerfile"
         );
         package["packageManager"] = json!(pnpm_pin);
@@ -941,19 +949,25 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
             native_sdks.push((directory.to_owned(), package.to_owned()));
         }
     }
-    let mut docker = "# Generated shared TypeScript production image. Install once to commit pnpm-lock.yaml.\nFROM node:22-bookworm-slim AS builder\nRUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*\nRUN corepack enable && corepack prepare pnpm@11.28.7 --activate\nWORKDIR /app\n".to_owned();
-    docker = docker.replace("pnpm@11.28.7", &pnpm_pin);
-    if bun {
-        docker = format!(
-            "# Generated shared Bun production image. Commit bun.lock before building.\nFROM oven/bun:{BUN_VERSION} AS builder\nUSER root\nRUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ git ca-certificates && rm -rf /var/lib/apt/lists/*\nWORKDIR /app\n"
-        );
-    }
+    let (heading, builder) = if bun {
+        (
+            "# Generated shared Bun production image. Commit bun.lock before building.\n",
+            crate::core::runtime_image::bun_builder_stage(),
+        )
+    } else {
+        (
+            "# Generated shared TypeScript production image. Install once to commit pnpm-lock.yaml.\n",
+            crate::core::runtime_image::node_builder_stage(&pnpm_pin),
+        )
+    };
+    let mut docker = heading.to_owned();
     let native_stage = "native-sdk-compiler";
     if !native_sdks.is_empty() {
         let (_, native_inputs, _) = super::language_images::plan(&root)?;
         let (stages, copies) = super::language_images::framework_inputs(&root)?;
         let mut generation = format!(
-            "{stages}FROM rust:1.98.0-slim-bookworm AS native-sdk-compiler\nWORKDIR /app\nARG CARGO_BUILD_JOBS=2\nRUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*\n{copies}"
+            "{stages}{}\nWORKDIR /app\nARG CARGO_BUILD_JOBS=2\n{copies}",
+            crate::core::runtime_image::rust_builder_from(native_stage)
         );
         for input in native_inputs {
             generation.push_str(&format!(
@@ -966,12 +980,9 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
             generation.push_str(&format!(" -p {package}"));
         }
         generation.push('\n');
-        let stage = if bun { "FROM oven/bun:" } else { "FROM node:" };
-        let position = docker
-            .find(stage)
-            .context("Managed Node builder stage missing")?;
-        docker.insert_str(position, &generation);
+        docker.push_str(&generation);
     }
+    docker.push_str(&builder);
     for input in &inputs {
         docker.push_str(&format!(
             "COPY {}\n",
@@ -1053,7 +1064,7 @@ pub(super) fn reconcile(root: &Path) -> Result<()> {
     if bun {
         docker.push_str(&crate::core::runtime_image::bun_runtime_stage());
     } else {
-        docker.push_str(&crate::core::runtime_image::node_runtime_stage());
+        docker.push_str(&crate::core::runtime_image::node_runtime_stage(&pnpm_pin));
     }
     if has_ca_bundle {
         docker.push_str("ENV NODE_EXTRA_CA_CERTS=/app/.certs/aws-rds-global-bundle.pem\n");
@@ -1248,7 +1259,7 @@ mod tests {
         assert!(
             read_to_string(root.path().join("Dockerfile.typescript"))
                 .unwrap()
-                .contains("corepack prepare pnpm@10.33.2")
+                .contains("npm install -g --prefix /opt/pnpm pnpm@10.33.2")
         );
         // Returning to Express need not invalidate a supported existing lockfile.
         write(&manifest, format!("{original}http_framework='express'\n")).unwrap();
@@ -1499,19 +1510,11 @@ mod tests {
         write(path.join("Dockerfile.typescript"), template).unwrap();
         reconcile(path).unwrap();
         let docker = read_to_string(path.join("Dockerfile.typescript")).unwrap();
-        assert!(!docker.contains(&format!(
-            "FROM oven/bun:{} AS runtime",
-            crate::constants::BUN_VERSION
-        )));
-        assert!(docker.contains(&format!(
-            "FROM oven/bun:{} AS builder",
-            crate::constants::BUN_VERSION
-        )));
+        assert!(docker.contains(&crate::core::runtime_image::bun_builder_stage()));
         assert!(docker.contains("bun install --production --frozen-lockfile --ignore-scripts"));
-        // The runtime is the pinned Wolfi base with Wolfi's build of the same Bun.
+        // The runtime is the pinned ForkLaunch Bun image of the same release.
         assert!(docker.contains(&crate::core::runtime_image::bun_runtime_stage()));
-        assert!(docker.contains(&format!("bun={}", crate::constants::WOLFI_BUN)));
-        assert!(!docker[docker.find(" AS runtime").unwrap()..].contains("apt-get"));
+        assert!(!docker.contains("apt-get") && !docker.contains("oven/bun"));
         assert!(
             docker.contains(
                 "cp .forklaunch/universal-sdk/package.json /out/.forklaunch/universal-sdk/"
@@ -1772,13 +1775,19 @@ mod tests {
                 && docker.contains("--prod deploy --frozen-lockfile")
                 && !docker.contains("--offline")
         );
-        // Built on Debian, run on the pinned Wolfi base as `node` (uid 1000).
-        assert!(docker.contains("FROM node:22-bookworm-slim AS builder\n"));
-        assert!(!docker.contains("FROM node:22-bookworm-slim AS runtime"));
-        let runtime = &docker[docker.find("FROM cgr.dev/chainguard/wolfi-base@").unwrap()..];
-        assert!(runtime.starts_with(&crate::core::runtime_image::node_runtime_stage()));
+        // Built on the pinned Node dev image with the workspace's pnpm, run on
+        // the pinned Node runtime image as `node` (uid 1000) with that pnpm.
+        let pin = format!("pnpm@{PNPM_VERSION}");
+        assert!(docker.contains(&crate::core::runtime_image::node_builder_stage(&pin)));
+        let runtime = &docker[docker
+            .find(&format!(
+                "FROM {} AS runtime",
+                crate::constants::NODE_RUNTIME_IMAGE
+            ))
+            .unwrap()..];
+        assert!(runtime.starts_with(&crate::core::runtime_image::node_runtime_stage(&pin)));
         assert_eq!(runtime.matches("\nFROM ").count(), 0, "{runtime}");
-        assert!(!runtime.contains("apt-get"));
+        assert!(!docker.contains("apt-get") && !docker.contains("corepack"));
         assert!(docker.contains("USER node"));
         let compose: JsonValue =
             serde_yml::from_str(&read_to_string(root.path().join("docker-compose.yaml")).unwrap())
@@ -1815,7 +1824,7 @@ mod tests {
         );
         write(
             root.path().join("Dockerfile.typescript"),
-            docker.replace("FROM node", "FROM custom-node"),
+            docker.replace("USER node", "USER root"),
         )
         .unwrap();
         assert!(preflight(root.path()).is_err());

@@ -347,7 +347,7 @@ fn merge_workspace(stage: &Path, template: &Path, original: &Value) -> Result<()
     let mut package: Json = if package_path.exists() {
         serde_json::from_str(&fs::read_to_string(&package_path)?)?
     } else {
-        serde_json::json!({"name": original["app_name"].as_str(), "private": true, "type": "module", "packageManager": "pnpm@11.28.7"})
+        serde_json::json!({"name": original["app_name"].as_str(), "private": true, "type": "module", "packageManager": format!("pnpm@{}", crate::constants::PNPM_VERSION), "engines": {"node": format!(">={}", crate::constants::NODE_MAJOR)}})
     };
     for field in ["scripts", "devDependencies"] {
         merge_map_missing(&mut package, &generated_package, field)?;

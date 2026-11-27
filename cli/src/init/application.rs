@@ -275,7 +275,11 @@ fn generate_application_package_json(
                 serde_json::to_value(crate::core::pnpm_workspace::framework_release_overrides())?,
             )])
         } else {
-            HashMap::new()
+            // Node services run on the generated images' Node major.
+            HashMap::from([(
+                "engines".to_owned(),
+                serde_json::json!({ "node": format!(">={}", crate::constants::NODE_MAJOR) }),
+            )])
         },
     };
 
@@ -1384,6 +1388,16 @@ impl CliCommand for ApplicationCommand {
                 generate_pnpm_workspace(&application_path, &additional_projects)
                     .with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?,
             );
+            // The Node major of the generated images, for nvm/fnm and
+            // actions/setup-node in the application root.
+            let nvmrc = Path::new(&origin_path).join(".nvmrc");
+            if !nvmrc.exists() {
+                rendered_templates.push(RenderedTemplate {
+                    path: nvmrc,
+                    content: format!("{}\n", crate::constants::NODE_MAJOR),
+                    context: None,
+                });
+            }
         } else if runtime == Runtime::Bun {
             rendered_templates.extend(
                 generate_bunfig(&application_path)

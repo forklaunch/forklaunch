@@ -829,7 +829,8 @@ fn url_list(value: Option<&String>) -> Vec<String> {
 pub(crate) fn generated_gateway_mock(networks: Option<Vec<String>>) -> DockerService {
     DockerService {
         hostname: Some(GATEWAY_MOCK_SERVICE.to_string()),
-        image: Some("node:22-alpine".to_string()),
+        // The dev image: the mock runs through npx, which the runtime image lacks.
+        image: Some(crate::constants::NODE_DEV_IMAGE.to_string()),
         command: Some(crate::core::docker::Command::Multiple(vec![
             "npx".to_string(),
             "-y".to_string(),

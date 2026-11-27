@@ -877,7 +877,9 @@ fn preflight_http_framework(base_path: &Path, http_framework: &str, runtime: &st
         );
         let pinned_pnpm11 = package["packageManager"]
             .as_str()
-            .is_some_and(|manager| manager.starts_with("pnpm@11."));
+            .and_then(|manager| manager.strip_prefix("pnpm@"))
+            .and_then(|version| version.split('.').next()?.parse::<u32>().ok())
+            .is_some_and(|major| major >= 11);
         if !pinned_pnpm11 {
             return Ok(());
         }

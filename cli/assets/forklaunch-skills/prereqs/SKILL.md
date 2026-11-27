@@ -23,7 +23,7 @@ out to the Node toolchain:
 
 | tool | needed for | needed by |
 |---|---|---|
-| **Node 22+** | everything below it | `forklaunch init`, `release create` |
+| **Node 26+** | everything below it | `forklaunch init`, `release create` |
 | **pnpm** (or bun) | installing the app's dependencies | `forklaunch init`, `release create` |
 | **git** | version control, and the GitHub App path | `release create --git`, autodeploy |
 | **container runtime** | running the app **locally** | `docker compose up`, local dev only |
@@ -98,8 +98,8 @@ trying to drive it:
 Then:
 
 ```bash
-brew install node          # Node 22+ and npm
-corepack enable pnpm       # pnpm, shipped with Node — no separate download
+brew install node            # Node 26+ and npm (new apps pin Node 26)
+npm install -g pnpm@12       # Node 26 has no corepack; pnpm then follows the app's packageManager pin
 brew install git
 ```
 
@@ -128,10 +128,10 @@ starting — wait and try once more before treating it as broken.
 ### Linux
 
 ```bash
-# Node 22 via nodesource
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+# Node 26 via nodesource
+curl -fsSL https://deb.nodesource.com/setup_26.x | sudo -E bash -
 sudo apt-get install -y nodejs git
-corepack enable pnpm
+sudo npm install -g pnpm@12   # Node 26 has no corepack
 
 # Docker Engine
 curl -fsSL https://get.docker.com | sudo sh
@@ -218,9 +218,12 @@ docker`, and check the `usermod` group change has taken effect in a new login.
 pins a minimum release age for dependencies; a package published in the last 24
 hours can fail the gate. Retry, or use `--no-frozen-lockfile` once.
 
-**Node is installed but too old.** `corepack enable pnpm` needs Node 16+, and
-ForkLaunch needs 22+. Upgrading Node is a machine-wide change — tell the user
-before doing it, since it affects their other projects.
+**Node is installed but too old.** New ForkLaunch apps pin Node 26 (`engines`,
+`.nvmrc`, and the images they build on) and pnpm 12. An older pnpm, or corepack
+on Node 24 and earlier, cannot switch to pnpm 12's native executable: install
+it with `npm install -g pnpm@12`. Upgrading Node is a machine-wide change — tell
+the user before doing it, since it affects their other projects (`nvm use`
+reads the app's `.nvmrc`).
 
 **Homebrew asks for a password and nothing happens.** `sudo` prompts cannot be
 answered from a non-interactive session. Hand the command to the user with the

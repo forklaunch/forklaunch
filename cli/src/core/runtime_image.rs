@@ -1,204 +1,261 @@
-//! The final stage of generated production images.
+//! The base-image stages of generated production images.
 //!
-//! Every generated Dockerfile builds on Debian and runs on Wolfi
-//! (`cgr.dev/chainguard/wolfi-base`), pinned by digest with pinned packages
-//! (see the `WOLFI_*` constants). Only the runtime stage changes base; the
-//! users, paths and binaries the Debian runtime images provided are recreated
-//! here so `COPY --chown`, `USER` and compose commands keep working.
+//! Every generated Dockerfile builds on a ForkLaunch `-dev` image and runs on
+//! the matching ForkLaunch runtime image (github.com/forklaunch/base-images),
+//! each pinned by digest (see the `*_IMAGE` constants). The runtime images
+//! already carry the users the old Debian images had (`node` and `bun` are
+//! uid/gid 1000, Rust's default is `nonroot` 65532), curl for the generated
+//! Compose health checks, and CA roots.
 use std::sync::LazyLock;
 
 use regex::Regex;
 
 use crate::constants::{
-    WOLFI_BASE_DIGEST, WOLFI_BASE_IMAGE, WOLFI_BUN, WOLFI_CA_CERTIFICATES, WOLFI_CURL,
-    WOLFI_LIBSTDCXX, WOLFI_NODEJS_22, WOLFI_OPENSSL_3_LIBS,
+    BASE_IMAGE_REGISTRY, BUN_DEV_IMAGE, BUN_RUNTIME_IMAGE, NODE_DEV_IMAGE, NODE_RUNTIME_IMAGE,
+    RUST_DEV_IMAGE, RUST_RUNTIME_IMAGE,
 };
 
-/// `FROM <wolfi-base>@<digest>`, without a stage name.
-pub(crate) fn wolfi_from() -> String {
-    format!("FROM {WOLFI_BASE_IMAGE}@{WOLFI_BASE_DIGEST}")
+/// Where the builder installs the application's pinned pnpm.
+const PNPM_PREFIX: &str = "/opt/pnpm";
+
+/// The release of a `packageManager` pin such as `pnpm@12.23.0`.
+fn pnpm_release(pin: &str) -> &str {
+    pin.strip_prefix("pnpm@").unwrap_or(pin)
 }
 
-/// `apk add` of exact package builds. curl stays because generated Compose
-/// health checks call it inside the container.
-fn apk_add(packages: &[(&str, &str)]) -> String {
-    let pins = packages
-        .iter()
-        .map(|(name, version)| format!("{name}={version}"))
-        .collect::<Vec<_>>()
-        .join(" ");
-    format!("apk add --no-cache {pins}")
+/// pnpm 12 and later ship as one native executable; earlier releases are a
+/// JavaScript package that runs on Node.
+fn native_pnpm(release: &str) -> bool {
+    release
+        .split('.')
+        .next()
+        .and_then(|major| major.parse::<u32>().ok())
+        .is_some_and(|major| major >= 12)
 }
 
-/// The account `node:*` and `oven/bun:*` images ship (uid/gid 1000), so
-/// `--chown=<name>:<name>` and `USER <name>` resolve as they did on Debian.
-fn add_user(name: &str) -> String {
+/// Builder stage of the shared Node image: the dev image (Node, npm, git and
+/// the native-addon toolchain) plus exactly the pnpm the workspace pins,
+/// installed with npm because Node 25 and later ship no corepack. It lives under
+/// /opt/pnpm so it is found before the image's own pnpm and can be copied into
+/// the runtime stage on its own.
+pub(crate) fn node_builder_stage(pnpm_pin: &str) -> String {
+    let release = pnpm_release(pnpm_pin);
     format!(
-        "addgroup -g 1000 {name} && adduser -D -u 1000 -G {name} -h /home/{name} -s /bin/sh {name}"
+        "FROM {NODE_DEV_IMAGE} AS builder\nRUN npm install -g --prefix {PNPM_PREFIX} pnpm@{release} && [ \"$({PNPM_PREFIX}/bin/pnpm --version)\" = \"{release}\" ]\nENV PATH={PNPM_PREFIX}/bin:$PATH\nWORKDIR /app\n"
     )
+}
+
+/// Builder stage of the shared Bun image (runs as root, with git and the
+/// native-addon toolchain).
+pub(crate) fn bun_builder_stage() -> String {
+    format!("FROM {BUN_DEV_IMAGE} AS builder\nWORKDIR /app\n")
+}
+
+/// Builder stage of Rust images: the toolchain, pkg-config, OpenSSL 3.6
+/// headers, cmake, perl and a C/C++ compiler.
+pub(crate) fn rust_builder_from(stage: &str) -> String {
+    format!("FROM {RUST_DEV_IMAGE} AS {stage}")
 }
 
 /// Runtime stage of the shared Node image, up to and including `USER node`.
-pub(crate) fn node_runtime_stage() -> String {
+/// ForkLaunch starts processes with `pnpm run start:*`, so the pinned pnpm
+/// travels with the application: pnpm 12's native executable alone (glibc,
+/// libgcc and libstdc++ are in the image), or an earlier release's package.
+/// pnpm 11 and later verify dependencies before `pnpm run` and reinstall when
+/// they look stale; a `pnpm deploy` tree always looks stale to them (its store
+/// is gone), and the reinstall deletes it. The image's tree is final, so that
+/// check is off.
+pub(crate) fn node_runtime_stage(pnpm_pin: &str) -> String {
+    let release = pnpm_release(pnpm_pin);
+    let pnpm = if native_pnpm(release) {
+        format!(
+            "COPY --from=builder {PNPM_PREFIX}/lib/node_modules/pnpm/pnpm /usr/local/bin/pnpm\n"
+        )
+    } else {
+        format!(
+            "COPY --from=builder {PNPM_PREFIX} {PNPM_PREFIX}\nENV PATH={PNPM_PREFIX}/bin:$PATH\n"
+        )
+    };
     format!(
-        "{} AS runtime\nRUN {} && {}\nWORKDIR /app\nCOPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n",
-        wolfi_from(),
-        apk_add(&[
-            ("nodejs-22", WOLFI_NODEJS_22),
-            ("ca-certificates-bundle", WOLFI_CA_CERTIFICATES),
-            ("curl", WOLFI_CURL),
-        ]),
-        add_user("node"),
+        "FROM {NODE_RUNTIME_IMAGE} AS runtime\nWORKDIR /app\n{pnpm}RUN [ \"$(pnpm --version)\" = \"{release}\" ]\nENV pnpm_config_verify_deps_before_run=false\nCOPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n"
     )
 }
 
-/// Runtime stage of the shared Bun image, up to and including `USER bun`.
-/// libstdc++ is for prebuilt native addons; Wolfi's bun itself needs only glibc.
+/// Runtime stage of the shared Bun image, up to and including `USER bun`. The
+/// image's entrypoint is `bun`; it is cleared so Compose and platform commands
+/// (`/bin/sh -c ...`, `bun run ...`) run as written.
 pub(crate) fn bun_runtime_stage() -> String {
     format!(
-        "{} AS runtime\nRUN {} && {}\nWORKDIR /app\nCOPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n",
-        wolfi_from(),
-        apk_add(&[
-            ("bun", WOLFI_BUN),
-            ("libstdc++", WOLFI_LIBSTDCXX),
-            ("ca-certificates-bundle", WOLFI_CA_CERTIFICATES),
-            ("curl", WOLFI_CURL),
-        ]),
-        add_user("bun"),
+        "FROM {BUN_RUNTIME_IMAGE} AS runtime\nENTRYPOINT []\nCMD [\"bun\"]\nWORKDIR /app\nCOPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"
     )
 }
 
-/// Packages a Rust binary built on Debian bookworm needs on Wolfi: OpenSSL 3
-/// (bookworm's ABI; Wolfi defaults to OpenSSL 4), CA roots and curl. glibc and
-/// libgcc are in wolfi-base. The `nonroot` account (65532) is too.
-fn rust_packages() -> String {
-    apk_add(&[
-        ("openssl-3.6-libssl", WOLFI_OPENSSL_3_LIBS),
-        ("ca-certificates-bundle", WOLFI_CA_CERTIFICATES),
-        ("curl", WOLFI_CURL),
-    ])
+/// Runtime stage header of the shared (mixed application) Rust image. It
+/// prepares /app as root; the image switches to 65532 after copying binaries.
+pub(crate) fn rust_runtime_stage() -> String {
+    format!("FROM {RUST_RUNTIME_IMAGE} AS runtime\nUSER root\nWORKDIR /app\n")
 }
 
-/// Runtime stage header of the shared (mixed application) Rust image.
-pub(crate) fn rust_runtime_stage() -> String {
+/// Builder stage header of the single-application Rust Dockerfile template.
+pub(crate) fn rust_template_builder_stage() -> String {
     format!(
-        "{} AS runtime\nWORKDIR /app\nRUN {}\n",
-        wolfi_from(),
-        rust_packages()
+        "{}\n\nARG FRAMEWORK_ROOT=/forklaunch\nWORKDIR /app\n",
+        rust_builder_from("builder")
     )
 }
 
 /// Runtime stage header of the single-application Rust Dockerfile template.
+/// That image has always run as root; the runtime image's default is 65532.
 pub(crate) fn rust_template_runtime_stage() -> String {
-    format!(
-        "{} AS runtime\n\nWORKDIR /app\nRUN {}\n",
-        wolfi_from(),
-        rust_packages()
-    )
+    format!("FROM {RUST_RUNTIME_IMAGE} AS runtime\n\nUSER root\nWORKDIR /app\n")
 }
 
-static PINNED_DIGEST: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(wolfi-base)@sha256:[0-9a-f]{64}").unwrap());
-static PINNED_PACKAGE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)(\s[a-z0-9][a-z0-9.+_-]*)=[0-9][0-9A-Za-z.+_~-]*").unwrap());
+static PINNED_IMAGE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(&format!(
+        r"({}/[a-z0-9-]+):[A-Za-z0-9._-]+@sha256:[0-9a-f]{{64}}",
+        regex::escape(BASE_IMAGE_REGISTRY)
+    ))
+    .unwrap()
+});
 
-/// `content` with the Wolfi digest and `apk add` package pins blanked, so a file
+/// `content` with every ForkLaunch base-image tag and digest blanked, so a file
 /// generated under older pins still compares equal to the current rendering.
-/// Only `apk add` lines are touched.
 pub(crate) fn without_pins(content: &str) -> String {
-    let content = PINNED_DIGEST.replace_all(content, "$1@sha256:<pin>");
-    content
-        .lines()
-        .map(|line| {
-            if line.contains("apk add --no-cache ") {
-                PINNED_PACKAGE.replace_all(line, "$1=<pin>").into_owned()
-            } else {
-                line.to_owned()
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// Node.js major version a runtime `apk add nodejs-<major>=...` installs.
-pub(crate) fn wolfi_node_major(line: &str) -> Option<&str> {
-    let rest = line.split_once("nodejs-")?.1;
-    let major = rest.split(|c: char| !c.is_ascii_digit()).next()?;
-    (!major.is_empty() && line.contains("apk add")).then_some(major)
+    PINNED_IMAGE
+        .replace_all(content, "$1:<tag>@sha256:<pin>")
+        .into_owned()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::{BUN_VERSION, NODE_MAJOR, PNPM_VERSION};
 
-    #[test]
-    fn runtime_stages_use_the_pinned_wolfi_base_and_packages() {
-        let from = format!("FROM {WOLFI_BASE_IMAGE}@{WOLFI_BASE_DIGEST} AS runtime\n");
-        assert!(WOLFI_BASE_DIGEST.starts_with("sha256:") && WOLFI_BASE_DIGEST.len() == 71);
-        for stage in [
-            node_runtime_stage(),
-            bun_runtime_stage(),
-            rust_runtime_stage(),
-            rust_template_runtime_stage(),
-        ] {
-            assert!(stage.starts_with(&from), "{stage}");
-            assert!(!stage.contains("apt-get"), "{stage}");
-            assert!(stage.contains("apk add --no-cache "), "{stage}");
-            assert!(
-                stage.contains(&format!("ca-certificates-bundle={WOLFI_CA_CERTIFICATES}")),
-                "{stage}"
-            );
-            assert!(stage.contains(&format!("curl={WOLFI_CURL}")), "{stage}");
-        }
-        let node = node_runtime_stage();
-        assert!(node.contains(&format!("nodejs-22={WOLFI_NODEJS_22}")));
-        assert!(node.contains("adduser -D -u 1000 -G node"));
-        assert!(node.ends_with("COPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n"));
-        let bun = bun_runtime_stage();
-        assert!(bun.contains(&format!("bun={WOLFI_BUN}")));
-        assert!(bun.contains("adduser -D -u 1000 -G bun"));
-        assert!(bun.ends_with(
-            "COPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"
-        ));
-        assert!(
-            rust_runtime_stage().contains(&format!("openssl-3.6-libssl={WOLFI_OPENSSL_3_LIBS}"))
-        );
+    fn tag(image: &str) -> &str {
+        image
+            .rsplit_once('@')
+            .unwrap()
+            .0
+            .rsplit_once(':')
+            .unwrap()
+            .1
     }
 
     #[test]
-    fn wolfi_bun_is_a_build_of_the_pinned_bun_release() {
+    fn every_pin_is_a_forklaunch_image_with_a_versioned_tag_and_an_index_digest() {
+        for image in [
+            NODE_RUNTIME_IMAGE,
+            NODE_DEV_IMAGE,
+            BUN_RUNTIME_IMAGE,
+            BUN_DEV_IMAGE,
+            RUST_RUNTIME_IMAGE,
+            RUST_DEV_IMAGE,
+        ] {
+            assert!(
+                image.starts_with(&format!("{BASE_IMAGE_REGISTRY}/")),
+                "{image}"
+            );
+            let (reference, digest) = image.split_once('@').unwrap();
+            assert!(
+                digest.starts_with("sha256:") && digest.len() == 71,
+                "{image}"
+            );
+            assert!(digest[7..].bytes().all(|b| b.is_ascii_hexdigit()));
+            let tag = reference.rsplit_once(':').unwrap().1;
+            assert!(!tag.is_empty() && !tag.contains("latest"), "{image}");
+            assert_eq!(without_pins(image).matches("<pin>").count(), 1, "{image}");
+        }
+        assert_eq!(tag(NODE_RUNTIME_IMAGE), NODE_MAJOR);
+        assert_eq!(tag(NODE_DEV_IMAGE), format!("{NODE_MAJOR}-dev"));
+        assert_eq!(tag(BUN_RUNTIME_IMAGE), BUN_VERSION);
+        assert_eq!(tag(BUN_DEV_IMAGE), format!("{BUN_VERSION}-dev"));
+        assert!(RUST_DEV_IMAGE.contains("/rust:") && tag(RUST_DEV_IMAGE).ends_with("-dev"));
+        assert!(RUST_RUNTIME_IMAGE.contains("/rust:") && !tag(RUST_RUNTIME_IMAGE).contains("dev"));
+    }
+
+    #[test]
+    fn node_stages_install_and_carry_the_pinned_pnpm() {
+        let pin = format!("pnpm@{PNPM_VERSION}");
+        let builder = node_builder_stage(&pin);
+        assert!(builder.starts_with(&format!("FROM {NODE_DEV_IMAGE} AS builder\n")));
+        assert!(builder.contains(&format!(
+            "npm install -g --prefix /opt/pnpm pnpm@{PNPM_VERSION} && [ \"$(/opt/pnpm/bin/pnpm --version)\" = \"{PNPM_VERSION}\" ]"
+        )));
+        assert!(!builder.contains("corepack"));
+        let runtime = node_runtime_stage(&pin);
+        assert!(runtime.starts_with(&format!("FROM {NODE_RUNTIME_IMAGE} AS runtime\n")));
+        assert!(runtime.contains(
+            "COPY --from=builder /opt/pnpm/lib/node_modules/pnpm/pnpm /usr/local/bin/pnpm\n"
+        ));
+        assert!(runtime.ends_with(
+            "COPY --from=builder --chown=node:node /out/ /app/\nENV NODE_ENV=production\nUSER node\n"
+        ));
+        // A JavaScript pnpm (before 12) travels as its package.
+        let legacy = node_runtime_stage("pnpm@10.33.2");
         assert!(
-            WOLFI_BUN.starts_with(&format!("{}-r", crate::constants::BUN_VERSION)),
-            "WOLFI_BUN {WOLFI_BUN} must be a Wolfi build of BUN_VERSION"
+            legacy.contains(
+                "COPY --from=builder /opt/pnpm /opt/pnpm\nENV PATH=/opt/pnpm/bin:$PATH\n"
+            )
         );
+        assert!(legacy.contains("RUN [ \"$(pnpm --version)\" = \"10.33.2\" ]"));
+        for stage in [&runtime, &legacy] {
+            assert!(stage.contains("ENV pnpm_config_verify_deps_before_run=false\n"));
+        }
+    }
+
+    #[test]
+    fn bun_and_rust_stages_use_their_images() {
+        let bun = bun_runtime_stage();
+        assert!(bun.starts_with(&format!(
+            "FROM {BUN_RUNTIME_IMAGE} AS runtime\nENTRYPOINT []\nCMD [\"bun\"]\n"
+        )));
+        assert!(bun.ends_with(
+            "COPY --from=builder --chown=bun:bun /out/ /app/\nENV NODE_ENV=production\nUSER bun\n"
+        ));
+        assert!(bun_builder_stage().starts_with(&format!("FROM {BUN_DEV_IMAGE} AS builder\n")));
+        assert!(rust_runtime_stage().starts_with(&format!(
+            "FROM {RUST_RUNTIME_IMAGE} AS runtime\nUSER root\n"
+        )));
+        assert!(rust_template_runtime_stage().contains("USER root"));
+        assert!(
+            rust_template_builder_stage()
+                .starts_with(&format!("FROM {RUST_DEV_IMAGE} AS builder\n"))
+        );
+        for stage in [
+            node_builder_stage("pnpm@12.23.0"),
+            node_runtime_stage("pnpm@12.23.0"),
+            bun_builder_stage(),
+            bun_runtime_stage(),
+            rust_runtime_stage(),
+            rust_template_builder_stage(),
+            rust_template_runtime_stage(),
+        ] {
+            assert!(
+                !stage.contains("apt-get") && !stage.contains("apk add"),
+                "{stage}"
+            );
+        }
     }
 
     #[test]
     fn pins_are_ignored_only_where_they_are_pins() {
-        let older = node_runtime_stage()
-            .replace(WOLFI_BASE_DIGEST, &format!("sha256:{}", "0".repeat(64)))
-            .replace(WOLFI_NODEJS_22, "22.20.0-r0")
-            .replace(WOLFI_CURL, "8.1.0-r3");
-        assert_ne!(older, node_runtime_stage());
-        assert_eq!(without_pins(&older), without_pins(&node_runtime_stage()));
-        // A different package set, or an edit outside the pins, still differs.
-        let swapped = node_runtime_stage().replace("nodejs-22=", "nodejs-24=");
-        assert_ne!(without_pins(&swapped), without_pins(&node_runtime_stage()));
-        let edited = node_runtime_stage().replace("USER node", "USER root");
-        assert_ne!(without_pins(&edited), without_pins(&node_runtime_stage()));
-        // Other `=` assignments are left alone.
-        assert_eq!(without_pins("ENV PORT=8000"), "ENV PORT=8000");
-    }
-
-    #[test]
-    fn node_major_is_read_from_the_runtime_install() {
-        let line = node_runtime_stage().lines().nth(1).unwrap().to_owned();
-        assert_eq!(wolfi_node_major(&line), Some("22"));
-        assert_eq!(
-            wolfi_node_major("RUN apk add --no-cache nodejs-24=24.1.0-r0"),
-            Some("24")
+        let older = node_runtime_stage("pnpm@12.23.0").replace(
+            NODE_RUNTIME_IMAGE,
+            &format!("{BASE_IMAGE_REGISTRY}/node:26@sha256:{}", "0".repeat(64)),
         );
-        assert_eq!(wolfi_node_major("RUN echo nodejs-24"), None);
-        assert_eq!(wolfi_node_major("RUN apk add --no-cache curl"), None);
+        assert_ne!(older, node_runtime_stage("pnpm@12.23.0"));
+        assert_eq!(
+            without_pins(&older),
+            without_pins(&node_runtime_stage("pnpm@12.23.0"))
+        );
+        let edited = node_runtime_stage("pnpm@12.23.0").replace("USER node", "USER root");
+        assert_ne!(
+            without_pins(&edited),
+            without_pins(&node_runtime_stage("pnpm@12.23.0"))
+        );
+        assert_eq!(
+            without_pins("FROM node:26\nENV PORT=8000"),
+            "FROM node:26\nENV PORT=8000"
+        );
     }
 }

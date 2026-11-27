@@ -33,7 +33,7 @@ try:
   assert all(p.read_bytes()==content for p,content in saved.items())
   api=next(p for p in manifest['projects'] if p['name']=='api');assert api['metadata']['contractBuild'] is True
   package=json.loads((app/'modules/api/package.json').read_text());assert package['scripts']['build']=='tsc -b'
-  docker=(app/'Dockerfile.typescript').read_text();assert ('FROM oven/bun:' in docker)==(runtime=='bun')
+  docker=(app/'Dockerfile.typescript').read_text();assert ('e6h0t2z8/bun:' in docker)==(runtime=='bun')
   assert package['scripts']['start:production:server']==runtime+' --enable-source-maps production/server.mjs'
   assert 'build:production' not in json.loads((app/'modules/package.json').read_text())['scripts']
   assert (f'RUN {runtime} /forklaunch/production-build.mjs /forklaunch/production.json') in docker

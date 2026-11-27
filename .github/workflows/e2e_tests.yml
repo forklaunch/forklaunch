@@ -159,16 +159,23 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Must equal BUN_VERSION in cli/src/constants.rs (the generated images'
-      # oven/bun tag); a unit test in cli/src/core/github_configs.rs enforces it.
+      # ForkLaunch bun image tag); a unit test in cli/src/core/github_configs.rs enforces it.
       - name: Install Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
+      # Generated applications pin Node 26 (engines, .nvmrc, images) and
+      # pnpm 12 (packageManager). pnpm 10 cannot switch itself to pnpm 12's
+      # native executable, and Node 25+ ships no corepack, so install the
+      # pinned release with npm (PNPM_VERSION in cli/src/constants.rs). pnpm 12
+      # still switches to an older pin (HyperExpress apps use pnpm 10).
+      - uses: actions/setup-node@v4
         with:
-          version: 10
+          node-version: '26'
+
+      - name: Install pnpm
+        run: npm install -g pnpm@12.23.0 && pnpm --version
 
       # The scaffolded applications install the same dependency trees over and
       # over. Nothing cached them before, so every install refetched everything
@@ -287,7 +294,7 @@ jobs:
         run: echo "CARGO_TARGET_DIR=$RUNNER_TEMP/forklaunch-generated-target" >> "$GITHUB_ENV"
 
       - name: Install TypeScript compiler for SDK checks
-        run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@22 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
+        run: npm install --before="$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)" --prefix "$RUNNER_TEMP/fl-rust-ts" --no-save --package-lock=false --ignore-scripts typescript@5.9.3 qs@6.16.0 @types/qs@6.15.1 @types/node@26 @types/ws@8.18.1 ws@8.22.0 ajv@8.20.0 ajv-draft-04@1.0.0 ajv-formats@3.0.1 @asyncapi/parser@3.6.3 stripe@22.6.2 bullmq@6.3.10 ioredis@6.0.0 zod@4.6.5 ts-deepmerge@8.0.0 cross-fetch@4.1.0 better-auth@1.7.6 esbuild@0.28.2
 
       - name: Configure pinned worker and auth client fixtures
         run: |
@@ -298,16 +305,23 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Must equal BUN_VERSION in cli/src/constants.rs (the generated images'
-      # oven/bun tag); a unit test in cli/src/core/github_configs.rs enforces it.
+      # ForkLaunch bun image tag); a unit test in cli/src/core/github_configs.rs enforces it.
       - name: Install Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.5
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2.4.1
+      # Generated applications pin Node 26 (engines, .nvmrc, images) and
+      # pnpm 12 (packageManager). pnpm 10 cannot switch itself to pnpm 12's
+      # native executable, and Node 25+ ships no corepack, so install the
+      # pinned release with npm (PNPM_VERSION in cli/src/constants.rs). pnpm 12
+      # still switches to an older pin (HyperExpress apps use pnpm 10).
+      - uses: actions/setup-node@v4
         with:
-          version: 10
+          node-version: '26'
+
+      - name: Install pnpm
+        run: npm install -g pnpm@12.23.0 && pnpm --version
 
       # The scaffolded applications install the same dependency trees over and
       # over. Nothing cached them before, so every install refetched everything

@@ -28,10 +28,14 @@ const ALLOWED_BUILD_DEPENDENCIES: &[&str] = &[
     "msgpackr-extract",
     "protobufjs",
     "sqlite3",
-    "ssh2",
     "tldjs",
     "unrs-resolver",
 ];
+
+/// Build scripts the scaffold declines. ssh2 (pulled in by testcontainers via
+/// docker-modem) compiles an optional native crypto binding that does not build
+/// on Node 26; ssh2 runs without it.
+const DECLINED_BUILD_DEPENDENCIES: &[&str] = &["ssh2"];
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct PnpmWorkspace {
@@ -57,8 +61,17 @@ fn default_allow_builds() -> BTreeMap<String, Value> {
     ALLOWED_BUILD_DEPENDENCIES
         .iter()
         .map(|dep| ((*dep).to_string(), Value::Bool(true)))
-        .chain([(BIOME_BUILD_DEPENDENCY.to_string(), Value::Bool(false))])
+        .chain(
+            DECLINED_BUILD_DEPENDENCIES
+                .iter()
+                .chain([&BIOME_BUILD_DEPENDENCY])
+                .map(|dep| ((*dep).to_string(), Value::Bool(false))),
+        )
         .collect()
+}
+
+fn declined_build(dependency: &str) -> bool {
+    dependency == BIOME_BUILD_DEPENDENCY || DECLINED_BUILD_DEPENDENCIES.contains(&dependency)
 }
 
 /// pnpm writes string placeholders ("set this to true or false") for
@@ -72,7 +85,7 @@ fn sanitize_allow_builds(pnpm_workspace: &mut PnpmWorkspace) {
         .unwrap_or_else(default_allow_builds);
     for (dependency, value) in &mut allow_builds {
         if !matches!(value, Value::Bool(_)) {
-            *value = Value::Bool(dependency != BIOME_BUILD_DEPENDENCY);
+            *value = Value::Bool(!declined_build(dependency));
         }
     }
     for (dependency, decision) in default_allow_builds() {
@@ -315,8 +328,22 @@ pub(crate) fn framework_release_overrides() -> Value {
     )
 }
 
+/// pnpm 12 fails `pnpm -r run` on a workspace dependency cycle
+/// (ERR_PNPM_TASK_CYCLE); the billing and IAM modules depend on each other.
+const IGNORE_WORKSPACE_CYCLES: &str = "ignoreWorkspaceCycles";
+
+/// Set-if-missing on every rewrite path, like the release-age defaults, so a
+/// workspace generated before pnpm 12 gets it back when it moves to pnpm 12.
+fn ensure_ignore_workspace_cycles(pnpm_workspace: &mut PnpmWorkspace) {
+    pnpm_workspace
+        .other
+        .entry(IGNORE_WORKSPACE_CYCLES.to_string())
+        .or_insert(Value::Bool(true));
+}
+
 fn default_other() -> BTreeMap<String, Value> {
     BTreeMap::from([
+        (IGNORE_WORKSPACE_CYCLES.to_string(), Value::Bool(true)),
         ("overrides".to_string(), framework_release_overrides()),
         ("minimumReleaseAge".to_string(), Value::Number(1440.into())),
         (
@@ -375,6 +402,7 @@ pub(crate) fn render_pnpm_workspace_with_packages(
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
+    ensure_ignore_workspace_cycles(&mut pnpm_workspace);
     Ok(to_string(&pnpm_workspace).with_context(|| ERROR_FAILED_TO_GENERATE_PNPM_WORKSPACE)?)
 }
 
@@ -420,6 +448,7 @@ pub(crate) fn add_project_definition_to_pnpm_workspace<
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
+    ensure_ignore_workspace_cycles(&mut pnpm_workspace);
     Ok(to_string(&pnpm_workspace)
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_PNPM_WORKSPACE)?)
 }
@@ -445,6 +474,7 @@ pub(crate) fn remove_project_definition_to_pnpm_workspace(
     sanitize_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age_exclude(&mut pnpm_workspace);
     ensure_minimum_release_age(&mut pnpm_workspace);
+    ensure_ignore_workspace_cycles(&mut pnpm_workspace);
 
     Ok(to_string(&pnpm_workspace)
         .with_context(|| ERROR_FAILED_TO_ADD_PROJECT_METADATA_TO_PNPM_WORKSPACE)?)
@@ -463,7 +493,36 @@ mod tests {
         let workspace: PnpmWorkspace = from_str(&rendered.content).unwrap();
         let decisions = workspace.allow_builds.unwrap();
         assert_eq!(decisions[BIOME_BUILD_DEPENDENCY], Value::Bool(false));
-        assert_eq!(decisions["esbuild"], Value::Bool(true));
+        for allowed in ["esbuild", "msgpackr-extract", "cpu-features"] {
+            assert_eq!(decisions[allowed], Value::Bool(true), "{allowed}");
+        }
+        assert_eq!(decisions["ssh2"], Value::Bool(false));
+        assert_eq!(workspace.other[IGNORE_WORKSPACE_CYCLES], Value::Bool(true));
+        assert!(!workspace.other.contains_key("pnpm"));
+    }
+
+    #[test]
+    fn rewriting_workspace_backfills_cycle_policy_and_keeps_explicit_ssh2_decision() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("pnpm-workspace.yaml"),
+            "packages: [core]\nallowBuilds:\n  ssh2: true\n",
+        )
+        .unwrap();
+        let workspace: PnpmWorkspace = from_str(
+            &render_pnpm_workspace_with_packages(dir.path(), vec!["core".into()]).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(workspace.other[IGNORE_WORKSPACE_CYCLES], Value::Bool(true));
+        assert_eq!(workspace.allow_builds.unwrap()["ssh2"], Value::Bool(true));
+        let mut placeholder: PnpmWorkspace =
+            from_str("packages: [core]\nallowBuilds:\n  ssh2: set this to true or false\n")
+                .unwrap();
+        sanitize_allow_builds(&mut placeholder);
+        assert_eq!(
+            placeholder.allow_builds.unwrap()["ssh2"],
+            Value::Bool(false)
+        );
     }
 
     #[test]

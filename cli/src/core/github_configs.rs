@@ -12,11 +12,10 @@ use ramhorns::{Content, Template};
 use serde_json::Value as JsonValue;
 
 use super::{template::get_file_contents, watermark::generate_watermark};
-use crate::constants::BUN_VERSION;
+use crate::constants::{BUN_VERSION, NODE_MAJOR};
 
 const OWNERSHIP: &str = "forklaunch-sha256:";
 const DEFAULT_RUST_TOOLCHAIN: &str = "1.98.0";
-const NODE_VERSION: &str = "22";
 const SMOKE_SCRIPT: &str = ".github/scripts/container-smoke.mjs";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +36,8 @@ struct JsWorkspace {
     directory: String,
     /// A modules directory that is its own pnpm workspace root has its own lockfile.
     nested_install: Option<String>,
-    pinned_package_manager: bool,
+    /// The pnpm release `packageManager` pins, if any.
+    pinned_pnpm: Option<String>,
     scripts: Vec<Script>,
 }
 
@@ -157,7 +157,10 @@ fn detect(root: &Path) -> Result<Shape> {
         .then(|| modules.clone());
         JsWorkspace {
             runtime,
-            pinned_package_manager: package["packageManager"].is_string(),
+            pinned_pnpm: package["packageManager"]
+                .as_str()
+                .and_then(|manager| manager.strip_prefix("pnpm@"))
+                .map(|version| version.split('+').next().unwrap_or(version).to_owned()),
             directory,
             nested_install,
             scripts,
@@ -226,12 +229,12 @@ fn render_ci(shape: &Shape) -> String {
         let (install, run) = match js.runtime {
             Runtime::Node => {
                 ci.push_str(&format!(
-                    "      - uses: actions/setup-node@v4\n        with:\n          node-version: '{NODE_VERSION}'\n"
+                    "      - uses: actions/setup-node@v4\n        with:\n          node-version: '{NODE_MAJOR}'\n"
                 ));
-                ci.push_str(if js.pinned_package_manager {
-                    "      - run: corepack enable\n"
-                } else {
-                    "      - run: npm install -g pnpm\n"
+                // Node 25 and later ship no corepack: install the pinned pnpm.
+                ci.push_str(&match &js.pinned_pnpm {
+                    Some(version) => format!("      - run: npm install -g pnpm@{version}\n"),
+                    None => "      - run: npm install -g pnpm\n".to_owned(),
                 });
                 ("pnpm install --frozen-lockfile", "pnpm run")
             }
@@ -269,7 +272,7 @@ fn render_ci(shape: &Shape) -> String {
     }
     if !shape.dockerfiles.is_empty() {
         ci.push_str(&format!(
-            "  docker:\n    name: Docker\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '{NODE_VERSION}'\n"
+            "  docker:\n    name: Docker\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-node@v4\n        with:\n          node-version: '{NODE_MAJOR}'\n"
         ));
         for dockerfile in &shape.dockerfiles {
             ci.push_str(&run_step(
@@ -488,7 +491,10 @@ mod tests {
                 "{script}"
             );
         }
-        assert!(ci.contains("corepack enable") && ci.contains("container-smoke.mjs Dockerfile"));
+        assert!(!ci.contains("corepack"));
+        assert!(ci.contains("      - run: npm install -g pnpm@11.28.7\n"));
+        assert!(ci.contains(&format!("          node-version: '{NODE_MAJOR}'\n")));
+        assert!(ci.contains("container-smoke.mjs Dockerfile"));
         let dependabot = fs::read_to_string(root.path().join(".github/dependabot.yml")).unwrap();
         assert!(dependabot.contains("directory: \"/src\"") && !dependabot.contains("cargo"));
         serde_yml::from_str::<serde_yml::Value>(&ci).unwrap();
@@ -509,6 +515,26 @@ mod tests {
         assert!(ci.contains(&format!("      - uses: oven-sh/setup-bun@v2\n        with:\n          bun-version: {BUN_VERSION}\n")), "{ci}");
         assert!(ci.contains("run: bun install --frozen-lockfile"));
         serde_yml::from_str::<serde_yml::Value>(&ci).unwrap();
+    }
+
+    /// The repository's own e2e workflow installs the pnpm and Node new
+    /// workspaces pin; pnpm 10 cannot switch itself to pnpm 12.
+    #[test]
+    fn repository_e2e_workflow_installs_the_generated_pnpm_and_node() {
+        let workflow = include_str!("../../../.github/workflows/e2e_tests.yml");
+        let installs = workflow.matches("npm install -g pnpm@").count();
+        assert!(installs >= 2);
+        assert_eq!(
+            workflow
+                .matches(&format!(
+                    "npm install -g pnpm@{}",
+                    crate::constants::PNPM_VERSION
+                ))
+                .count(),
+            installs
+        );
+        assert!(!workflow.contains("pnpm/action-setup"));
+        assert!(workflow.contains(&format!("node-version: '{NODE_MAJOR}'")));
     }
 
     /// The repository's own e2e workflow installs the Bun the generated images

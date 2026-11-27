@@ -534,7 +534,7 @@ impl CliCommand for SyncAllCommand {
 
         crate::core::github_configs::reconcile_github_configs(&app_root_path)?;
         if manifest_data.runtime == "tokio" {
-            rust_project::refresh_unedited_images(&app_root_path)?;
+            refresh_generated_images(&app_root_path, &mut stdout)?;
             writeln!(stdout)?;
             log_header!(stdout, Color::Green, "Sync all completed");
             return Ok(());
@@ -574,8 +574,8 @@ impl CliCommand for SyncAllCommand {
             .collect();
 
         write_rendered_templates(&rendered_templates, false, &mut stdout)?;
-        // Unedited generated images follow the current CLI (runtime stage, pins).
-        rust_project::refresh_unedited_images(&app_root_path)?;
+        // Unedited generated images follow the current CLI (base images, pins).
+        refresh_generated_images(&app_root_path, &mut stdout)?;
         if rust_project::is_rust_app_root(&app_root_path)? {
             regenerate_native_app_sdks_after_sync(&app_root_path, &manifest_data, &mut stdout)?;
         }
@@ -645,5 +645,16 @@ fn sync_docker_compose_with_env_vars(
         log_ok!(stdout, "Synchronized docker-compose environment variables");
     }
 
+    Ok(())
+}
+
+/// Bring unedited generated images to the current CLI. Sync reconciles the
+/// workspace first; a workspace the image generator cannot package yet (for
+/// example two packages sharing a name mid-edit) is reported, not fatal, and
+/// the image is left as it was.
+fn refresh_generated_images(root: &std::path::Path, stdout: &mut StandardStream) -> Result<()> {
+    if let Err(error) = rust_project::refresh_unedited_images(root) {
+        log_warn!(stdout, "Generated Dockerfile left unchanged: {error:#}");
+    }
     Ok(())
 }

@@ -756,22 +756,16 @@ impl ImportScanner {
     }
 }
 
-/// Node.js major version a Dockerfile runs: the first `FROM node:<major>`
-/// (`FROM node:25-trixie-slim` is "25"), or a Wolfi runtime stage's
-/// `apk add ... nodejs-<major>=<version>` when no stage is a Node image.
+/// Node.js major version a Dockerfile runs: the first `FROM [registry/]node:<major>`
+/// (`FROM node:25-trixie-slim` and the generated
+/// `FROM public.ecr.aws/e6h0t2z8/node:26-dev@sha256:...` are "25" and "26").
 fn node_version_from_dockerfile(content: &str) -> Option<String> {
-    let from_re = Regex::new(r"(?i)^FROM\s+node:(\d+)").ok()?;
-    let from_node = content.lines().find_map(|line| {
+    let from_re = Regex::new(r"(?i)^FROM\s+(?:\S+/)?node:(\d+)").ok()?;
+    content.lines().find_map(|line| {
         from_re
             .captures(line.trim())
             .and_then(|cap| cap.get(1))
             .map(|m| m.as_str().to_string())
-    });
-    from_node.or_else(|| {
-        content
-            .lines()
-            .find_map(crate::core::runtime_image::wolfi_node_major)
-            .map(str::to_string)
     })
 }
 
@@ -860,29 +854,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn node_version_reads_node_images_and_wolfi_runtime_installs() {
+    fn node_version_reads_node_images_with_or_without_a_registry() {
         assert_eq!(
             super::node_version_from_dockerfile("FROM node:25-trixie-slim\nRUN true\n"),
             Some("25".to_string())
         );
-        let wolfi = format!(
-            "{} AS runtime\nRUN apk add --no-cache nodejs-24=24.1.0-r0 curl=8.0.0-r0\n",
-            crate::core::runtime_image::wolfi_from()
-        );
-        assert_eq!(
-            super::node_version_from_dockerfile(&wolfi),
-            Some("24".to_string())
-        );
         let generated = format!(
-            "FROM node:22-bookworm-slim AS builder\n{}",
-            crate::core::runtime_image::node_runtime_stage()
+            "# heading\n{}{}",
+            crate::core::runtime_image::node_builder_stage("pnpm@12.23.0"),
+            crate::core::runtime_image::node_runtime_stage("pnpm@12.23.0")
         );
         assert_eq!(
             super::node_version_from_dockerfile(&generated),
-            Some("22".to_string())
+            Some(crate::constants::NODE_MAJOR.to_string())
         );
         assert_eq!(
             super::node_version_from_dockerfile("FROM oven/bun:1.4\n"),
+            None
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM custom-node:22\n"),
             None
         );
     }
