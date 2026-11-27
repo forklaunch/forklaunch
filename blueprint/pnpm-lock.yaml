@@ -13,13 +13,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/universal-sdk':
         specifier: ^1.4.1
         version: 1.4.1
@@ -31,8 +31,8 @@ importers:
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
     devDependencies:
       '@biomejs/biome':
-        specifier: 2.6.8
-        version: 2.6.8
+        specifier: 2.6.9
+        version: 2.6.9
       '@changesets/cli':
         specifier: ^3.0.3
         version: 3.0.3
@@ -44,7 +44,7 @@ importers:
         version: 30.0.0
       '@types/node':
         specifier: ^26.6.7
-        version: 26.6.11
+        version: 26.6.7
       eslint:
         specifier: ^10.15.0
         version: 10.15.0(supports-color@8.1.1)
@@ -53,16 +53,16 @@ importers:
         version: 17.14.0
       jest:
         specifier: ^30.5.2
-        version: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+        version: 30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       lint-staged:
-        specifier: ^17.6.1
-        version: 17.6.1
+        specifier: ^17.6.2
+        version: 17.6.2
       oxlint:
-        specifier: ^1.94.0
-        version: 1.94.0(oxlint-tsgolint@7.0.2007)
+        specifier: ^1.95.0
+        version: 1.95.0(oxlint-tsgolint@7.0.2008)
       oxlint-tsgolint:
-        specifier: ^7.0.2007
-        version: 7.0.2007
+        specifier: ^7.0.2008
+        version: 7.0.2008
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -71,7 +71,7 @@ importers:
         version: 4.1.0
       ts-jest:
         specifier: ^29.4.15
-        version: 29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)))(typescript@7.0.2)
+        version: 29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2)))(typescript@7.0.2)
       tsup:
         specifier: ^9.0.0
         version: 9.0.0(postcss@8.5.33)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1)
@@ -82,11 +82,11 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   billing-base:
     dependencies:
@@ -104,19 +104,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../implementations/billing/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../interfaces/billing
@@ -124,26 +124,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -171,10 +171,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -191,8 +191,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -201,7 +201,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -210,7 +210,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   billing-stripe:
     dependencies:
@@ -228,19 +228,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-stripe':
         specifier: workspace:^
         version: link:../implementations/billing/stripe
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../interfaces/billing
@@ -248,26 +248,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -285,7 +285,7 @@ importers:
         version: 10.4.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.11)
+        version: 22.6.2(@types/node@26.6.7)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -298,10 +298,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -318,8 +318,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -328,7 +328,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -337,7 +337,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   cac-base:
     dependencies:
@@ -352,19 +352,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-cac-base':
         specifier: workspace:^
         version: link:../implementations/cac/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../interfaces/cac
@@ -372,26 +372,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -419,10 +419,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -446,7 +446,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -455,7 +455,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   client-sdk:
     dependencies:
@@ -466,8 +466,8 @@ importers:
         specifier: ^1.4.1
         version: 1.4.1
       better-auth:
-        specifier: ^1.7.26
-        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: ^1.7.28
+        version: 1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
     devDependencies:
       '@forklaunch/blueprint-billing-base':
         specifier: workspace:^
@@ -489,7 +489,7 @@ importers:
         version: link:../sample-worker
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -501,22 +501,22 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator':
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -559,13 +559,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../implementations/ecommerce/base
@@ -580,7 +580,7 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../interfaces/ecommerce
@@ -591,26 +591,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -628,7 +628,7 @@ importers:
         version: 10.4.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.11)
+        version: 22.6.2(@types/node@26.6.7)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -641,10 +641,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -661,8 +661,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -671,7 +671,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -680,7 +680,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   iam-base:
     dependencies:
@@ -692,7 +692,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/hyper-express-fork':
         specifier: ^6.18.1
         version: 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
@@ -706,26 +706,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -753,10 +753,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -770,8 +770,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -786,13 +786,13 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   iam-better-auth:
     dependencies:
       '@forklaunch/better-auth-mikro-orm-fork':
         specifier: ~0.5.12
-        version: 0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
+        version: 0.5.12(@mikro-orm/core@7.2.11)(better-auth@1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
       '@forklaunch/blueprint-core':
         specifier: workspace:^
         version: link:../core
@@ -804,7 +804,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-iam-base':
         specifier: workspace:^
         version: link:../implementations/iam/base
@@ -812,26 +812,26 @@ importers:
         specifier: workspace:^
         version: link:../interfaces/iam
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@opentelemetry/api':
         specifier: ^1.10.0
         version: 1.10.0
@@ -839,8 +839,8 @@ importers:
         specifier: ^0.34.52
         version: 0.34.52
       better-auth:
-        specifier: ^1.7.26
-        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        specifier: ^1.7.28
+        version: 1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       dotenv:
         specifier: ^18.0.10
         version: 18.0.10
@@ -859,10 +859,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -892,7 +892,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   implementations/billing/base:
     dependencies:
@@ -901,7 +901,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../../../interfaces/billing
@@ -912,8 +912,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -944,7 +944,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../base
@@ -958,8 +958,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -968,14 +968,14 @@ importers:
         version: 8.20.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.11)
+        version: 22.6.2(@types/node@26.6.7)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
     devDependencies:
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       depcheck:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
@@ -999,7 +999,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../../../interfaces/cac
@@ -1010,8 +1010,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1033,7 +1033,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../../../interfaces/ecommerce
@@ -1044,8 +1044,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1076,7 +1076,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1090,8 +1090,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1122,7 +1122,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1136,8 +1136,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1146,7 +1146,7 @@ importers:
         version: 8.20.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.11)
+        version: 22.6.2(@types/node@26.6.7)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1171,7 +1171,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-iam':
         specifier: workspace:^
         version: link:../../../interfaces/iam
@@ -1182,8 +1182,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1217,7 +1217,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../../../interfaces/messaging
@@ -1228,8 +1228,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1260,7 +1260,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../base
@@ -1274,8 +1274,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1287,8 +1287,8 @@ importers:
         version: 4.6.7
     devDependencies:
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       depcheck:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
@@ -1309,7 +1309,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-mlse':
         specifier: workspace:^
         version: link:../../../interfaces/mlse
@@ -1337,7 +1337,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1351,8 +1351,8 @@ importers:
         specifier: ^0.34.52
         version: 0.34.52
       bullmq:
-        specifier: ^6.7.8
-        version: 6.7.8(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0))
+        specifier: ^6.7.10
+        version: 6.7.10(ioredis@6.1.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0))
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1373,14 +1373,14 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
   implementations/worker/database:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1391,8 +1391,8 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1416,14 +1416,14 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
   implementations/worker/kafka:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1459,14 +1459,14 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
   implementations/worker/redis:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1499,8 +1499,8 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
   interfaces/billing:
     dependencies:
@@ -1508,8 +1508,8 @@ importers:
         specifier: ^1.2.32
         version: 1.2.32
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1530,8 +1530,8 @@ importers:
         specifier: ^1.2.32
         version: 1.2.32
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1552,8 +1552,8 @@ importers:
         specifier: ^1.2.32
         version: 1.2.32
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1574,8 +1574,8 @@ importers:
         specifier: ^1.2.32
         version: 1.2.32
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1596,8 +1596,8 @@ importers:
         specifier: ^1.2.32
         version: 1.2.32
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
     devDependencies:
       depcheck:
         specifier: ^1.4.7
@@ -1645,8 +1645,8 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
   messaging-base:
     dependencies:
@@ -1661,19 +1661,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../implementations/messaging/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../interfaces/messaging
@@ -1681,26 +1681,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1728,10 +1728,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -1748,8 +1748,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -1758,7 +1758,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -1767,7 +1767,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   messaging-twilio:
     dependencies:
@@ -1782,19 +1782,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-twilio':
         specifier: workspace:^
         version: link:../implementations/messaging/twilio
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../interfaces/messaging
@@ -1802,26 +1802,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1849,10 +1849,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -1869,8 +1869,8 @@ importers:
         specifier: ^1.4.7
         version: 1.4.7(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -1879,7 +1879,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -1888,7 +1888,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   mlse-base:
     dependencies:
@@ -1906,13 +1906,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-mlse-base':
         specifier: workspace:^
         version: link:../implementations/mlse/base
@@ -1921,7 +1921,7 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-mlse':
         specifier: workspace:^
         version: link:../interfaces/mlse
@@ -1932,26 +1932,26 @@ importers:
         specifier: ^1.3.0
         version: 1.3.0
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -1979,10 +1979,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -2006,7 +2006,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -2015,13 +2015,13 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   monitoring:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -2037,7 +2037,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/implementation-worker-bullmq':
         specifier: workspace:^
         version: link:../implementations/worker/bullmq
@@ -2052,10 +2052,10 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/infrastructure-s3':
         specifier: ^1.5.5
-        version: 1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+        version: 1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../interfaces/worker
@@ -2063,35 +2063,35 @@ importers:
         specifier: ^1.4.1
         version: 1.4.1
       '@mikro-orm/core':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@mikro-orm/libsql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mariadb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/migrations':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mongodb':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/mssql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(supports-color@8.1.1)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(supports-color@8.1.1)
       '@mikro-orm/mysql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       '@mikro-orm/postgresql':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/seeder':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@mikro-orm/sqlite':
-        specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)
+        specifier: 7.2.11
+        version: 7.2.11(@mikro-orm/core@7.2.11)
       '@sinclair/typebox':
         specifier: ^0.34.52
         version: 0.34.52
@@ -2102,8 +2102,8 @@ importers:
         specifier: ^13.2.0
         version: 13.2.0
       bullmq:
-        specifier: ^6.7.8
-        version: 6.7.8(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0))
+        specifier: ^6.7.10
+        version: 6.7.10(ioredis@6.1.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0))
       dotenv:
         specifier: ^18.0.10
         version: 18.0.10
@@ -2125,10 +2125,10 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
-        specifier: 7.2.10
-        version: 7.2.10
+        specifier: 7.2.11
+        version: 7.2.11
       '@types/express':
         specifier: ^5.0.6
         version: 5.0.6
@@ -2148,8 +2148,8 @@ importers:
         specifier: ^10.15.0
         version: 10.15.0(supports-color@8.1.1)
       ioredis:
-        specifier: ^6.0.0
-        version: 6.0.0(supports-color@8.1.1)
+        specifier: ^6.1.0
+        version: 6.1.0(supports-color@8.1.1)
       prettier:
         specifier: ^3.10.1
         version: 3.10.1
@@ -2166,8 +2166,8 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       typescript-eslint:
-        specifier: ^8.73.0
-        version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+        specifier: ^8.74.0
+        version: 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
 
 packages:
 
@@ -2570,8 +2570,8 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
-  '@better-auth/core@1.7.26':
-    resolution: {integrity: sha512-k9tECegh1/MZmAQ9tD+4fjF2zYCzMcy0Xhu3nASp8bj48NrK1E0yV2BAeWnprMVRqh62ka07xc0MZuqmvlXNDQ==}
+  '@better-auth/core@1.7.28':
+    resolution: {integrity: sha512-hg2RD1FWup0zAbdVG+LqOquho7LW166OzcQXFp05a/GKlLZyYzhSDussFd5Rlzh8sNnwWKeiSK5Wz3QEBzoWWA==}
     peerDependencies:
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       '@better-fetch/fetch': 1.3.3
@@ -2584,46 +2584,46 @@ packages:
       '@opentelemetry/api':
         optional: true
 
-  '@better-auth/drizzle-adapter@1.7.26':
-    resolution: {integrity: sha512-3OOQPZkAFVo63jbjkQTVjM7SyNbKxmM5sb9BKflaJOT+ld6mxM6yItm5NMKNd1xn/wA4X/+kAmT/KjFL0mRW/Q==}
+  '@better-auth/drizzle-adapter@1.7.28':
+    resolution: {integrity: sha512-L8Xw/3hDpXvEZwlPAOogpgFSQ8sPunGQM3BG6dFXWZkXRIXjp3ZJOITu2oS2oWkIRn7L/8V1FGJJY6pbqYmraQ==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       drizzle-orm: ^0.45.2 || >=1.0.0-rc.1 <2.0.0
     peerDependenciesMeta:
       drizzle-orm:
         optional: true
 
-  '@better-auth/kysely-adapter@1.7.26':
-    resolution: {integrity: sha512-8kImf5aRi5cFC3fYO7fqszSAUC5vU8ya7yHxuCovTJNz7ow4pItRshU319aEPBdgABRFU53kI0v+SE5NI8UJtQ==}
+  '@better-auth/kysely-adapter@1.7.28':
+    resolution: {integrity: sha512-4YVzRfcGtyrFaltk0Nv9TnN6bba2KUxP6pSmw+lqt5KO6vnXSg1gpTGAgZwuMKhpvVLvnO7Eilc+CWXet2c3Gg==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       kysely: ^0.28.17 || ^0.29.0
     peerDependenciesMeta:
       kysely:
         optional: true
 
-  '@better-auth/memory-adapter@1.7.26':
-    resolution: {integrity: sha512-ttV2Q06uoJBJzp9J8zYwYwMY60jvlhziumyqUZ1gJKltvsOasbGfoGPYThypyydTVu8iApP9O4xI9jYXJ08syg==}
+  '@better-auth/memory-adapter@1.7.28':
+    resolution: {integrity: sha512-LPGyUbkQDinwRq7bE42sVeNvy8Q4ynear6TZwkZF34OAheaTsfKZnvIVFMjUZkIJ+Japv9ziALD4x15OZtyoJA==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
 
-  '@better-auth/mongo-adapter@1.7.26':
-    resolution: {integrity: sha512-mGVJ0UIL1hjrp5aCuv4hFinZhpB7vvpu1c/fSa40Ktk4GugXcXguVwHI4hiDqGCttslTz0LOa5gqT+BfzgdJWw==}
+  '@better-auth/mongo-adapter@1.7.28':
+    resolution: {integrity: sha512-k1jaHxALobvohPHtt1qjhQKCAVtINVT88ae7b3ZPh7QSM+otuPDlh4MuNhT+RZ/4DNYa6UL30Fq6HhpetzaqqA==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       mongodb: ^6.0.0 || ^7.0.0
     peerDependenciesMeta:
       mongodb:
         optional: true
 
-  '@better-auth/prisma-adapter@1.7.26':
-    resolution: {integrity: sha512-rXc6dI6HBhD4uXh1gMJU0ScQjojt3wIS4+DziIm/j8ujoTBEG96hFVN0vFVIq/D7SnimXIsPu5rqJ7GYSDbDtw==}
+  '@better-auth/prisma-adapter@1.7.28':
+    resolution: {integrity: sha512-30Q/+HMqwsFQ+HeLLUwZ01F52Dh6F65Syl4o88QoNDn1VN9CFDvhPl2lojHr2dREzQoRlov6VMZBE/PMrFoB+w==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       '@prisma/client': ^5.0.0 || ^6.0.0 || ^7.0.0
       prisma: ^5.0.0 || ^6.0.0 || ^7.0.0
@@ -2633,10 +2633,10 @@ packages:
       prisma:
         optional: true
 
-  '@better-auth/telemetry@1.7.26':
-    resolution: {integrity: sha512-XSxQWg+guJ4X9KrcsdJCUPcXk/GaKxPNSXrhuDRhoWhk3ommioRB2Y6/to6ROy1fGP8JtXqRN4ZPiyKZnfy4Sw==}
+  '@better-auth/telemetry@1.7.28':
+    resolution: {integrity: sha512-a798mVvOqvUHEikjggFDLnxgm+1MJI7f03eslJc4zp/vElsNw9TC2gnT4Flg/BeLuemMe8liD5SRJmM3TaG9XQ==}
     peerDependencies:
-      '@better-auth/core': ^1.7.26
+      '@better-auth/core': ^1.7.28
       '@better-auth/utils': ^0.4.2 || ^0.5.0
       '@better-fetch/fetch': 1.3.3
 
@@ -2646,71 +2646,71 @@ packages:
   '@better-fetch/fetch@1.3.3':
     resolution: {integrity: sha512-U6SlDt/GUWtK2JAxS/NhdoYTEim+EL1G5byz2TUj83KjLZBUpYzb5SmX0aXaCnbGkAjFKnV/o/0+cyXMbEcqqg==}
 
-  '@biomejs/biome@2.6.8':
-    resolution: {integrity: sha512-kqZUFvX6/aYQOmzfRN5ANcfNS9wLH4aHLWWP/dQKyhRZVoA6rdWszA7DGugFcxPbMiznUyVYyukVl+ExZN4PQA==}
+  '@biomejs/biome@2.6.9':
+    resolution: {integrity: sha512-RelCBDzTXu4DBU8c35P4iMrDO80SUjW0OgjDA7CT1z3UcCU5IclWTZ2XnMelI4frQL//xg2K2BQxAhcOKxdPQA==}
     engines: {node: '>=14.21.3'}
     hasBin: true
 
-  '@biomejs/cli-android-arm64@2.6.8':
-    resolution: {integrity: sha512-X4JKPLK85kfUTwuuaORFplnBfGjKkp62PsFhhcL7F/Tpltc7pyUofjlkkMnlZZLWsifFl7LNB8ngVrwJg1uo1Q==}
+  '@biomejs/cli-android-arm64@2.6.9':
+    resolution: {integrity: sha512-/3Aj5aiG+Iz8yDBJJb/GFDsptr9ONk3n1wZUIERuU+pVXMIslBaOnrTYJI5QVVXZ9jE494myQHiIvFrjQCBYeQ==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [android]
 
-  '@biomejs/cli-android-x64@2.6.8':
-    resolution: {integrity: sha512-C3Hk485vl+deEj53K08+SYYelPIPkdSZL3qHuD31Xi+qydVa4q2ze+aCYo1k3iJGWtvWtjHaGkDh7S2sX6wk8w==}
+  '@biomejs/cli-android-x64@2.6.9':
+    resolution: {integrity: sha512-erjbUpD9KJhzTsGHY9oStJ1bSiUJ1ikUXgdr0iOFoIAMiKqW+GdVdEqAlEyqiZA6CBiFqf2fV+g0AVl3hYOuYg==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [android]
 
-  '@biomejs/cli-darwin-arm64@2.6.8':
-    resolution: {integrity: sha512-DHyj+JnRHcn4YdvpiqgTFZMYKSPELMCfFpNNlEuu1L8DKTGXhzW7raIwdsbo2Ie9nCljQLAQkVWQk/mwM0ueiA==}
+  '@biomejs/cli-darwin-arm64@2.6.9':
+    resolution: {integrity: sha512-fO67s0SF+lKGhNPQ7jUXiz0yXGl/1Qm3XTIn/4Hd2Z2z3ewQMrotWIMVdIPxZAgLJdQtRLBOzgsTRzTl981yWA==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [darwin]
 
-  '@biomejs/cli-darwin-x64@2.6.8':
-    resolution: {integrity: sha512-QWWUPjlA0RnkkgYnFLUHZu+RrDc0FdK0A+wEPA+dENQJwsuSHMH89lspnAw2QUWWc9VHyfluGx1Xmp6Y2GZi8Q==}
+  '@biomejs/cli-darwin-x64@2.6.9':
+    resolution: {integrity: sha512-RdjT3Z6dLlii0x6EroncTp9jg38FMx2R1aeaaU4BbZ4//3TJ2mA2R39KMIrZYxHdHXcfv9X2V5hwKkXhg08w/g==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [darwin]
 
-  '@biomejs/cli-linux-arm64-musl@2.6.8':
-    resolution: {integrity: sha512-WB9PhOitX+bRc0G3+GNJGlvbKoWn3JoB9z4E04JQizIC9aPCQyIvwvWG7QZHxw6k20Fi+dHLmZ2fSEmBa9HqiA==}
+  '@biomejs/cli-linux-arm64-musl@2.6.9':
+    resolution: {integrity: sha512-qoG0R5MhJ8VFozVFZQC42V3qCI1TInDhL/YcPPg0oTzfv3vuh0ZDXj+2nNahq8gboHUMv7MWpGjRDLhpQatJ+A==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@biomejs/cli-linux-arm64@2.6.8':
-    resolution: {integrity: sha512-0Bjim8lKwnrvXUHoI4k3Tb51BjoiLEwDnovCI8nSzkk6wj3dShiuAjrx6+X0Hjf4ejR1sRZgTQiSDHlpy9vB7w==}
+  '@biomejs/cli-linux-arm64@2.6.9':
+    resolution: {integrity: sha512-x73OpQSuQLuvNfzXWEjf0mK95NxlJQX4eG/jmuSrGWOz+/jcLUE4N/21yBu3n0X+wa8bJ3NsWNvmNacLnyc2CQ==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@biomejs/cli-linux-x64-musl@2.6.8':
-    resolution: {integrity: sha512-64Yzo+J4fEk7Kf9SMnVdVxC+Y2A2e/L86QTP9JjGQ57lsddyELLpbBcNMxSJggre2T1AvISwwSrOApkBAHDqNA==}
+  '@biomejs/cli-linux-x64-musl@2.6.9':
+    resolution: {integrity: sha512-o73Sk1hCbGOFOrDlxtpHGIubnLwMXscT32+ujMwUyq9o0f4onxO7OznzkFgcZGbwKy1R3ohroOkqZDXqj1u29g==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@biomejs/cli-linux-x64@2.6.8':
-    resolution: {integrity: sha512-XIk3pLQT56I6Tti+u0DF8FtSNXjCMTPbxVTzfJ9cS2t1ImVKvrqV5b52GuEaJg6/wuiXvz0sjfb5saB4TPRjzA==}
+  '@biomejs/cli-linux-x64@2.6.9':
+    resolution: {integrity: sha512-uVrqS0HDjRzFlx88ZpfmlZvJ+xIwTU+110vunzrYvZQ5OqXl/1ugMTNvAs61hejH7jh7iequKJwagRVarrYcSQ==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@biomejs/cli-win32-arm64@2.6.8':
-    resolution: {integrity: sha512-ezjCEZzHIWE2pdh83a7zLVcAAcDaERcTcvfA7uWlxqz/1CuDxgtfO19pDg9B6YY4wKYIDvYBw2QCMnqIshSwmw==}
+  '@biomejs/cli-win32-arm64@2.6.9':
+    resolution: {integrity: sha512-4yvNG4nQGJsJA/PTVAt8IBFXvY6hXk4UdjtPlTf4QTMIjH7ysOwBew78bKThkRv1eyRwH2mGLIk4lAZp8tfAdw==}
     engines: {node: '>=14.21.3'}
     cpu: [arm64]
     os: [win32]
 
-  '@biomejs/cli-win32-x64@2.6.8':
-    resolution: {integrity: sha512-cD6HvGczZUiAYsY8s2TxxXj2AHFzEdMomvVJfEjzOjBM45nGqIDfBpbtvwGQzDCN8X2yKKk9u1jnDZisT2nxIg==}
+  '@biomejs/cli-win32-x64@2.6.9':
+    resolution: {integrity: sha512-mwarNc4GEg5JknsRaJDyJDFr4kICD7snsGM8yYFOoIHimSU1ekWNbcZ44QDa6/30fUZC9077wbBpXE8fp03aug==}
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
@@ -3108,8 +3108,8 @@ packages:
     resolution: {integrity: sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==}
     engines: {node: '>=18.18'}
 
-  '@ioredis/commands@2.0.0':
-    resolution: {integrity: sha512-vrx0AE/T0h7cRZwfo1M39Cr+ZhZrkf0V8mQN75wucKCxCLD9l/VX6no3gFvrLqD1IlG/1LtzWovqEw3t0Vr9zg==}
+  '@ioredis/commands@2.4.0':
+    resolution: {integrity: sha512-fyu7ZM5RvtsYZ3pz4DFlPqSGB3aoVD9ir0vL6/TLtRo8EMuC7f0Z+qGBskDkUL/gJs5fzelxityZAfNNUCrVrQ==}
 
   '@isaacs/cliui@8.0.2':
     resolution: {integrity: sha512-O8jcjabXaleOG9DQ0+ARXWZBTfnP4WNAqzuiJK7ll44AmxGKv/J2M4TPjxjY3znBCfvBXFzucm1twdyFybFqEA==}
@@ -3324,8 +3324,8 @@ packages:
     resolution: {integrity: sha512-6QEf6yqFbETdwGITKq57aYoPfX/3K8XFNwsAlx0C1M7o8cb79sv1M3w+tWuWvIcSbNqrLF7OD7YpZMVVz335hQ==}
     engines: {node: '>=20.0.0'}
 
-  '@mikro-orm/cli@7.2.10':
-    resolution: {integrity: sha512-hGKD2QBKL74YQ8P+xY6iKSijc6RLuWxZ5341sxsum//eaOvJiuu1QQRmAL6aBcCVzoHGxbSLnYHpUgAaigMdWg==}
+  '@mikro-orm/cli@7.2.11':
+    resolution: {integrity: sha512-o8UDfMnbTTF4CdX4JgUduoN5GBJa7DNIa/nfZaeti/Mlj57nFpZ0ZSTGsM+LuuwvgpqVGpsu+CwCgfSmAdTb/A==}
     engines: {node: '>= 22.17.0'}
     hasBin: true
 
@@ -3338,23 +3338,32 @@ packages:
       dataloader:
         optional: true
 
-  '@mikro-orm/libsql@7.2.10':
-    resolution: {integrity: sha512-BVQ1NhG45nFxa6dL/FA8P3zkall6UBUEqOr4XwGWIlZsB0vv2VaA3nEVHp61i64j0hV+/IMtoKI/tuior+51pw==}
+  '@mikro-orm/core@7.2.11':
+    resolution: {integrity: sha512-9SbLovgTOD1rl7bfOSvJcObjslF9qFUBazDYTkLQitxmlSy1OfwdKV5VH64/0c39AgBVWNP/AB282PkJ3MiWOg==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      dataloader: 2.2.3
+    peerDependenciesMeta:
+      dataloader:
+        optional: true
 
-  '@mikro-orm/mariadb@7.2.10':
-    resolution: {integrity: sha512-66FtAlkqVS9hSAGQ5Ag6UoqIqXFEp5AutwqYA2iPDCCwaK0lA4cwW9131WfNaUCfe2W5jR/rRUbPvKJIyuRUCg==}
+  '@mikro-orm/libsql@7.2.11':
+    resolution: {integrity: sha512-COOHqaDpuqDcTVcrrHe4BBF4ijpuhXgpA4ZhhbsxeMonf52yfj7qRDfltm1HO3od2ppulsN/F9ogdXMJeA7njQ==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/migrations@7.2.10':
-    resolution: {integrity: sha512-r+Dyftllq8CrrTaznixUkPd3Vl5FWIy++ZKamsVuw0jD0tEjVTHi2lA/87eGVxTbkNJsrs3Ov6ynI5B3/kJYZA==}
+  '@mikro-orm/mariadb@7.2.11':
+    resolution: {integrity: sha512-TQcn5EHyTNnEWGZkRRepYRMeguqkN+Yq8xv1rLj3iBwU+XGZuK8Mo7AWhISSnpBj/xDtqWkVbV07wCTr+Lq6iA==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
+
+  '@mikro-orm/migrations@7.2.11':
+    resolution: {integrity: sha512-nE9n8a7zRpDTim05hn+qAjp/pq1sw3q3vm3chDn6oXCNqx6Cq5kLvhNYsMmg1IkyCqSLMvk29iRPva0R2jKgmw==}
+    engines: {node: '>= 22.17.0'}
+    peerDependencies:
+      '@mikro-orm/core': 7.2.11
 
   '@mikro-orm/mongodb@7.2.10':
     resolution: {integrity: sha512-NrEj/WyXu8574pI94H1bZkmP9sQcHRgDz7265ren73yak+80BTFH5D+KXwt8F6hjiPRrJ2Kegncs03bWL4bc9A==}
@@ -3362,41 +3371,47 @@ packages:
     peerDependencies:
       '@mikro-orm/core': 7.2.10
 
-  '@mikro-orm/mssql@7.2.10':
-    resolution: {integrity: sha512-dR7zaAv2+eH87srWNbz7/EX0OyEqKhi8Cq0KkxQiD0xryae7EB9Eayqq0qeqF+zeaEitKtZWxSDCSzYhVj9GVA==}
+  '@mikro-orm/mongodb@7.2.11':
+    resolution: {integrity: sha512-vL8rbKrgXyv9kZYnpAXI3j8Lh9B1neAFaezKsZU5b88vczZwbNC27jRrhz/jpPbM5TBYe/GgIbV019bnjmfYDg==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/mysql@7.2.10':
-    resolution: {integrity: sha512-pr0Dh++K34WD+bJYqn+qJ0LuhvppuxW6HC38bxIJop+GFWqzSMx9Z0NiCvQmpGQGzzVt4p5DGjVCXec+gL+g1A==}
+  '@mikro-orm/mssql@7.2.11':
+    resolution: {integrity: sha512-r3QnEb5razG+MWIC+AX7bz8kQxBmHVJDGHq7fmT11LKxDuNw485hP+SIq5dmS0WC0Dn4AJZrJFowH3I5cJ9kyA==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/postgresql@7.2.10':
-    resolution: {integrity: sha512-nJey5FEtes0+OhU6lr5ap4UK6MuNrRRNGMUw8ex8jSZbPM+c4tmHUjuR3TppB+0aB4xVV3k25RShW5g4Ywy6nw==}
+  '@mikro-orm/mysql@7.2.11':
+    resolution: {integrity: sha512-ldRRkfYQclrYtj9VEftMLpNJpqvq5tg+tJjXBQTWn4HShn5Nb/zP1J+AiQ1w0cmV9tiyafORFc5aAYinDCuemQ==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/seeder@7.2.10':
-    resolution: {integrity: sha512-B9N8F1i+uX3vNwtscV0i1GKaK2ThOo+QcUJ6Df4t0K7I7fqgz8BQ7ima6cN9o6W3Sgf4//PUjJWfnR/KTjAKNg==}
+  '@mikro-orm/postgresql@7.2.11':
+    resolution: {integrity: sha512-CPrN12WYRQ835zfzs/5jZFEh6iOlmqTWMEziO70Ct8E6S1/SEzQZykBVTsDRwK3SY/qRVdkfi1wiPGuz0LG9xQ==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/sql@7.2.10':
-    resolution: {integrity: sha512-A+pqqynIiJWcVzOcZsEtBt76S5iCphhQluqL+Qivep3rIbChVVQwPHBq926CXiYI1yc8QQfwglVTQj+Q3UILog==}
+  '@mikro-orm/seeder@7.2.11':
+    resolution: {integrity: sha512-ZqExTwoRwu/SroEXOYe47HBVk217WXrrmNt5/pnCOcwBxzOsRBhl0WFdC7sQ1cUTdP6fdZFsYOw2xthGht3rFw==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/sqlite@7.2.10':
-    resolution: {integrity: sha512-kiIlWVAo00HVfd8vDTciOditlgmDVZXktIzOrr3em7mEObYQ6qHX53ibd28UjciqaEOGZ29R8pQyoHWXGeSQIg==}
+  '@mikro-orm/sql@7.2.11':
+    resolution: {integrity: sha512-TWG3l2lDbeNPbSC8h+66zDehc34w219MwZ/9t8mhpL1LfEQWKqsbzmS7rZDdgNtryChifxCME5Sv3tIC4qTDQg==}
     engines: {node: '>= 22.17.0'}
     peerDependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
+
+  '@mikro-orm/sqlite@7.2.11':
+    resolution: {integrity: sha512-/LZc4W+xHLZ8Lh1hvZs3wbYYKagk9w18Riq1xmYenRPlRI6uvtU0yVHDV0CQrGnDh3F4cwpyS5bh3pGHA6tgiA==}
+    engines: {node: '>= 22.17.0'}
+    peerDependencies:
+      '@mikro-orm/core': 7.2.11
 
   '@modelcontextprotocol/client@2.4.0':
     resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
@@ -3694,154 +3709,154 @@ packages:
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
 
-  '@oxlint-tsgolint/darwin-arm64@7.0.2007':
-    resolution: {integrity: sha512-bjNxPFyu1wNK74epHzXrtVLrj7oEuB8jQvJZDSia2d5EZ/0YgnyhI37E9U530IUZlNCqlTWjko1iT3CKAYF9+A==}
+  '@oxlint-tsgolint/darwin-arm64@7.0.2008':
+    resolution: {integrity: sha512-RXcQ439KXqspwHtw39825cyFmvrkOa1AA2CnqFNNG0pVJB0FdhpfQZsDLjRc/3Mt/uEG0MWOG50Hl09J2Ra9UA==}
     cpu: [arm64]
     os: [darwin]
 
-  '@oxlint-tsgolint/darwin-x64@7.0.2007':
-    resolution: {integrity: sha512-dCd7mzk2FeTaU46LLeXy5mQyEFICaPqlew/LpehNzEuL86D0jTYlwZHbibRqdRrvkSNgq1szz/7014FIHgyV1g==}
+  '@oxlint-tsgolint/darwin-x64@7.0.2008':
+    resolution: {integrity: sha512-4FpkHVDF1I4W0Owgsff8rDdf/XVcI9aoqflqyh3JiMCg7zCzWNkB0hfKMNjMDYDAeK/k1CNawAb7Y7mYGr/Xhg==}
     cpu: [x64]
     os: [darwin]
 
-  '@oxlint-tsgolint/linux-arm64@7.0.2007':
-    resolution: {integrity: sha512-qb0XUQXuTmQ8H++zsx/tQitG0/fU3BE16KGp1qXExeDgRzEc7WIlCuN1i+rmA40lty9gQs+x3a73BFODVhTZqA==}
+  '@oxlint-tsgolint/linux-arm64@7.0.2008':
+    resolution: {integrity: sha512-CmheyZowc+sbXlZ2ksFrbqR6Mnu+HHheZZKTP3FpDBe64eCp6DzSrjcR2VHRj6mC2UKF1ZO0J8Z1e9Bgji4kKw==}
     cpu: [arm64]
     os: [linux]
 
-  '@oxlint-tsgolint/linux-x64@7.0.2007':
-    resolution: {integrity: sha512-75vx0067HSgxq/HEZzlHwqhcujn3bshg43fVLTx604jZdZZMQfPVCcxTh2RTEShP7ACT1PRty6vboZlWh5RtEA==}
+  '@oxlint-tsgolint/linux-x64@7.0.2008':
+    resolution: {integrity: sha512-7by4bup5rF9q7i19G6zPDXgywBi3tFB6jGzefoc/BfleNS0Q/eleYpD2SDLmsXzN2hFpDrfAskx7H0WnUtKbtQ==}
     cpu: [x64]
     os: [linux]
 
-  '@oxlint-tsgolint/win32-arm64@7.0.2007':
-    resolution: {integrity: sha512-6zl7I+BvScfOPtnPtSEP5JA+z8NkDPGd47YnQChL5lLF/Dzs7Rasr1G+q0zGlQcP8OEgW43hW4QlUTXxPfD13Q==}
+  '@oxlint-tsgolint/win32-arm64@7.0.2008':
+    resolution: {integrity: sha512-u12UqT/xG64vXclqfe3/7I4j2mWSMZmXsMRBxbgmGfHaEfZUEzxl1QCNyx3TDM5OfsWWKH4dAHJtDRxTAiYA7A==}
     cpu: [arm64]
     os: [win32]
 
-  '@oxlint-tsgolint/win32-x64@7.0.2007':
-    resolution: {integrity: sha512-VptFHYhBm0SIWCUkx89hmTrKVOQsDg0iB1YE3EBlvRRtCHGUd3pU1kMxPBg1wOd83ZMmIn7zB6maBROtpmrP5g==}
+  '@oxlint-tsgolint/win32-x64@7.0.2008':
+    resolution: {integrity: sha512-Vjev4Ns8rdGa4Tb85ZsBkei0reLa77j3FNJsCKPo2gi5oTPK5O2eN42sim2ewoorgx7JQ3+49YuUKa1d6UKHPw==}
     cpu: [x64]
     os: [win32]
 
-  '@oxlint/binding-android-arm-eabi@1.94.0':
-    resolution: {integrity: sha512-730FKSBsKg/NawYnpI3gXRroXptOVqY32iYBPLUZaSx0vgYzOeiNtwojZL4gJdzo9wDvHUlstShmGRHrWcbRYg==}
+  '@oxlint/binding-android-arm-eabi@1.95.0':
+    resolution: {integrity: sha512-hJna6w3COWJjfMPxomjZL82klTdrITm56PEpCsfO/xMkzQw/fNtJWauQ/YEwQqVttj0L5vDIa8rCcuhfAE3L4w==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [android]
 
-  '@oxlint/binding-android-arm64@1.94.0':
-    resolution: {integrity: sha512-8v8TICIiZpXLot1HSq5+vsG9NEKQ5czQBYlUqJR75OVfFDr3cGOmRU/CtHDWnS4tm8nW+Z4Y357qGToSfYqFvA==}
+  '@oxlint/binding-android-arm64@1.95.0':
+    resolution: {integrity: sha512-uAIGZQ9uJVUeogeWOSboI3F7twOuM4mNuZcHXD9+LdYLcWp7J6kbtRUXJ6GVqcs5E0Cjb4emmSBK9FNrkGuhqQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [android]
 
-  '@oxlint/binding-darwin-arm64@1.94.0':
-    resolution: {integrity: sha512-NePcRMO/ltt1Pnytohl6pl0bd/QyRX8HbpptuDz9LK7FTsFD4lKxDMBt7di9k6IFLO0J05jO2nm7wGqIh6dRHA==}
+  '@oxlint/binding-darwin-arm64@1.95.0':
+    resolution: {integrity: sha512-Ogh1vfHO5vshKRop/He46r+WqC5BTqonYwhB4fp9e2gvOFvg1Xi6XsHTuM/lBSH85ZcaG+DS99EMAy9GcwDong==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [darwin]
 
-  '@oxlint/binding-darwin-x64@1.94.0':
-    resolution: {integrity: sha512-QV+m+OaEgLmYyillvP1wKXhMm6tDZEWx3vG7Wjmx9ybg15+6YMfqzvp6e+uPukC6zNywuule0vMn0fZgihZzZA==}
+  '@oxlint/binding-darwin-x64@1.95.0':
+    resolution: {integrity: sha512-kTrE1xfpQUBMMS50Ws6KY92N8OsJ8LE6JqxKqkHEY3KdsmguQ6kKVGSjzyt1HLwsSi0fQCvNRog8YRBBovD1AA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [darwin]
 
-  '@oxlint/binding-freebsd-x64@1.94.0':
-    resolution: {integrity: sha512-KVZjca581nrV6P71kZ9M1otBib9LH0IMn9rr4mrnbRp18V0HiZhBHbU26gji/Ieq2G34qMacnMc3zrmKmvWqWA==}
+  '@oxlint/binding-freebsd-x64@1.95.0':
+    resolution: {integrity: sha512-ho7E1VCInK0VnpneRaI1BEpe1ceJE8VjxP2O9THWdReV6bth1Q4+80kYVGGK47mHRyZ2NGztQZ2dWRo6j1lavA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [freebsd]
 
-  '@oxlint/binding-linux-arm-gnueabihf@1.94.0':
-    resolution: {integrity: sha512-AMQtgQJk8DgdIV+qaQ5sFoHAko4iKa8zo+gYqELy2grtU8hXWB08DAGB3u90aQL1YSxbd3zqHjgcODBHDFyzBQ==}
+  '@oxlint/binding-linux-arm-gnueabihf@1.95.0':
+    resolution: {integrity: sha512-94afnouMHcnHr/OtRh07gG5LehC9M0GjiSoik3xxTtrmq6cWxXOTAhYlBtxa67u/GlycbnHlDoGJfYlTshcr/w==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
 
-  '@oxlint/binding-linux-arm-musleabihf@1.94.0':
-    resolution: {integrity: sha512-ZLzoGVGAmQkp9leeB5rNxAXLcvlmkmd/GY71LKd5uikk+28NEApY3S2FB3pq6MkfOCFFnFg6QgD9lJIjd07D0Q==}
+  '@oxlint/binding-linux-arm-musleabihf@1.95.0':
+    resolution: {integrity: sha512-LEeclqV1/fafxPgJWN21Bri6HBBBZpEFluq/ZH7Avvu9HjJh/XOn6WwogJqX9X7pG2aITZ2nRH39+sUKEQt2WA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm]
     os: [linux]
 
-  '@oxlint/binding-linux-arm64-gnu@1.94.0':
-    resolution: {integrity: sha512-N1dW6o7cY90hLVkDsvz8nWIFOwbO+n272pvW7uLYB7u47HagJVnLChfK6QA9dWFdiPudud9zfksVUOciHc5PNA==}
+  '@oxlint/binding-linux-arm64-gnu@1.95.0':
+    resolution: {integrity: sha512-EpXpEQKmgtkvc6RyU84LM1e3CrVDWQkgghVzf1hMGgwjBzgKAJ/QntHgnzmu5cNeLBfa7GPCY+gGXxEll8Adcg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@oxlint/binding-linux-arm64-musl@1.94.0':
-    resolution: {integrity: sha512-7tCF4OV/bGDQ2xxgb+sDI97SpmmDrUII4JxTG553voJVA9cnkbXSGSXzo78Ax73BuhEOPoQc2Qi6VrfT0cDG2A==}
+  '@oxlint/binding-linux-arm64-musl@1.95.0':
+    resolution: {integrity: sha512-+96Md8c2BAgFp8nWHrUrpqba87DoU+HVJYIun6qA+QKFoeNd3xAWq1JYE6da4nVli9GgwRpfncfRePcgmQQaIQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@oxlint/binding-linux-ppc64-gnu@1.94.0':
-    resolution: {integrity: sha512-B5vUHE4wNisVEuaYxwFUn6tY+vw7A+9APxxqGKI+UmP3yKLpkhnt0qsaCrzjpX55F8rCRHBaTvIDdYo32NE36g==}
+  '@oxlint/binding-linux-ppc64-gnu@1.95.0':
+    resolution: {integrity: sha512-6yG99vsXct3Uv536w6Z1s03w2makRKnE0q3eJSmf+W/IwPmO56QLk8XUA6ebu/R5peCbJ67HmcWqACH+kg/6Bg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ppc64]
     os: [linux]
     libc: [glibc]
 
-  '@oxlint/binding-linux-riscv64-gnu@1.94.0':
-    resolution: {integrity: sha512-/U0b15+c4hTodo8YhEqDlQ6OjnGKvc8igjM/mh23ukqqCUBKiBCaxqUV8bcaofK9uZ+f8wCygkyXLS6LN25YSA==}
+  '@oxlint/binding-linux-riscv64-gnu@1.95.0':
+    resolution: {integrity: sha512-Eir0Z4ldh55AsQUqVDlLF4Pw3lSFXIdAl8ZNgU8tp/gTwT9JVCzWY0o3+ys9pCcpTN0vCqBwwuQfAUxzbIgvcQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [riscv64]
     os: [linux]
     libc: [glibc]
 
-  '@oxlint/binding-linux-riscv64-musl@1.94.0':
-    resolution: {integrity: sha512-ba94Vwl0qOnwXIXNDR33AEbLXuX++ckM74t+9Te7CiPSPAHivhOYyeEkUAicrvOEei1pxXkWggLbFeBFFBTuHA==}
+  '@oxlint/binding-linux-riscv64-musl@1.95.0':
+    resolution: {integrity: sha512-ceRx+K2WJ7C3tIv+XjZS28oAoZ7DY29ZcWChPdXG5M100phI72FRDYwGRlWZEeDfmkROnarLTMKnnrQAtsC42Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [riscv64]
     os: [linux]
     libc: [musl]
 
-  '@oxlint/binding-linux-s390x-gnu@1.94.0':
-    resolution: {integrity: sha512-GVwwwms3O8pdgbCiPavwq2vltyB4661GkDz6kJduZ0E5nsSJUDJ0svaP+ePYpuDVYi4+K1qhCKnWa/Ec8I4LUA==}
+  '@oxlint/binding-linux-s390x-gnu@1.95.0':
+    resolution: {integrity: sha512-WbD3sM08ZDk2QE6060wK/omihQKbRm+LVzKIg4W5zNTbEhYJChciqX49UZuqW59RGF+wBUxzAup7egUIESTjUA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [s390x]
     os: [linux]
     libc: [glibc]
 
-  '@oxlint/binding-linux-x64-gnu@1.94.0':
-    resolution: {integrity: sha512-iUfCFJN8ZIresSnpTfiIkhF3s8X+XA4I9KJ249QwR2QYTMwh0+pla1pj1xaFi+HtR9McjM4Jaemf70HzX7ilOQ==}
+  '@oxlint/binding-linux-x64-gnu@1.95.0':
+    resolution: {integrity: sha512-F4ST2ZkFIiLL9OKyRCyC0KQQpwM5WIv0GTcMiZuYVa6xSRJHR05iVRqst+arOVudEPkhP47EnbuoC9UfVCYDyg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@oxlint/binding-linux-x64-musl@1.94.0':
-    resolution: {integrity: sha512-RqWVeWpDACS4Oh0m21OBmy+CQ50CbbhuHFmNNPVS2P/4R3d188MjEuEuV7So82/tAM8UAT+UuMDtRDESd9NJ7g==}
+  '@oxlint/binding-linux-x64-musl@1.95.0':
+    resolution: {integrity: sha512-hEpYDZatpuxLrWlTlkwhHZ1e8QkL02aFS55BPQX1XA9iOd+yUEADGFF1iY6z+xkw6RkpzXFrtnDFe4/JNOLSRA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@oxlint/binding-openharmony-arm64@1.94.0':
-    resolution: {integrity: sha512-K/2DHOUoypwYVqzxJMRPdMuBKjAetZEAsGPP7rHimd+2+5J1TxM+17pG8kw+ayH4+rqBXiPd+H9wgPcU+fF77A==}
+  '@oxlint/binding-openharmony-arm64@1.95.0':
+    resolution: {integrity: sha512-+JwIH9/uLgQXfxBvOAKzvp616m5i0fBR5ELEBHm5D+++fStBZ+74T7YW4xBpX13zNU2blr52Swoe3GTF1JyqRg==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [openharmony]
 
-  '@oxlint/binding-win32-arm64-msvc@1.94.0':
-    resolution: {integrity: sha512-hYOCaOJiB4ZCGswBWKl3JQrhqu6mnC5DCUw/1UMNzRXgsHIJ0V226J43LAVICVIDGlhFUZTYShFW+wHWpt6qCQ==}
+  '@oxlint/binding-win32-arm64-msvc@1.95.0':
+    resolution: {integrity: sha512-pzJgcp3WkOSchukg5y5pn5mVIQ6P83RDI79YJ9gQZKed1pOgjhrmlc5AMizjuq6/P8VifhxzBsMqYI6LLjO2TA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [arm64]
     os: [win32]
 
-  '@oxlint/binding-win32-ia32-msvc@1.94.0':
-    resolution: {integrity: sha512-1l1FDlzbPmAeDoZ8UGspOE2dOmz1ZL6SlDsvOmRCmWSQjCdTy5LzUepS8mO/SGpAoz4D6WAt/yNZAUyHqbkmkQ==}
+  '@oxlint/binding-win32-ia32-msvc@1.95.0':
+    resolution: {integrity: sha512-54MeQvLRXkJqF1nEFs7wb73SrnurZJQy9fVK4NdEwumNKVwyUUxpGHhvfDMIY2NqJZS7kz0pY9uVty5664Gt1Q==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [ia32]
     os: [win32]
 
-  '@oxlint/binding-win32-x64-msvc@1.94.0':
-    resolution: {integrity: sha512-I3eZdd4bemIJQDNv9XDV/FEofDxIoN32tzCv98wIgLdW05EqxZb5hF4AwPrRzHD/dQhl0n7KgPy5AQPfM0HWrA==}
+  '@oxlint/binding-win32-x64-msvc@1.95.0':
+    resolution: {integrity: sha512-I/Fn+Fed1qzb1k2uRjMe2VRtRN1+ZObyU+E76B6v/Ul3Z6JdeAW5zBHSe0n5d8a0ZyU4iorzVy0Rw9LYgo3MSQ==}
     engines: {node: ^20.19.0 || >=22.12.0}
     cpu: [x64]
     os: [win32]
@@ -4514,11 +4529,11 @@ packages:
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
-  '@types/node@26.6.11':
-    resolution: {integrity: sha512-uUyQ2XLEz+EXh34lmS3GhKrkqn/8FU7KUiKRpk347At2bmnMVWss45yz8b4FG/tUtmV1tV/+TVkITItPROyeeQ==}
-
   '@types/node@26.6.5':
     resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
+
+  '@types/node@26.6.7':
+    resolution: {integrity: sha512-tovuRfrUILu6v46bMG+BgXxMvsqPBx2WO2as8Rpln+JTff1dbexMtAM4KFTejmL0axsnSWViCW7MecUQpLuBRA==}
 
   '@types/parse-json@4.0.2':
     resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
@@ -4572,50 +4587,50 @@ packages:
   '@types/yargs@17.0.35':
     resolution: {integrity: sha512-qUHkeCyQFxMXg79wQfTtfndEC+N9ZZg76HJftDJp+qH2tV7Gj4OJi7l+PiWwJ+pWtW8GwSmqsDj/oymhrTWXjg==}
 
-  '@typescript-eslint/eslint-plugin@8.73.0':
-    resolution: {integrity: sha512-UkygMFer53Yzn29MCYFTHf34hGXf5KJhiDWfIm1tXtXRrym1CS6l5H9Y3yCtPWChpC0/f93H88gdj8tN0dd4kw==}
+  '@typescript-eslint/eslint-plugin@8.74.0':
+    resolution: {integrity: sha512-z3KXk1+Vm+d82ZRplOoC89ho4Rf1da5ju6sx8//92GnN532U62DGPjECXkkVqtYzIv0zoJlpO39SX2Z9tk6LVw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
-      '@typescript-eslint/parser': ^8.73.0
+      '@typescript-eslint/parser': ^8.74.0
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
       typescript: '>=4.8.4 <6.1.0'
 
-  '@typescript-eslint/parser@8.73.0':
-    resolution: {integrity: sha512-AuL45bVcmssHfZ3Di3cs9Q0l4gBm4ZFVrJOQEE7VpqW+PVgQaEwSwazz4TVIiFabXkk6U51EprYDwqw+HR8ePw==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
-      typescript: '>=4.8.4 <6.1.0'
-
-  '@typescript-eslint/project-service@8.73.0':
-    resolution: {integrity: sha512-/pEf8Rc4Mjk+qJnY0uO1+Gadeal8uv50xpuic+srG2vIVatA0XxvWMUeMtFvs6OCHqftiQ7/+qH4aehG5stzIA==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      typescript: '>=4.8.4 <6.1.0'
-
-  '@typescript-eslint/scope-manager@8.73.0':
-    resolution: {integrity: sha512-/TjD738Iq2rzj5z0ixVOi+TsvgjAzZPLPaH1yWdDBytR/HTR5gMpyYWZeCe5WTQZLwk3ho8AV7U3muoQCRtXBQ==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-
-  '@typescript-eslint/tsconfig-utils@8.73.0':
-    resolution: {integrity: sha512-lmtCFOfYaJfpqZywGuXi4FpNtE+NQ+YLe3T0K9rtEDcW8ZuGWvfI++pj8r05sYMI8vWT2CYK4rWyedmD6Rp4og==}
-    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
-    peerDependencies:
-      typescript: '>=4.8.4 <6.1.0'
-
-  '@typescript-eslint/type-utils@8.73.0':
-    resolution: {integrity: sha512-MOC9i4xy1F7KcDde7Ip8jf1SrRiALb2Km4UWxGNjUE2YlhjIEo1ayE27GHIwIQyfWuHTmEonQT14uyurlyC6aA==}
+  '@typescript-eslint/parser@8.74.0':
+    resolution: {integrity: sha512-ecr8AYdig7avVkxaHdQvxHnIJ/mOyliO4Gv/uWF8q69vBew/z3sexqBwHUZX5Vql+Ns0w4sH6gBLkICGbOvJkA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
       typescript: '>=4.8.4 <6.1.0'
 
-  '@typescript-eslint/types@8.73.0':
-    resolution: {integrity: sha512-O/1ytYzflF16QDKXx4/qOXg1IuZp+n7hr9t+S0nv7N/2Tl8rJiNCshztV1gcSUvHbPtoX3+zmNbtSAyVbzxVfw==}
+  '@typescript-eslint/project-service@8.74.0':
+    resolution: {integrity: sha512-z/mymuE+JlEeSFIv3Mo70EvgG1Zz74Hl0IDfExfXutARAP834bt+MppTD7mVAwmZO0GdxdOAi0jbTam749eH6g==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      typescript: '>=4.8.4 <6.1.0'
+
+  '@typescript-eslint/scope-manager@8.74.0':
+    resolution: {integrity: sha512-kpOdpu4CpWN5U38ox3f727DwWRBtUAVhyUJtqTBYe5gf2wYoxac7PgKP14txrxN7ICVtcjlLdzjqfRgpSnDKvQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@typescript-eslint/typescript-estree@8.73.0':
-    resolution: {integrity: sha512-InjlBkSdWceIwIBWSwS3ENUp+i0O02PGX3Zv2wnihWJC1WDVGvG7mTHuf8b57uAaITj94d6tRPDH+sUEtXdRQQ==}
+  '@typescript-eslint/tsconfig-utils@8.74.0':
+    resolution: {integrity: sha512-p07wAuaS6BjCYgOSXKJi4YhvTnAf7fiG37e9THcpnYaQEt2QiTTYZWKwUFNgeRiywiMudazhzgddAirZ0GgHtQ==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      typescript: '>=4.8.4 <6.1.0'
+
+  '@typescript-eslint/type-utils@8.74.0':
+    resolution: {integrity: sha512-CV3Y3la8l3F9ANfxcfpgSSiQgJTe4IeLEoZV4O/gcW86Ugp8X6SKiQ0vm+QegXaRIbbDMokZZSF3A1CgiU/kPw==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    peerDependencies:
+      eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
+      typescript: '>=4.8.4 <6.1.0'
+
+  '@typescript-eslint/types@8.74.0':
+    resolution: {integrity: sha512-MpnMrJCVNpP1iVL8NiHkQZgQqIMBH5ewDGUPBh1pqQXwFtMFjsl1M03QcYPXmv6stCKEiF0PN7CGbU1ZbXFzEA==}
+    engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@typescript-eslint/typescript-estree@8.74.0':
+    resolution: {integrity: sha512-wL348k6l92DNG+kPP5rVpKwNBoz7a3xRZy3TPKc1uymQttd7u7gcMv3eENmcuh4CjC4mO3FTM0DYstFXMyDLuw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       '@typescript/native': npm:typescript@>=7.1.0-dev.20261009.1 || >=7.1.0-beta <7.1.0-dev
@@ -4624,15 +4639,15 @@ packages:
       '@typescript/native':
         optional: true
 
-  '@typescript-eslint/utils@8.73.0':
-    resolution: {integrity: sha512-j2SVJJvVkXdUL0WcEzo4vEH1mO1vIi8KlVukcYA2MgMZvYN2LlZR4PmsW+GTSxSW24j6Q/EP7+MOifLtg5hmsA==}
+  '@typescript-eslint/utils@8.74.0':
+    resolution: {integrity: sha512-IpWXPxXXomzxyTcvjhZJexgdvtTR1TooLAPpuxzaGqQ8BHll1lf4Ysp/BTE/l0U5TJ+x1j7B4bEM8pLRrvY+XA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
       typescript: '>=4.8.4 <6.1.0'
 
-  '@typescript-eslint/visitor-keys@8.73.0':
-    resolution: {integrity: sha512-k4lsFVpRZICbltkIEEH4hZRkwXkqDF1GHBpClKQOHQY+RkoZAAuyc1ci3I6p+CB6v3U4jaHIUshc4RzzQXZWLg==}
+  '@typescript-eslint/visitor-keys@8.74.0':
+    resolution: {integrity: sha512-XSZmOtMUbWCBIM+2BK134FyMFxmll1mW2mPLk/PSwYQYzGIPMgJAqL929U4qXVizLv7Xq5b7r41/o7Ombuwk0g==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
@@ -5182,8 +5197,8 @@ packages:
   bcrypt-pbkdf@1.0.2:
     resolution: {integrity: sha512-qeFIXtP4MSoi6NLqO12WfqARWWuCKi2Rn/9hJLEmtB5yTNr9DqFWkJRCf2qShWzPeAMRnOgCrq0sg/KLv5ES9w==}
 
-  better-auth@1.7.26:
-    resolution: {integrity: sha512-8TLA60CxEnhcmGceHIFlheonqrFFcVJ1Yfr3gOJEet3xyMfN6qAVN0N1GRcpe0g9KNzqhe1EM2smbk9DCylaAA==}
+  better-auth@1.7.28:
+    resolution: {integrity: sha512-Ux3LBegiy6O8txablum7sGB4+6SXefOeEoiiHbs8Aj0bOmW6uPNgzLj8BTNZV1Ov10UmH7CFf0fvgqX9TUeIjQ==}
     peerDependencies:
       '@lynx-js/react': '*'
       '@prisma/client': ^5.0.0 || ^6.0.0 || ^7.0.0
@@ -5326,8 +5341,8 @@ packages:
     resolution: {integrity: sha512-lHblz4ahamxpTmnsk+MNTRWsjYKv965MwOrSJyeD588rR3Jcu7swE+0wN5F+PbL5cjgu/9ObkhfzEPuofEMwLA==}
     engines: {node: '>=10.0.0'}
 
-  bullmq@6.7.8:
-    resolution: {integrity: sha512-Mt0+nKGNFWAruuwwzEUVE+5yEgK5XgzjoR2BjSKp/JeqfgeYO0pFh6oy78Ls8u9upVTsaLhBzSaEZAhYvjPlJg==}
+  bullmq@6.7.10:
+    resolution: {integrity: sha512-Gd+z7bqpO2WeTtol8q01OpIf2kWLrVJcpvJGYsB8c/GeLZgeW6ezyeg4DIs7u8+LTJt1y8XMI2BPmIXlgFe7xg==}
     engines: {node: '>=14.18.0'}
     peerDependencies:
       bullmq-otel: '>=2.0.0'
@@ -5457,10 +5472,6 @@ packages:
   cliui@9.0.1:
     resolution: {integrity: sha512-k7ndgKhwoQveBL+/1tqGJYNz097I7WOvwbmmU2AR5+magtbjPWQTS1C5vzGkBC8Ym8UWRzfKUzUUqFLypY4Q+w==}
     engines: {node: '>=20'}
-
-  cluster-key-slot@1.1.1:
-    resolution: {integrity: sha512-rwHwUfXL40Chm1r08yrhU3qpUvdVlgkKNeyeGPOxnW8/SyVDvgRaed/Uz54AqWNaTCAThlj6QAs3TZcKI0xDEw==}
-    engines: {node: '>=0.10.0'}
 
   co@4.6.0:
     resolution: {integrity: sha512-QVb0dM5HvG+uaxitm8wONl7jltx8dqhfU33DcqtOZcLSVIKSDDLDi7+0LbAKiyI8hD9u42m2YxXSkMGWThaecQ==}
@@ -6309,8 +6320,8 @@ packages:
     resolution: {integrity: sha512-4gd7VpWNQNB4UKKCFFVcp1AVv+FMOgs9NKzjHKusc8jTMhd5eL1NqQqOpE0KzMds804/yHlglp3uxgluOqAPLw==}
     engines: {node: '>= 0.4'}
 
-  ioredis@6.0.0:
-    resolution: {integrity: sha512-f+Dtubxfpf6KYFq7WVXJoOLn0bk4TJrMrN9SzeE+jrWrCWj7XX3fA6vkryafhADX+GMymRxgDJDOI33COkJc0w==}
+  ioredis@6.1.0:
+    resolution: {integrity: sha512-0ooWUoxEiWEcCA0FFBsmCnYHnjiFgWPQwA144NxpQzLIVkW20JUjAoKtMg+7spFn+6OAI68XwpcLcGKW5xe4UA==}
     engines: {node: '>=20.0.0'}
 
   ip-address@10.7.6:
@@ -6846,8 +6857,8 @@ packages:
   linkify-it@5.0.2:
     resolution: {integrity: sha512-ONTm2jCMAVZjgQa/Fy1kScXsuOoF5NPTsoFBdE1KVIZ2vAh/r9+Bqo+0jINCBYnavTPQZz38QzFTme79ENoN3Q==}
 
-  lint-staged@17.6.1:
-    resolution: {integrity: sha512-3MXgVN7BERDR/6CXZs2fDHGc+r0+hlvGAa9wqMlVbIS6RVRuaPOnb5SnN6wMXulwfEy9DXVkMVUN/8cUlpPDnw==}
+  lint-staged@17.6.2:
+    resolution: {integrity: sha512-c/JaXaXmleubmKUwwp4OAcq55RV9Z3HTUNdqdqPh2srtmP9Of3bcR6o00GoWDUye+9JhMuoYkhYqAVPIOZKcsw==}
     engines: {node: '>=22.22.1'}
     hasBin: true
 
@@ -6973,8 +6984,8 @@ packages:
     resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
     engines: {node: '>=8.6'}
 
-  mikro-orm@7.2.10:
-    resolution: {integrity: sha512-VRjCKvZwsSK2RUbUY+9HS7iA8IwrkXTq0i24w60uEObjlg1TC2VKjruYNIxe9UQo+vnVr7EVwyjwB3kq5TtN1Q==}
+  mikro-orm@7.2.11:
+    resolution: {integrity: sha512-u2V4coHgGDzvHj3NvdAiqnssnogZdjwwNPP7aLTBsbVAifrCwyEFCHQoxtbJ/ZASk6CSFOL8BzVWe/z72tXS6A==}
     engines: {node: '>= 22.17.0'}
 
   mime-db@1.52.0:
@@ -7286,16 +7297,16 @@ packages:
     resolution: {integrity: sha512-19YVAg7T+WTrxggPukVq7DjTv6+PJ867TmhCvBsYwmbFCsZd344rq2Ld1p0wo8f8Qrrhgp82c6FJRqdXWtSEhg==}
     engines: {node: '>= 0.4'}
 
-  oxlint-tsgolint@7.0.2007:
-    resolution: {integrity: sha512-i8X2qf6VVqFzoNVP34joMKuZpO6T2uXMOgKJaSPFc6p+E3FTnbIGPRbI8K4ZApmtDTMu2CIeGfpzeK1zzGwfnA==}
+  oxlint-tsgolint@7.0.2008:
+    resolution: {integrity: sha512-QuRK+gdriCwpOs+1PGq6/aImEEEK+EClNptdVtI0y4bDOhJ0uH/v3noz+yPKe+DYOTdkej75/5f3ouOGP5EGrQ==}
     hasBin: true
 
-  oxlint@1.94.0:
-    resolution: {integrity: sha512-Fnt+3wSKRhtLmvgRfxgRX0excSPCoyiXRol4eWKZLtXxWMQtwQ3KjKQUYXOw5loyinfnZfGzh4RCYf7opfL0vw==}
+  oxlint@1.95.0:
+    resolution: {integrity: sha512-eNzjFjm1TU02/+ohAJjOB7aekRQgTXhOWxMGscEm8VJMokNnnix+PCZn7kqIuGIqxAoBnHxatqlN3Chz3N6PKA==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
     peerDependencies:
-      oxlint-tsgolint: '>=7.0.2007'
+      oxlint-tsgolint: '>=7.0.2008'
       vite-plus: '*'
     peerDependenciesMeta:
       oxlint-tsgolint:
@@ -8327,8 +8338,8 @@ packages:
     peerDependencies:
       typescript: 5.0.x || 5.1.x || 5.2.x || 5.3.x || 5.4.x || 5.5.x || 5.6.x || 5.7.x || 5.8.x || 5.9.x || 6.0.x
 
-  typescript-eslint@8.73.0:
-    resolution: {integrity: sha512-+EnKy9rkYPun4l+kG2bDuYWQ6y1tGVgdR/tY1U9AC6h21CjEwOoc7gsjwe0FXB8uWFzk4QiCFbuRWgX758PiAg==}
+  typescript-eslint@8.74.0:
+    resolution: {integrity: sha512-OsWQlsedt1ZpZXfZZMNK3m4SoQONFFcy4h/uRznsCeRfVuEic3gh4KGUs2pJJ5o0Jj0Jr7keUHQGN1Ns9aDw7Q==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
@@ -9357,7 +9368,7 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
-  '@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)':
+  '@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)':
     dependencies:
       '@better-auth/utils': 0.5.1
       '@better-fetch/fetch': 1.3.3
@@ -9370,38 +9381,38 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
 
-  '@better-auth/drizzle-adapter@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
+  '@better-auth/drizzle-adapter@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
 
-  '@better-auth/kysely-adapter@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.9)':
+  '@better-auth/kysely-adapter@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.9)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
     optionalDependencies:
       kysely: 0.29.9
 
-  '@better-auth/memory-adapter@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
+  '@better-auth/memory-adapter@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
 
-  '@better-auth/mongo-adapter@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(mongodb@7.9.0)':
+  '@better-auth/mongo-adapter@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(mongodb@7.9.0)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
     optionalDependencies:
       mongodb: 7.9.0
 
-  '@better-auth/prisma-adapter@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
+  '@better-auth/prisma-adapter@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
 
-  '@better-auth/telemetry@1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)':
+  '@better-auth/telemetry@1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)':
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/utils': 0.5.1
       '@better-fetch/fetch': 1.3.3
 
@@ -9411,47 +9422,47 @@ snapshots:
 
   '@better-fetch/fetch@1.3.3': {}
 
-  '@biomejs/biome@2.6.8':
+  '@biomejs/biome@2.6.9':
     optionalDependencies:
-      '@biomejs/cli-android-arm64': 2.6.8
-      '@biomejs/cli-android-x64': 2.6.8
-      '@biomejs/cli-darwin-arm64': 2.6.8
-      '@biomejs/cli-darwin-x64': 2.6.8
-      '@biomejs/cli-linux-arm64': 2.6.8
-      '@biomejs/cli-linux-arm64-musl': 2.6.8
-      '@biomejs/cli-linux-x64': 2.6.8
-      '@biomejs/cli-linux-x64-musl': 2.6.8
-      '@biomejs/cli-win32-arm64': 2.6.8
-      '@biomejs/cli-win32-x64': 2.6.8
+      '@biomejs/cli-android-arm64': 2.6.9
+      '@biomejs/cli-android-x64': 2.6.9
+      '@biomejs/cli-darwin-arm64': 2.6.9
+      '@biomejs/cli-darwin-x64': 2.6.9
+      '@biomejs/cli-linux-arm64': 2.6.9
+      '@biomejs/cli-linux-arm64-musl': 2.6.9
+      '@biomejs/cli-linux-x64': 2.6.9
+      '@biomejs/cli-linux-x64-musl': 2.6.9
+      '@biomejs/cli-win32-arm64': 2.6.9
+      '@biomejs/cli-win32-x64': 2.6.9
 
-  '@biomejs/cli-android-arm64@2.6.8':
+  '@biomejs/cli-android-arm64@2.6.9':
     optional: true
 
-  '@biomejs/cli-android-x64@2.6.8':
+  '@biomejs/cli-android-x64@2.6.9':
     optional: true
 
-  '@biomejs/cli-darwin-arm64@2.6.8':
+  '@biomejs/cli-darwin-arm64@2.6.9':
     optional: true
 
-  '@biomejs/cli-darwin-x64@2.6.8':
+  '@biomejs/cli-darwin-x64@2.6.9':
     optional: true
 
-  '@biomejs/cli-linux-arm64-musl@2.6.8':
+  '@biomejs/cli-linux-arm64-musl@2.6.9':
     optional: true
 
-  '@biomejs/cli-linux-arm64@2.6.8':
+  '@biomejs/cli-linux-arm64@2.6.9':
     optional: true
 
-  '@biomejs/cli-linux-x64-musl@2.6.8':
+  '@biomejs/cli-linux-x64-musl@2.6.9':
     optional: true
 
-  '@biomejs/cli-linux-x64@2.6.8':
+  '@biomejs/cli-linux-x64@2.6.9':
     optional: true
 
-  '@biomejs/cli-win32-arm64@2.6.8':
+  '@biomejs/cli-win32-arm64@2.6.9':
     optional: true
 
-  '@biomejs/cli-win32-x64@2.6.8':
+  '@biomejs/cli-win32-x64@2.6.9':
     optional: true
 
   '@borewit/text-codec@0.2.3': {}
@@ -9717,15 +9728,15 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@forklaunch/better-auth-mikro-orm-fork@0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
+  '@forklaunch/better-auth-mikro-orm-fork@0.5.12(@mikro-orm/core@7.2.11)(better-auth@1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      better-auth: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+      '@mikro-orm/core': 7.2.11
+      better-auth: 1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       dset: 3.1.4
 
   '@forklaunch/common@1.2.32': {}
 
-  '@forklaunch/core@4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
+  '@forklaunch/core@4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)':
     dependencies:
       '@asyncapi/parser': 3.6.6
       '@forklaunch/common': 1.2.32
@@ -9760,7 +9771,7 @@ snapshots:
       uuid: 14.0.3
       zod: 4.6.7
     optionalDependencies:
-      stripe: 22.6.2(@types/node@26.6.11)
+      stripe: 22.6.2(@types/node@26.6.7)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9782,10 +9793,10 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@modelcontextprotocol/sdk': 1.32.2(supports-color@8.1.1)(zod@4.6.7)
       '@scalar/express-api-reference': 0.10.39
@@ -9823,10 +9834,10 @@ snapshots:
       - sury
       - zod
 
-  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@modelcontextprotocol/sdk': 1.32.2(supports-color@8.1.1)(zod@4.6.7)
       '@scalar/express-api-reference': 0.10.39
@@ -9877,13 +9888,13 @@ snapshots:
       typed-emitter: 2.1.0
       uWebSockets.js: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
 
-  '@forklaunch/hyper-express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
+  '@forklaunch/hyper-express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/hyper-express-fork': 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator': 1.3.0
-      '@forklaunch/ws': 1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/ws': 1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@scalar/express-api-reference': 0.10.39
       cors: 2.8.6
       live-directory: 3.0.3
@@ -9917,10 +9928,10 @@ snapshots:
       - sury
       - utf-8-validate
 
-  '@forklaunch/infrastructure-redis@1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
+  '@forklaunch/infrastructure-redis@1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       redis: 6.3.1(@opentelemetry/api@1.10.0)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
@@ -9945,14 +9956,14 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/infrastructure-s3@1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
+  '@forklaunch/infrastructure-s3@1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)':
     dependencies:
       '@aws-sdk/client-s3': 3.1173.0
       '@aws-sdk/lib-storage': 3.1173.0(@aws-sdk/client-s3@3.1173.0)
       '@aws-sdk/s3-presigned-post': 3.1173.0
       '@aws-sdk/s3-request-presigner': 3.1173.0
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9989,13 +10000,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@forklaunch/testing@1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@forklaunch/testing@1.3.2(@mikro-orm/core@7.2.11)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      ioredis: 6.0.0(supports-color@8.1.1)
+      '@mikro-orm/core': 7.2.11
+      ioredis: 6.1.0(supports-color@8.1.1)
       jose: 6.2.18
       testcontainers: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
-      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -10018,11 +10029,11 @@ snapshots:
       ts-deepmerge: 8.0.0
       zod: 4.6.7
 
-  '@forklaunch/ws@1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
+  '@forklaunch/ws@1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)':
     dependencies:
       '@asyncapi/parser': 3.6.6
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.7))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@types/ws': 8.18.2
       ws: 8.23.0
@@ -10097,7 +10108,7 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@ioredis/commands@2.0.0': {}
+  '@ioredis/commands@2.4.0': {}
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -10127,13 +10138,13 @@ snapshots:
   '@jest/console@30.5.2':
     dependencies:
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       chalk: 4.1.2
       jest-message-util: 30.5.1
       jest-util: 30.5.1
       slash: 3.0.0
 
-  '@jest/core@30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))':
+  '@jest/core@30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))':
     dependencies:
       '@jest/console': 30.5.2
       '@jest/pattern': 30.5.0
@@ -10141,7 +10152,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       ci-info: 4.5.0
@@ -10149,7 +10160,7 @@ snapshots:
       fast-json-stable-stringify: 2.1.0
       graceful-fs: 4.2.12
       jest-changed-files: 30.5.1
-      jest-config: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      jest-config: 30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       jest-haste-map: 30.5.1
       jest-message-util: 30.5.1
       jest-regex-util: 30.5.0
@@ -10175,7 +10186,7 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       jest-mock: 30.5.2
 
   '@jest/expect-utils@30.5.2':
@@ -10193,7 +10204,7 @@ snapshots:
     dependencies:
       '@jest/types': 30.5.1
       '@sinonjs/fake-timers': 15.5.0
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       jest-message-util: 30.5.1
       jest-mock: 30.5.2
       jest-util: 30.5.1
@@ -10222,7 +10233,7 @@ snapshots:
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
       '@jridgewell/trace-mapping': 0.3.31
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       chalk: 4.1.2
       collect-v8-coverage: 1.0.3
       exit-x: 0.2.2
@@ -10399,35 +10410,37 @@ snapshots:
       tinyglobby: 0.2.17
       yaml: 2.9.1
 
-  '@mikro-orm/cli@7.2.10':
+  '@mikro-orm/cli@7.2.11':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      mikro-orm: 7.2.10
+      '@mikro-orm/core': 7.2.11
+      mikro-orm: 7.2.11
       yargs: 18.2.0
     transitivePeerDependencies:
       - dataloader
 
   '@mikro-orm/core@7.2.10': {}
 
-  '@mikro-orm/libsql@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/core@7.2.11': {}
+
+  '@mikro-orm/libsql@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
       kysely: 0.29.9
       libsql: 0.5.29
 
-  '@mikro-orm/mariadb@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)':
+  '@mikro-orm/mariadb@7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/mysql': 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/mysql': 7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)
       kysely: 0.29.9
     transitivePeerDependencies:
       - '@types/node'
 
-  '@mikro-orm/migrations@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/migrations@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
 
   '@mikro-orm/mongodb@7.2.10(@mikro-orm/core@7.2.10)':
     dependencies:
@@ -10442,10 +10455,23 @@ snapshots:
       - snappy
       - socks
 
-  '@mikro-orm/mssql@7.2.10(@mikro-orm/core@7.2.10)(supports-color@8.1.1)':
+  '@mikro-orm/mongodb@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      mongodb: 7.9.0
+    transitivePeerDependencies:
+      - '@aws-sdk/credential-providers'
+      - '@mongodb-js/zstd'
+      - gcp-metadata
+      - kerberos
+      - mongodb-client-encryption
+      - snappy
+      - socks
+
+  '@mikro-orm/mssql@7.2.11(@mikro-orm/core@7.2.11)(supports-color@8.1.1)':
+    dependencies:
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
       kysely: 0.29.9
       tarn: 3.1.2
       tedious: 20.3.9(supports-color@8.1.1)
@@ -10453,20 +10479,20 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mikro-orm/mysql@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)':
+  '@mikro-orm/mysql@7.2.11(@mikro-orm/core@7.2.11)(@types/node@26.6.7)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
       kysely: 0.29.9
-      mysql2: 3.24.6(@types/node@26.6.11)
+      mysql2: 3.24.6(@types/node@26.6.7)
       sqlstring: 2.3.3
     transitivePeerDependencies:
       - '@types/node'
 
-  '@mikro-orm/postgresql@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/postgresql@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
       kysely: 0.29.9
       pg: 8.23.1
       pg-cursor: 2.22.1(pg@8.23.1)
@@ -10476,19 +10502,19 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  '@mikro-orm/seeder@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/seeder@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
 
-  '@mikro-orm/sql@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/sql@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
+      '@mikro-orm/core': 7.2.11
       kysely: 0.29.9
 
-  '@mikro-orm/sqlite@7.2.10(@mikro-orm/core@7.2.10)':
+  '@mikro-orm/sqlite@7.2.11(@mikro-orm/core@7.2.11)':
     dependencies:
-      '@mikro-orm/core': 7.2.10
-      '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
+      '@mikro-orm/core': 7.2.11
+      '@mikro-orm/sql': 7.2.11(@mikro-orm/core@7.2.11)
       better-sqlite3: 13.2.0
       kysely: 0.29.9
 
@@ -10843,79 +10869,79 @@ snapshots:
 
   '@oxc-project/types@0.156.0': {}
 
-  '@oxlint-tsgolint/darwin-arm64@7.0.2007':
+  '@oxlint-tsgolint/darwin-arm64@7.0.2008':
     optional: true
 
-  '@oxlint-tsgolint/darwin-x64@7.0.2007':
+  '@oxlint-tsgolint/darwin-x64@7.0.2008':
     optional: true
 
-  '@oxlint-tsgolint/linux-arm64@7.0.2007':
+  '@oxlint-tsgolint/linux-arm64@7.0.2008':
     optional: true
 
-  '@oxlint-tsgolint/linux-x64@7.0.2007':
+  '@oxlint-tsgolint/linux-x64@7.0.2008':
     optional: true
 
-  '@oxlint-tsgolint/win32-arm64@7.0.2007':
+  '@oxlint-tsgolint/win32-arm64@7.0.2008':
     optional: true
 
-  '@oxlint-tsgolint/win32-x64@7.0.2007':
+  '@oxlint-tsgolint/win32-x64@7.0.2008':
     optional: true
 
-  '@oxlint/binding-android-arm-eabi@1.94.0':
+  '@oxlint/binding-android-arm-eabi@1.95.0':
     optional: true
 
-  '@oxlint/binding-android-arm64@1.94.0':
+  '@oxlint/binding-android-arm64@1.95.0':
     optional: true
 
-  '@oxlint/binding-darwin-arm64@1.94.0':
+  '@oxlint/binding-darwin-arm64@1.95.0':
     optional: true
 
-  '@oxlint/binding-darwin-x64@1.94.0':
+  '@oxlint/binding-darwin-x64@1.95.0':
     optional: true
 
-  '@oxlint/binding-freebsd-x64@1.94.0':
+  '@oxlint/binding-freebsd-x64@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-arm-gnueabihf@1.94.0':
+  '@oxlint/binding-linux-arm-gnueabihf@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-arm-musleabihf@1.94.0':
+  '@oxlint/binding-linux-arm-musleabihf@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-arm64-gnu@1.94.0':
+  '@oxlint/binding-linux-arm64-gnu@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-arm64-musl@1.94.0':
+  '@oxlint/binding-linux-arm64-musl@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-ppc64-gnu@1.94.0':
+  '@oxlint/binding-linux-ppc64-gnu@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-riscv64-gnu@1.94.0':
+  '@oxlint/binding-linux-riscv64-gnu@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-riscv64-musl@1.94.0':
+  '@oxlint/binding-linux-riscv64-musl@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-s390x-gnu@1.94.0':
+  '@oxlint/binding-linux-s390x-gnu@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-x64-gnu@1.94.0':
+  '@oxlint/binding-linux-x64-gnu@1.95.0':
     optional: true
 
-  '@oxlint/binding-linux-x64-musl@1.94.0':
+  '@oxlint/binding-linux-x64-musl@1.95.0':
     optional: true
 
-  '@oxlint/binding-openharmony-arm64@1.94.0':
+  '@oxlint/binding-openharmony-arm64@1.95.0':
     optional: true
 
-  '@oxlint/binding-win32-arm64-msvc@1.94.0':
+  '@oxlint/binding-win32-arm64-msvc@1.95.0':
     optional: true
 
-  '@oxlint/binding-win32-ia32-msvc@1.94.0':
+  '@oxlint/binding-win32-ia32-msvc@1.95.0':
     optional: true
 
-  '@oxlint/binding-win32-x64-msvc@1.94.0':
+  '@oxlint/binding-win32-x64-msvc@1.95.0':
     optional: true
 
   '@parcel/watcher-android-arm64@2.6.0':
@@ -11447,11 +11473,11 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/busboy@1.5.5':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/chai@5.2.3':
     dependencies:
@@ -11460,24 +11486,24 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/deep-eql@4.0.2': {}
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       '@types/ssh2': 1.15.6
 
   '@types/dockerode@4.0.2':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       '@types/ssh2': 1.15.6
 
   '@types/es-aggregate-error@1.0.6':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/esrecurse@4.3.1': {}
 
@@ -11485,7 +11511,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.3':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -11504,7 +11530,7 @@ snapshots:
 
   '@types/ioredis@5.0.0(supports-color@8.1.1)':
     dependencies:
-      ioredis: 6.0.0(supports-color@8.1.1)
+      ioredis: 6.1.0(supports-color@8.1.1)
     transitivePeerDependencies:
       - supports-color
 
@@ -11535,11 +11561,11 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
-  '@types/node@26.6.11':
+  '@types/node@26.6.5':
     dependencies:
       undici-types: 8.9.0
 
-  '@types/node@26.6.5':
+  '@types/node@26.6.7':
     dependencies:
       undici-types: 8.9.0
 
@@ -11551,16 +11577,16 @@ snapshots:
 
   '@types/readable-stream@4.0.25':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/shimmer@1.2.0': {}
 
@@ -11586,7 +11612,7 @@ snapshots:
 
   '@types/ws@8.18.2':
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -11594,14 +11620,14 @@ snapshots:
     dependencies:
       '@types/yargs-parser': 21.0.3
 
-  '@typescript-eslint/eslint-plugin@8.73.0(@typescript-eslint/parser@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2))(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/eslint-plugin@8.74.0(@typescript-eslint/parser@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2))(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
       '@eslint-community/regexpp': 4.12.3
-      '@typescript-eslint/parser': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/scope-manager': 8.73.0
-      '@typescript-eslint/type-utils': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/utils': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/visitor-keys': 8.73.0
+      '@typescript-eslint/parser': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/scope-manager': 8.74.0
+      '@typescript-eslint/type-utils': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/utils': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/visitor-keys': 8.74.0
       eslint: 10.15.0(supports-color@8.1.1)
       ignore: 7.0.16
       natural-compare: 1.4.0
@@ -11611,12 +11637,12 @@ snapshots:
       - '@typescript/native'
       - supports-color
 
-  '@typescript-eslint/parser@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/parser@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
-      '@typescript-eslint/scope-manager': 8.73.0
-      '@typescript-eslint/types': 8.73.0
-      '@typescript-eslint/typescript-estree': 8.73.0(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/visitor-keys': 8.73.0
+      '@typescript-eslint/scope-manager': 8.74.0
+      '@typescript-eslint/types': 8.74.0
+      '@typescript-eslint/typescript-estree': 8.74.0(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/visitor-keys': 8.74.0
       debug: 4.4.3(supports-color@8.1.1)
       eslint: 10.15.0(supports-color@8.1.1)
       typescript: 7.0.2
@@ -11624,29 +11650,29 @@ snapshots:
       - '@typescript/native'
       - supports-color
 
-  '@typescript-eslint/project-service@8.73.0(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/project-service@8.74.0(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
-      '@typescript-eslint/tsconfig-utils': 8.73.0(typescript@7.0.2)
-      '@typescript-eslint/types': 8.73.0
+      '@typescript-eslint/tsconfig-utils': 8.74.0(typescript@7.0.2)
+      '@typescript-eslint/types': 8.74.0
       debug: 4.4.3(supports-color@8.1.1)
       typescript: 7.0.2
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/scope-manager@8.73.0':
+  '@typescript-eslint/scope-manager@8.74.0':
     dependencies:
-      '@typescript-eslint/types': 8.73.0
-      '@typescript-eslint/visitor-keys': 8.73.0
+      '@typescript-eslint/types': 8.74.0
+      '@typescript-eslint/visitor-keys': 8.74.0
 
-  '@typescript-eslint/tsconfig-utils@8.73.0(typescript@7.0.2)':
+  '@typescript-eslint/tsconfig-utils@8.74.0(typescript@7.0.2)':
     dependencies:
       typescript: 7.0.2
 
-  '@typescript-eslint/type-utils@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/type-utils@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
-      '@typescript-eslint/types': 8.73.0
-      '@typescript-eslint/typescript-estree': 8.73.0(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/utils': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/types': 8.74.0
+      '@typescript-eslint/typescript-estree': 8.74.0(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/utils': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
       debug: 4.4.3(supports-color@8.1.1)
       eslint: 10.15.0(supports-color@8.1.1)
       ts-api-utils: 2.5.0(typescript@7.0.2)
@@ -11655,14 +11681,14 @@ snapshots:
       - '@typescript/native'
       - supports-color
 
-  '@typescript-eslint/types@8.73.0': {}
+  '@typescript-eslint/types@8.74.0': {}
 
-  '@typescript-eslint/typescript-estree@8.73.0(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/typescript-estree@8.74.0(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
-      '@typescript-eslint/project-service': 8.73.0(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/tsconfig-utils': 8.73.0(typescript@7.0.2)
-      '@typescript-eslint/types': 8.73.0
-      '@typescript-eslint/visitor-keys': 8.73.0
+      '@typescript-eslint/project-service': 8.74.0(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/tsconfig-utils': 8.74.0(typescript@7.0.2)
+      '@typescript-eslint/types': 8.74.0
+      '@typescript-eslint/visitor-keys': 8.74.0
       debug: 4.4.3(supports-color@8.1.1)
       minimatch: 11.0.9
       semver: 7.8.6
@@ -11672,21 +11698,21 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@typescript-eslint/utils@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
+  '@typescript-eslint/utils@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
       '@eslint-community/eslint-utils': 4.10.1(eslint@10.15.0(supports-color@8.1.1))
-      '@typescript-eslint/scope-manager': 8.73.0
-      '@typescript-eslint/types': 8.73.0
-      '@typescript-eslint/typescript-estree': 8.73.0(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/scope-manager': 8.74.0
+      '@typescript-eslint/types': 8.74.0
+      '@typescript-eslint/typescript-estree': 8.74.0(supports-color@8.1.1)(typescript@7.0.2)
       eslint: 10.15.0(supports-color@8.1.1)
       typescript: 7.0.2
     transitivePeerDependencies:
       - '@typescript/native'
       - supports-color
 
-  '@typescript-eslint/visitor-keys@8.73.0':
+  '@typescript-eslint/visitor-keys@8.74.0':
     dependencies:
-      '@typescript-eslint/types': 8.73.0
+      '@typescript-eslint/types': 8.74.0
       eslint-visitor-keys: 5.0.1
 
   '@typescript/typescript-aix-ppc64@7.0.2':
@@ -11822,14 +11848,14 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.13.0':
     optional: true
 
-  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))':
+  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.1.1
       estree-walker: 3.0.3
       magic-string: 1.4.5
     optionalDependencies:
-      vite: 8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vite: 8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
 
   '@vitest/spy@5.1.1': {}
 
@@ -12130,15 +12156,15 @@ snapshots:
     dependencies:
       tweetnacl: 0.14.5
 
-  better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
+  better-auth@1.7.28(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.7))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
     dependencies:
-      '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
-      '@better-auth/drizzle-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
-      '@better-auth/kysely-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.9)
-      '@better-auth/memory-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
-      '@better-auth/mongo-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(mongodb@7.9.0)
-      '@better-auth/prisma-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
-      '@better-auth/telemetry': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)
+      '@better-auth/core': 1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
+      '@better-auth/drizzle-adapter': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/kysely-adapter': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(kysely@0.29.9)
+      '@better-auth/memory-adapter': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/mongo-adapter': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(mongodb@7.9.0)
+      '@better-auth/prisma-adapter': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
+      '@better-auth/telemetry': 1.7.28(@better-auth/core@1.7.28(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)
       '@better-auth/utils': 0.5.1
       '@better-fetch/fetch': 1.3.3
       '@noble/ciphers': 2.4.0
@@ -12151,9 +12177,9 @@ snapshots:
       zod: 4.6.7
     optionalDependencies:
       mongodb: 7.9.0
-      mysql2: 3.24.6(@types/node@26.6.11)
+      mysql2: 3.24.6(@types/node@26.6.7)
       pg: 8.23.1
-      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
@@ -12266,7 +12292,7 @@ snapshots:
   buildcheck@0.0.7:
     optional: true
 
-  bullmq@6.7.8(ioredis@6.0.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0)):
+  bullmq@6.7.10(ioredis@6.1.0(supports-color@8.1.1))(pg@8.23.1)(redis@6.3.1(@opentelemetry/api@1.10.0)):
     dependencies:
       cron-parser: 5.10.6
       msgpackr: 2.1.4
@@ -12274,7 +12300,7 @@ snapshots:
       semver: 7.8.6
       tslib: 2.9.1
     optionalDependencies:
-      ioredis: 6.0.0(supports-color@8.1.1)
+      ioredis: 6.1.0(supports-color@8.1.1)
       pg: 8.23.1
       redis: 6.3.1(@opentelemetry/api@1.10.0)
 
@@ -12388,8 +12414,6 @@ snapshots:
       string-width: 7.2.0
       strip-ansi: 7.2.0
       wrap-ansi: 9.0.2
-
-  cluster-key-slot@1.1.1: {}
 
   co@4.6.0: {}
 
@@ -13411,10 +13435,9 @@ snapshots:
       hasown: 2.0.4
       side-channel: 1.1.1
 
-  ioredis@6.0.0(supports-color@8.1.1):
+  ioredis@6.1.0(supports-color@8.1.1):
     dependencies:
-      '@ioredis/commands': 2.0.0
-      cluster-key-slot: 1.1.1
+      '@ioredis/commands': 2.4.0
       debug: 4.4.3(supports-color@8.1.1)
       denque: 2.1.0
       redis-errors: 1.2.0
@@ -13633,7 +13656,7 @@ snapshots:
       '@jest/expect': 30.5.2(supports-color@8.1.1)
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       chalk: 4.1.2
       co: 4.6.0
       dedent: 1.7.2
@@ -13653,15 +13676,15 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-cli@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
+  jest-cli@30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2)):
     dependencies:
-      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
       chalk: 4.1.2
       exit-x: 0.2.2
       import-local: 3.2.0
-      jest-config: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      jest-config: 30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       jest-util: 30.5.1
       jest-validate: 30.5.1
       yargs: 17.7.3
@@ -13672,7 +13695,7 @@ snapshots:
       - supports-color
       - ts-node
 
-  jest-config@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
+  jest-config@30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2)):
     dependencies:
       '@babel/core': 7.29.13(supports-color@8.1.1)
       '@jest/get-type': 30.5.0
@@ -13698,8 +13721,8 @@ snapshots:
       slash: 3.0.0
       strip-json-comments: 3.1.1
     optionalDependencies:
-      '@types/node': 26.6.11
-      ts-node: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
+      '@types/node': 26.6.7
+      ts-node: 10.9.2(@types/node@26.6.7)(typescript@7.0.2)
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -13729,7 +13752,7 @@ snapshots:
       '@jest/environment': 30.5.2
       '@jest/fake-timers': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       jest-mock: 30.5.2
       jest-util: 30.5.1
       jest-validate: 30.5.1
@@ -13777,7 +13800,7 @@ snapshots:
     dependencies:
       '@jest/expect-utils': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       jest-util: 30.5.1
 
   jest-regex-util@30.5.0: {}
@@ -13807,7 +13830,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       chalk: 4.1.2
       emittery: 0.13.1
       exit-x: 0.2.2
@@ -13835,7 +13858,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       chalk: 4.1.2
       cjs-module-lexer: 2.3.0
       collect-v8-coverage: 1.0.3
@@ -13902,7 +13925,7 @@ snapshots:
     dependencies:
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       emittery: 0.13.1
@@ -13917,12 +13940,12 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
-  jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
+  jest@30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2)):
     dependencies:
-      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       '@jest/types': 30.5.1
       import-local: 3.2.0
-      jest-cli: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      jest-cli: 30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
     transitivePeerDependencies:
       - '@types/node'
       - babel-plugin-macros
@@ -14108,7 +14131,7 @@ snapshots:
     dependencies:
       uc.micro: 2.1.0
 
-  lint-staged@17.6.1:
+  lint-staged@17.6.2:
     dependencies:
       picomatch: 4.0.7
       string-argv: 0.4.0
@@ -14215,7 +14238,7 @@ snapshots:
       braces: 3.0.3
       picomatch: 2.3.2
 
-  mikro-orm@7.2.10: {}
+  mikro-orm@7.2.11: {}
 
   mime-db@1.52.0: {}
 
@@ -14322,9 +14345,9 @@ snapshots:
       arrify: 2.0.1
       minimatch: 3.1.5
 
-  mysql2@3.24.6(@types/node@26.6.11):
+  mysql2@3.24.6(@types/node@26.6.7):
     dependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       aws-ssl-profiles: 1.1.2
       generate-function: 2.3.1
       iconv-lite: 0.7.3
@@ -14516,37 +14539,37 @@ snapshots:
       object-keys: 1.1.1
       safe-push-apply: 1.0.0
 
-  oxlint-tsgolint@7.0.2007:
+  oxlint-tsgolint@7.0.2008:
     optionalDependencies:
-      '@oxlint-tsgolint/darwin-arm64': 7.0.2007
-      '@oxlint-tsgolint/darwin-x64': 7.0.2007
-      '@oxlint-tsgolint/linux-arm64': 7.0.2007
-      '@oxlint-tsgolint/linux-x64': 7.0.2007
-      '@oxlint-tsgolint/win32-arm64': 7.0.2007
-      '@oxlint-tsgolint/win32-x64': 7.0.2007
+      '@oxlint-tsgolint/darwin-arm64': 7.0.2008
+      '@oxlint-tsgolint/darwin-x64': 7.0.2008
+      '@oxlint-tsgolint/linux-arm64': 7.0.2008
+      '@oxlint-tsgolint/linux-x64': 7.0.2008
+      '@oxlint-tsgolint/win32-arm64': 7.0.2008
+      '@oxlint-tsgolint/win32-x64': 7.0.2008
 
-  oxlint@1.94.0(oxlint-tsgolint@7.0.2007):
+  oxlint@1.95.0(oxlint-tsgolint@7.0.2008):
     optionalDependencies:
-      '@oxlint/binding-android-arm-eabi': 1.94.0
-      '@oxlint/binding-android-arm64': 1.94.0
-      '@oxlint/binding-darwin-arm64': 1.94.0
-      '@oxlint/binding-darwin-x64': 1.94.0
-      '@oxlint/binding-freebsd-x64': 1.94.0
-      '@oxlint/binding-linux-arm-gnueabihf': 1.94.0
-      '@oxlint/binding-linux-arm-musleabihf': 1.94.0
-      '@oxlint/binding-linux-arm64-gnu': 1.94.0
-      '@oxlint/binding-linux-arm64-musl': 1.94.0
-      '@oxlint/binding-linux-ppc64-gnu': 1.94.0
-      '@oxlint/binding-linux-riscv64-gnu': 1.94.0
-      '@oxlint/binding-linux-riscv64-musl': 1.94.0
-      '@oxlint/binding-linux-s390x-gnu': 1.94.0
-      '@oxlint/binding-linux-x64-gnu': 1.94.0
-      '@oxlint/binding-linux-x64-musl': 1.94.0
-      '@oxlint/binding-openharmony-arm64': 1.94.0
-      '@oxlint/binding-win32-arm64-msvc': 1.94.0
-      '@oxlint/binding-win32-ia32-msvc': 1.94.0
-      '@oxlint/binding-win32-x64-msvc': 1.94.0
-      oxlint-tsgolint: 7.0.2007
+      '@oxlint/binding-android-arm-eabi': 1.95.0
+      '@oxlint/binding-android-arm64': 1.95.0
+      '@oxlint/binding-darwin-arm64': 1.95.0
+      '@oxlint/binding-darwin-x64': 1.95.0
+      '@oxlint/binding-freebsd-x64': 1.95.0
+      '@oxlint/binding-linux-arm-gnueabihf': 1.95.0
+      '@oxlint/binding-linux-arm-musleabihf': 1.95.0
+      '@oxlint/binding-linux-arm64-gnu': 1.95.0
+      '@oxlint/binding-linux-arm64-musl': 1.95.0
+      '@oxlint/binding-linux-ppc64-gnu': 1.95.0
+      '@oxlint/binding-linux-riscv64-gnu': 1.95.0
+      '@oxlint/binding-linux-riscv64-musl': 1.95.0
+      '@oxlint/binding-linux-s390x-gnu': 1.95.0
+      '@oxlint/binding-linux-x64-gnu': 1.95.0
+      '@oxlint/binding-linux-x64-musl': 1.95.0
+      '@oxlint/binding-openharmony-arm64': 1.95.0
+      '@oxlint/binding-win32-arm64-msvc': 1.95.0
+      '@oxlint/binding-win32-ia32-msvc': 1.95.0
+      '@oxlint/binding-win32-x64-msvc': 1.95.0
+      oxlint-tsgolint: 7.0.2008
 
   p-limit@2.3.0:
     dependencies:
@@ -14820,7 +14843,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       long: 5.3.2
 
   proxy-addr@2.0.8:
@@ -15381,9 +15404,9 @@ snapshots:
 
   strip-json-comments@5.1.0: {}
 
-  stripe@22.6.2(@types/node@26.6.11):
+  stripe@22.6.2(@types/node@26.6.7):
     optionalDependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
 
   strnum@2.5.1:
     dependencies:
@@ -15482,7 +15505,7 @@ snapshots:
       '@azure/identity': 4.14.1(supports-color@8.1.1)
       '@azure/keyvault-keys': 4.10.2(supports-color@8.1.1)
       '@js-joda/core': 6.3.2
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       bl: 6.1.6
       iconv-lite: 0.7.3
       js-md4: 0.3.2
@@ -15585,12 +15608,12 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-jest@29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)))(typescript@7.0.2):
+  ts-jest@29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2)))(typescript@7.0.2):
     dependencies:
       bs-logger: 0.2.6
       fast-json-stable-stringify: 2.1.0
       handlebars: 4.7.10
-      jest: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
+      jest: 30.5.2(@types/node@26.6.7)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2))
       json5: 2.2.3
       lodash.memoize: 4.1.2
       make-error: 1.3.6
@@ -15606,14 +15629,14 @@ snapshots:
       esbuild: 0.28.2
       jest-util: 30.5.1
 
-  ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2):
+  ts-node@10.9.2(@types/node@26.6.7)(typescript@7.0.2):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.13
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       acorn: 8.19.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -15742,12 +15765,12 @@ snapshots:
       typescript: 7.0.2
       yaml: 2.9.1
 
-  typescript-eslint@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2):
+  typescript-eslint@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2):
     dependencies:
-      '@typescript-eslint/eslint-plugin': 8.73.0(@typescript-eslint/parser@8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2))(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/parser': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/typescript-estree': 8.73.0(supports-color@8.1.1)(typescript@7.0.2)
-      '@typescript-eslint/utils': 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/eslint-plugin': 8.74.0(@typescript-eslint/parser@8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2))(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/parser': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/typescript-estree': 8.74.0(supports-color@8.1.1)(typescript@7.0.2)
+      '@typescript-eslint/utils': 8.74.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
       eslint: 10.15.0(supports-color@8.1.1)
       typescript: 7.0.2
     transitivePeerDependencies:
@@ -15864,7 +15887,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
+  vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -15872,16 +15895,16 @@ snapshots:
       rolldown: 1.2.19
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
       esbuild: 0.28.2
       fsevents: 2.3.3
       tsx: 4.23.15
       yaml: 2.9.1
 
-  vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
+  vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.7)(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -15892,11 +15915,11 @@ snapshots:
       tinybench: 6.2.4
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vite: 8.3.8(@types/node@26.6.7)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
-      '@types/node': 26.6.11
+      '@types/node': 26.6.7
     transitivePeerDependencies:
       - msw
 
