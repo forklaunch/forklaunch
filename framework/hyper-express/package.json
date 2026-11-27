@@ -43,12 +43,12 @@
     "@forklaunch/hyper-express-fork": "^6.18.1",
     "@forklaunch/validator": "workspace:^",
     "@forklaunch/ws": "workspace:^",
-    "@scalar/express-api-reference": "^0.10.39",
+    "@scalar/express-api-reference": "^0.10.41",
     "cors": "^2.8.6",
     "live-directory": "^3.0.3",
     "openapi3-ts": "^4.6.2",
     "qs": "^6.17.1",
-    "swagger-ui-dist": "^5.35.1",
+    "swagger-ui-dist": "^5.36.0",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
@@ -64,7 +64,7 @@
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "typescript-eslint": "^8.73.0",
+    "typescript-eslint": "^8.74.0",
     "uWebSockets.js": "github:uNetworking/uWebSockets.js#v20.52.0"
   },
   "peerDependencies": {
