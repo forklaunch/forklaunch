@@ -58,12 +58,47 @@ pub(crate) fn is_dev_build() -> bool {
 // 1.2.0) must land before this bump ships.
 pub(crate) const RELEASE_MANIFEST_SCHEMA_VERSION: &str = "1.2.0";
 
-// The Bun release generated images (`oven/bun:<BUN_VERSION>`) and generated CI
+// The Bun release generated images (BUN_RUNTIME_IMAGE / BUN_DEV_IMAGE) and generated CI
 // (`setup-bun`) use. A bun.lock written by a newer Bun can be unreadable by an
 // older one ("Unknown lockfile version"), so the image, CI and the developer's
 // local Bun must move together. `.github/workflows/e2e_tests.yml` pins the same
 // release; a unit test in core::github_configs keeps the two in step.
-pub(crate) const BUN_VERSION: &str = "1.4.2";
+pub(crate) const BUN_VERSION: &str = "1.4.5";
+
+// Generated production images build and run on ForkLaunch's hardened base
+// images (github.com/forklaunch/base-images): Wolfi-based, rebuilt nightly and
+// published to public ECR only when every per-architecture image scans to 0
+// findings. See core::runtime_image for the stages built from these pins.
+//
+// Each reference is `<repository>:<tag>@<index digest>`. The digest is what is
+// pulled (one multi-arch index covers linux/amd64 and linux/arm64), so a build
+// is reproducible and a nightly rebuild never changes an application's image
+// behind its back. The tag only documents what was pinned and is always a
+// versioned one, never `latest`, which generated repositories' controls reject.
+// Published digests are never deleted, so a pin keeps resolving.
+//
+// To bump: run `cli/scripts/base-image-pins.sh` (add `--write` to update this
+// file in place), then `cargo test`. Unedited generated Dockerfiles pick up
+// new pins on the next command that regenerates images (or `sync all`).
+pub(crate) const BASE_IMAGE_REGISTRY: &str = "public.ecr.aws/e6h0t2z8";
+// Node major of generated images, CI, `engines` and `.nvmrc`. It must match the
+// tags of NODE_RUNTIME_IMAGE and NODE_DEV_IMAGE (a unit test checks this).
+pub(crate) const NODE_MAJOR: &str = "26";
+pub(crate) const NODE_RUNTIME_IMAGE: &str = "public.ecr.aws/e6h0t2z8/node:26@sha256:4ca1677772651587af3efdbf614142e11b56585043273179ecd82ce1943fc7df";
+pub(crate) const NODE_DEV_IMAGE: &str = "public.ecr.aws/e6h0t2z8/node:26-dev@sha256:c31798fa091a730089b0bd8d6b3995ba43d444a4f114f316e686fa36c47feb74";
+// Builds of BUN_VERSION (a unit test checks the tags).
+pub(crate) const BUN_RUNTIME_IMAGE: &str = "public.ecr.aws/e6h0t2z8/bun:1.4.5@sha256:4e74c07c0503a3c6e977693ce185827a75e3e72bb00642e179f8f235d4eb5a83";
+pub(crate) const BUN_DEV_IMAGE: &str = "public.ecr.aws/e6h0t2z8/bun:1.4.5-dev@sha256:c5b457e9678027b7073bb9f54a3e8a0c308959f50f213815349a0562bd15b4dd";
+// The Rust runtime image has only `latest` and date tags; the date tag names
+// the nightly run that published the pinned digest.
+pub(crate) const RUST_RUNTIME_IMAGE: &str = "public.ecr.aws/e6h0t2z8/rust:20261127@sha256:48bb3838e539d3c4a8b0f60217e973dd0b7bf45d460e5dd61df8783ba457da71";
+pub(crate) const RUST_DEV_IMAGE: &str = "public.ecr.aws/e6h0t2z8/rust:1.100.0-dev@sha256:f45fab4155c4d66c3f084971dfb4e21a77d9814181dd5e27952062846035a567";
+
+// The pnpm new Node workspaces pin in `packageManager`: the newest release
+// older than pnpm's one-day minimumReleaseAge when it was chosen. Generated
+// images and CI install exactly the pinned release with npm (Node 25 and later
+// ship no corepack).
+pub(crate) const PNPM_VERSION: &str = "12.23.0";
 
 pub(crate) fn get_platform_management_api_url() -> String {
     std::env::var("FORKLAUNCH_PLATFORM_MANAGEMENT_API_URL").unwrap_or_else(|_| {

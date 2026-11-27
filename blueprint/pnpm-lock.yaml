@@ -13,13 +13,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/universal-sdk':
         specifier: ^1.4.1
         version: 1.4.1
@@ -43,8 +43,8 @@ importers:
         specifier: ^30.0.0
         version: 30.0.0
       '@types/node':
-        specifier: ^26.6.6
-        version: 26.6.6
+        specifier: ^26.6.7
+        version: 26.6.11
       eslint:
         specifier: ^10.15.0
         version: 10.15.0(supports-color@8.1.1)
@@ -53,7 +53,7 @@ importers:
         version: 17.14.0
       jest:
         specifier: ^30.5.2
-        version: 30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+        version: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       lint-staged:
         specifier: ^17.6.1
         version: 17.6.1
@@ -71,7 +71,7 @@ importers:
         version: 4.1.0
       ts-jest:
         specifier: ^29.4.15
-        version: 29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2)))(typescript@7.0.2)
+        version: 29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)))(typescript@7.0.2)
       tsup:
         specifier: ^9.0.0
         version: 9.0.0(postcss@8.5.33)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1)
@@ -86,7 +86,7 @@ importers:
         version: 8.73.0(eslint@10.15.0(supports-color@8.1.1))(supports-color@8.1.1)(typescript@7.0.2)
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   billing-base:
     dependencies:
@@ -104,19 +104,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../implementations/billing/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../interfaces/billing
@@ -134,7 +134,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -171,7 +171,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -201,7 +201,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -210,7 +210,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   billing-stripe:
     dependencies:
@@ -228,19 +228,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-billing-stripe':
         specifier: workspace:^
         version: link:../implementations/billing/stripe
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../interfaces/billing
@@ -258,7 +258,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -285,7 +285,7 @@ importers:
         version: 10.4.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.6)
+        version: 22.6.2(@types/node@26.6.11)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -298,7 +298,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -328,7 +328,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -337,7 +337,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   cac-base:
     dependencies:
@@ -352,19 +352,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-cac-base':
         specifier: workspace:^
         version: link:../implementations/cac/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../interfaces/cac
@@ -382,7 +382,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -419,7 +419,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -446,7 +446,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -455,7 +455,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   client-sdk:
     dependencies:
@@ -467,7 +467,7 @@ importers:
         version: 1.4.1
       better-auth:
         specifier: ^1.7.26
-        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
     devDependencies:
       '@forklaunch/blueprint-billing-base':
         specifier: workspace:^
@@ -489,7 +489,7 @@ importers:
         version: link:../sample-worker
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
@@ -501,13 +501,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator':
         specifier: ^1.3.0
         version: 1.3.0
@@ -559,13 +559,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../implementations/ecommerce/base
@@ -580,7 +580,7 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../interfaces/ecommerce
@@ -601,7 +601,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -628,7 +628,7 @@ importers:
         version: 10.4.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.6)
+        version: 22.6.2(@types/node@26.6.11)
       uWebSockets.js:
         specifier: github:uNetworking/uWebSockets.js#v20.52.0
         version: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
@@ -641,7 +641,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -671,7 +671,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -680,7 +680,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   iam-base:
     dependencies:
@@ -692,7 +692,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/hyper-express-fork':
         specifier: ^6.18.1
         version: 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
@@ -716,7 +716,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -753,7 +753,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -786,13 +786,13 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   iam-better-auth:
     dependencies:
       '@forklaunch/better-auth-mikro-orm-fork':
         specifier: ~0.5.12
-        version: 0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
+        version: 0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))
       '@forklaunch/blueprint-core':
         specifier: workspace:^
         version: link:../core
@@ -804,7 +804,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-iam-base':
         specifier: workspace:^
         version: link:../implementations/iam/base
@@ -822,7 +822,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -840,7 +840,7 @@ importers:
         version: 0.34.52
       better-auth:
         specifier: ^1.7.26
-        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       dotenv:
         specifier: ^18.0.10
         version: 18.0.10
@@ -859,7 +859,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -892,7 +892,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   implementations/billing/base:
     dependencies:
@@ -901,7 +901,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-billing':
         specifier: workspace:^
         version: link:../../../interfaces/billing
@@ -944,7 +944,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-billing-base':
         specifier: workspace:^
         version: link:../base
@@ -968,7 +968,7 @@ importers:
         version: 8.20.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.6)
+        version: 22.6.2(@types/node@26.6.11)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -999,7 +999,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-cac':
         specifier: workspace:^
         version: link:../../../interfaces/cac
@@ -1033,7 +1033,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-ecommerce':
         specifier: workspace:^
         version: link:../../../interfaces/ecommerce
@@ -1076,7 +1076,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1122,7 +1122,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-ecommerce-base':
         specifier: workspace:^
         version: link:../base
@@ -1146,7 +1146,7 @@ importers:
         version: 8.20.0
       stripe:
         specifier: ^22.6.2
-        version: 22.6.2(@types/node@26.6.6)
+        version: 22.6.2(@types/node@26.6.11)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -1171,7 +1171,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-iam':
         specifier: workspace:^
         version: link:../../../interfaces/iam
@@ -1217,7 +1217,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../../../interfaces/messaging
@@ -1260,7 +1260,7 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../base
@@ -1309,7 +1309,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-mlse':
         specifier: workspace:^
         version: link:../../../interfaces/mlse
@@ -1337,7 +1337,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1380,7 +1380,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1423,7 +1423,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1466,7 +1466,7 @@ importers:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../../../interfaces/worker
@@ -1661,19 +1661,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-base':
         specifier: workspace:^
         version: link:../implementations/messaging/base
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../interfaces/messaging
@@ -1691,7 +1691,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -1728,7 +1728,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -1758,7 +1758,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -1767,7 +1767,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   messaging-twilio:
     dependencies:
@@ -1782,19 +1782,19 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-messaging-twilio':
         specifier: workspace:^
         version: link:../implementations/messaging/twilio
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-messaging':
         specifier: workspace:^
         version: link:../interfaces/messaging
@@ -1812,7 +1812,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -1849,7 +1849,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -1879,7 +1879,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -1888,7 +1888,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   mlse-base:
     dependencies:
@@ -1906,13 +1906,13 @@ importers:
         version: 1.2.32
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)
       '@forklaunch/hyper-express':
         specifier: ^2.2.0
-        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
+        version: 2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/implementation-mlse-base':
         specifier: workspace:^
         version: link:../implementations/mlse/base
@@ -1921,7 +1921,7 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-mlse':
         specifier: workspace:^
         version: link:../interfaces/mlse
@@ -1942,7 +1942,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -1979,7 +1979,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -2006,7 +2006,7 @@ importers:
         version: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
       ts-node:
         specifier: ^10.9.2
-        version: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+        version: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
       typedoc:
         specifier: ^0.28.20
         version: 0.28.20(typescript@7.0.2)
@@ -2015,13 +2015,13 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ^5.1.1
-        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
   monitoring:
     dependencies:
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
     devDependencies:
       typescript:
         specifier: ^7.0.2
@@ -2037,7 +2037,7 @@ importers:
         version: link:../monitoring
       '@forklaunch/core':
         specifier: ^4.1.0
-        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/implementation-worker-bullmq':
         specifier: workspace:^
         version: link:../implementations/worker/bullmq
@@ -2052,10 +2052,10 @@ importers:
         version: link:../implementations/worker/redis
       '@forklaunch/infrastructure-redis':
         specifier: ^1.5.0
-        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/infrastructure-s3':
         specifier: ^1.5.5
-        version: 1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+        version: 1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/interfaces-worker':
         specifier: workspace:^
         version: link:../interfaces/worker
@@ -2070,7 +2070,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)
       '@mikro-orm/mariadb':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/migrations':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -2082,7 +2082,7 @@ importers:
         version: 7.2.10(@mikro-orm/core@7.2.10)(supports-color@8.1.1)
       '@mikro-orm/mysql':
         specifier: 7.2.10
-        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+        version: 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       '@mikro-orm/postgresql':
         specifier: 7.2.10
         version: 7.2.10(@mikro-orm/core@7.2.10)
@@ -2125,7 +2125,7 @@ importers:
     devDependencies:
       '@forklaunch/testing':
         specifier: ^1.3.2
-        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+        version: 1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       '@mikro-orm/cli':
         specifier: 7.2.10
         version: 7.2.10
@@ -4514,11 +4514,11 @@ packages:
   '@types/node@18.19.130':
     resolution: {integrity: sha512-GRaXQx6jGfL8sKfaIDD6OupbIHBr9jv7Jnaml9tB7l4v068PAOXqfcujMMo5PhbIs6ggR1XODELqahT2R8v0fg==}
 
+  '@types/node@26.6.11':
+    resolution: {integrity: sha512-uUyQ2XLEz+EXh34lmS3GhKrkqn/8FU7KUiKRpk347At2bmnMVWss45yz8b4FG/tUtmV1tV/+TVkITItPROyeeQ==}
+
   '@types/node@26.6.5':
     resolution: {integrity: sha512-uMzsv9stDdofIZBx4UGh4Z9ZgXnGC9seRDscilBcTHAeOFk67MZg/k9bWVfO+bk4qZmG+l52hRnLwUiH2LnJTg==}
-
-  '@types/node@26.6.6':
-    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
 
   '@types/parse-json@4.0.2':
     resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
@@ -8748,7 +8748,7 @@ snapshots:
       '@types/urijs': 1.19.26
       ajv: 8.20.0
       ajv-errors: 3.0.0(ajv@8.20.0)
-      ajv-formats: 2.1.1(ajv@8.20.0)
+      ajv-formats: 2.1.1
       js-yaml: 4.3.2
       jsonpath-plus: 10.4.0
       node-fetch: 2.6.7
@@ -9717,15 +9717,15 @@ snapshots:
       '@eslint/core': 1.2.1
       levn: 0.4.1
 
-  '@forklaunch/better-auth-mikro-orm-fork@0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
+  '@forklaunch/better-auth-mikro-orm-fork@0.5.12(@mikro-orm/core@7.2.10)(better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))))':
     dependencies:
       '@mikro-orm/core': 7.2.10
-      better-auth: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
+      better-auth: 1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))
       dset: 3.1.4
 
   '@forklaunch/common@1.2.32': {}
 
-  '@forklaunch/core@4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)':
+  '@forklaunch/core@4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
     dependencies:
       '@asyncapi/parser': 3.6.6
       '@forklaunch/common': 1.2.32
@@ -9760,7 +9760,7 @@ snapshots:
       uuid: 14.0.3
       zod: 4.6.7
     optionalDependencies:
-      stripe: 22.6.2(@types/node@26.6.6)
+      stripe: 22.6.2(@types/node@26.6.11)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9782,10 +9782,10 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.17)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@modelcontextprotocol/sdk': 1.32.2(supports-color@8.1.1)(zod@4.6.7)
       '@scalar/express-api-reference': 0.10.39
@@ -9823,10 +9823,10 @@ snapshots:
       - sury
       - zod
 
-  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(zod@4.6.7)':
+  '@forklaunch/express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(jose@6.2.18)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(zod@4.6.7)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@modelcontextprotocol/sdk': 1.32.2(supports-color@8.1.1)(zod@4.6.7)
       '@scalar/express-api-reference': 0.10.39
@@ -9877,13 +9877,13 @@ snapshots:
       typed-emitter: 2.1.0
       uWebSockets.js: https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3
 
-  '@forklaunch/hyper-express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
+  '@forklaunch/hyper-express@2.2.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(express@5.3.0(supports-color@8.1.1))(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/hyper-express-fork': 6.18.1(uWebSockets.js@https://codeload.github.com/uNetworking/uWebSockets.js/tar.gz/cfc9a40d8132a34881813cec3d5f8e3a185b3ce3)
       '@forklaunch/validator': 1.3.0
-      '@forklaunch/ws': 1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/ws': 1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@scalar/express-api-reference': 0.10.39
       cors: 2.8.6
       live-directory: 3.0.3
@@ -9917,10 +9917,10 @@ snapshots:
       - sury
       - utf-8-validate
 
-  '@forklaunch/infrastructure-redis@1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)':
+  '@forklaunch/infrastructure-redis@1.5.0(@opentelemetry/api@1.10.0)(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
     dependencies:
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       redis: 6.3.1(@opentelemetry/api@1.10.0)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
@@ -9945,14 +9945,14 @@ snapshots:
       - supports-color
       - sury
 
-  '@forklaunch/infrastructure-s3@1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)':
+  '@forklaunch/infrastructure-s3@1.5.5(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
     dependencies:
       '@aws-sdk/client-s3': 3.1173.0
       '@aws-sdk/lib-storage': 3.1173.0(@aws-sdk/client-s3@3.1173.0)
       '@aws-sdk/s3-presigned-post': 3.1173.0
       '@aws-sdk/s3-request-presigner': 3.1173.0
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
     transitivePeerDependencies:
       - '@aws-sdk/credential-providers'
       - '@cfworker/json-schema'
@@ -9989,13 +9989,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@forklaunch/testing@1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))':
+  '@forklaunch/testing@1.3.2(@mikro-orm/core@7.2.10)(bare-buffer@3.7.3)(supports-color@8.1.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)))':
     dependencies:
       '@mikro-orm/core': 7.2.10
       ioredis: 6.0.0(supports-color@8.1.1)
       jose: 6.2.18
       testcontainers: 12.2.2(bare-buffer@3.7.3)(supports-color@8.1.1)
-      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     transitivePeerDependencies:
       - bare-abort-controller
       - bare-buffer
@@ -10018,11 +10018,11 @@ snapshots:
       ts-deepmerge: 8.0.0
       zod: 4.6.7
 
-  '@forklaunch/ws@1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)':
+  '@forklaunch/ws@1.3.1(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)':
     dependencies:
       '@asyncapi/parser': 3.6.6
       '@forklaunch/common': 1.2.32
-      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.6))(supports-color@8.1.1)
+      '@forklaunch/core': 4.1.0(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(openapi-types@12.1.3)(stripe@22.6.2(@types/node@26.6.11))(supports-color@8.1.1)
       '@forklaunch/validator': 1.3.0
       '@types/ws': 8.18.2
       ws: 8.23.0
@@ -10127,13 +10127,13 @@ snapshots:
   '@jest/console@30.5.2':
     dependencies:
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       chalk: 4.1.2
       jest-message-util: 30.5.1
       jest-util: 30.5.1
       slash: 3.0.0
 
-  '@jest/core@30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))':
+  '@jest/core@30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))':
     dependencies:
       '@jest/console': 30.5.2
       '@jest/pattern': 30.5.0
@@ -10141,7 +10141,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       ci-info: 4.5.0
@@ -10149,7 +10149,7 @@ snapshots:
       fast-json-stable-stringify: 2.1.0
       graceful-fs: 4.2.12
       jest-changed-files: 30.5.1
-      jest-config: 30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      jest-config: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       jest-haste-map: 30.5.1
       jest-message-util: 30.5.1
       jest-regex-util: 30.5.0
@@ -10175,7 +10175,7 @@ snapshots:
     dependencies:
       '@jest/fake-timers': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       jest-mock: 30.5.2
 
   '@jest/expect-utils@30.5.2':
@@ -10193,7 +10193,7 @@ snapshots:
     dependencies:
       '@jest/types': 30.5.1
       '@sinonjs/fake-timers': 15.5.0
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       jest-message-util: 30.5.1
       jest-mock: 30.5.2
       jest-util: 30.5.1
@@ -10222,7 +10222,7 @@ snapshots:
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
       '@jridgewell/trace-mapping': 0.3.31
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       chalk: 4.1.2
       collect-v8-coverage: 1.0.3
       exit-x: 0.2.2
@@ -10416,10 +10416,10 @@ snapshots:
       kysely: 0.29.9
       libsql: 0.5.29
 
-  '@mikro-orm/mariadb@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)':
+  '@mikro-orm/mariadb@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)':
     dependencies:
       '@mikro-orm/core': 7.2.10
-      '@mikro-orm/mysql': 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)
+      '@mikro-orm/mysql': 7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)
       kysely: 0.29.9
     transitivePeerDependencies:
       - '@types/node'
@@ -10453,12 +10453,12 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@mikro-orm/mysql@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.6)':
+  '@mikro-orm/mysql@7.2.10(@mikro-orm/core@7.2.10)(@types/node@26.6.11)':
     dependencies:
       '@mikro-orm/core': 7.2.10
       '@mikro-orm/sql': 7.2.10(@mikro-orm/core@7.2.10)
       kysely: 0.29.9
-      mysql2: 3.24.6(@types/node@26.6.6)
+      mysql2: 3.24.6(@types/node@26.6.11)
       sqlstring: 2.3.3
     transitivePeerDependencies:
       - '@types/node'
@@ -11309,7 +11309,7 @@ snapshots:
       '@types/json-schema': 7.0.15
       ajv: 8.20.0
       ajv-errors: 3.0.0(ajv@8.20.0)
-      ajv-formats: 2.1.1(ajv@8.20.0)
+      ajv-formats: 2.1.1
       es-aggregate-error: 1.0.14
       expr-eval-fork: 3.0.3
       jsonpath-plus: 10.4.0
@@ -11343,7 +11343,7 @@ snapshots:
       ajv: 8.20.0
       ajv-draft-04: 1.0.0(ajv@8.20.0)
       ajv-errors: 3.0.0(ajv@8.20.0)
-      ajv-formats: 2.1.1(ajv@8.20.0)
+      ajv-formats: 2.1.1
       lodash: 4.18.1
       tslib: 2.9.1
     transitivePeerDependencies:
@@ -11447,11 +11447,11 @@ snapshots:
   '@types/body-parser@1.19.6':
     dependencies:
       '@types/connect': 3.4.38
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/busboy@1.5.5':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/chai@5.2.3':
     dependencies:
@@ -11460,24 +11460,24 @@ snapshots:
 
   '@types/connect@3.4.38':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/deep-eql@4.0.2': {}
 
   '@types/docker-modem@3.0.6':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       '@types/ssh2': 1.15.6
 
   '@types/dockerode@4.0.2':
     dependencies:
       '@types/docker-modem': 3.0.6
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       '@types/ssh2': 1.15.6
 
   '@types/es-aggregate-error@1.0.6':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/esrecurse@4.3.1': {}
 
@@ -11485,7 +11485,7 @@ snapshots:
 
   '@types/express-serve-static-core@5.1.3':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       '@types/qs': 6.15.1
       '@types/range-parser': 1.2.7
       '@types/send': 1.2.1
@@ -11535,11 +11535,11 @@ snapshots:
     dependencies:
       undici-types: 5.26.5
 
-  '@types/node@26.6.5':
+  '@types/node@26.6.11':
     dependencies:
       undici-types: 8.9.0
 
-  '@types/node@26.6.6':
+  '@types/node@26.6.5':
     dependencies:
       undici-types: 8.9.0
 
@@ -11551,16 +11551,16 @@ snapshots:
 
   '@types/readable-stream@4.0.25':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/send@1.2.1':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/serve-static@2.2.0':
     dependencies:
       '@types/http-errors': 2.0.5
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/shimmer@1.2.0': {}
 
@@ -11586,7 +11586,7 @@ snapshots:
 
   '@types/ws@8.18.2':
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   '@types/yargs-parser@21.0.3': {}
 
@@ -11822,14 +11822,14 @@ snapshots:
   '@unrs/resolver-binding-win32-x64-msvc@1.13.0':
     optional: true
 
-  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))':
+  '@vitest/mocker@5.1.1(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@vitest/spy': 5.1.1
       estree-walker: 3.0.3
       magic-string: 1.4.5
     optionalDependencies:
-      vite: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vite: 8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
 
   '@vitest/spy@5.1.1': {}
 
@@ -11903,8 +11903,8 @@ snapshots:
     dependencies:
       ajv: 8.20.0
 
-  ajv-formats@2.1.1(ajv@8.20.0):
-    optionalDependencies:
+  ajv-formats@2.1.1:
+    dependencies:
       ajv: 8.20.0
 
   ajv-formats@3.0.1(ajv@8.20.0):
@@ -12130,7 +12130,7 @@ snapshots:
     dependencies:
       tweetnacl: 0.14.5
 
-  better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.6))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
+  better-auth@1.7.26(@opentelemetry/api@1.10.0)(mongodb@7.9.0)(mysql2@3.24.6(@types/node@26.6.11))(pg@8.23.1)(vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))):
     dependencies:
       '@better-auth/core': 1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5)
       '@better-auth/drizzle-adapter': 1.7.26(@better-auth/core@1.7.26(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.10.0)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)
@@ -12151,9 +12151,9 @@ snapshots:
       zod: 4.6.7
     optionalDependencies:
       mongodb: 7.9.0
-      mysql2: 3.24.6(@types/node@26.6.6)
+      mysql2: 3.24.6(@types/node@26.6.11)
       pg: 8.23.1
-      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
     transitivePeerDependencies:
       - '@opentelemetry/api'
 
@@ -13633,7 +13633,7 @@ snapshots:
       '@jest/expect': 30.5.2(supports-color@8.1.1)
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       chalk: 4.1.2
       co: 4.6.0
       dedent: 1.7.2
@@ -13653,15 +13653,15 @@ snapshots:
       - babel-plugin-macros
       - supports-color
 
-  jest-cli@30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2)):
+  jest-cli@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
     dependencies:
-      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
       chalk: 4.1.2
       exit-x: 0.2.2
       import-local: 3.2.0
-      jest-config: 30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      jest-config: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       jest-util: 30.5.1
       jest-validate: 30.5.1
       yargs: 17.7.3
@@ -13672,7 +13672,7 @@ snapshots:
       - supports-color
       - ts-node
 
-  jest-config@30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2)):
+  jest-config@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
     dependencies:
       '@babel/core': 7.29.13(supports-color@8.1.1)
       '@jest/get-type': 30.5.0
@@ -13698,8 +13698,8 @@ snapshots:
       slash: 3.0.0
       strip-json-comments: 3.1.1
     optionalDependencies:
-      '@types/node': 26.6.6
-      ts-node: 10.9.2(@types/node@26.6.6)(typescript@7.0.2)
+      '@types/node': 26.6.11
+      ts-node: 10.9.2(@types/node@26.6.11)(typescript@7.0.2)
     transitivePeerDependencies:
       - babel-plugin-macros
       - supports-color
@@ -13729,7 +13729,7 @@ snapshots:
       '@jest/environment': 30.5.2
       '@jest/fake-timers': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       jest-mock: 30.5.2
       jest-util: 30.5.1
       jest-validate: 30.5.1
@@ -13777,7 +13777,7 @@ snapshots:
     dependencies:
       '@jest/expect-utils': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       jest-util: 30.5.1
 
   jest-regex-util@30.5.0: {}
@@ -13807,7 +13807,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       chalk: 4.1.2
       emittery: 0.13.1
       exit-x: 0.2.2
@@ -13835,7 +13835,7 @@ snapshots:
       '@jest/test-result': 30.5.2
       '@jest/transform': 30.5.2(supports-color@8.1.1)
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       chalk: 4.1.2
       cjs-module-lexer: 2.3.0
       collect-v8-coverage: 1.0.3
@@ -13902,7 +13902,7 @@ snapshots:
     dependencies:
       '@jest/test-result': 30.5.2
       '@jest/types': 30.5.1
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       ansi-escapes: 4.3.2
       chalk: 4.1.2
       emittery: 0.13.1
@@ -13917,12 +13917,12 @@ snapshots:
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
-  jest@30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2)):
+  jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)):
     dependencies:
-      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      '@jest/core': 30.5.2(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       '@jest/types': 30.5.1
       import-local: 3.2.0
-      jest-cli: 30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      jest-cli: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
     transitivePeerDependencies:
       - '@types/node'
       - babel-plugin-macros
@@ -14322,9 +14322,9 @@ snapshots:
       arrify: 2.0.1
       minimatch: 3.1.5
 
-  mysql2@3.24.6(@types/node@26.6.6):
+  mysql2@3.24.6(@types/node@26.6.11):
     dependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       aws-ssl-profiles: 1.1.2
       generate-function: 2.3.1
       iconv-lite: 0.7.3
@@ -14820,7 +14820,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.2
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       long: 5.3.2
 
   proxy-addr@2.0.8:
@@ -15381,9 +15381,9 @@ snapshots:
 
   strip-json-comments@5.1.0: {}
 
-  stripe@22.6.2(@types/node@26.6.6):
+  stripe@22.6.2(@types/node@26.6.11):
     optionalDependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
 
   strnum@2.5.1:
     dependencies:
@@ -15482,7 +15482,7 @@ snapshots:
       '@azure/identity': 4.14.1(supports-color@8.1.1)
       '@azure/keyvault-keys': 4.10.2(supports-color@8.1.1)
       '@js-joda/core': 6.3.2
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       bl: 6.1.6
       iconv-lite: 0.7.3
       js-md4: 0.3.2
@@ -15585,12 +15585,12 @@ snapshots:
 
   ts-interface-checker@0.1.13: {}
 
-  ts-jest@29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2)))(typescript@7.0.2):
+  ts-jest@29.4.15(@babel/core@7.29.13(supports-color@8.1.1))(@jest/transform@30.5.2(supports-color@8.1.1))(@jest/types@30.5.1)(babel-jest@30.5.2(@babel/core@7.29.13(supports-color@8.1.1))(supports-color@8.1.1))(esbuild@0.28.2)(jest-util@30.5.1)(jest@30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2)))(typescript@7.0.2):
     dependencies:
       bs-logger: 0.2.6
       fast-json-stable-stringify: 2.1.0
       handlebars: 4.7.10
-      jest: 30.5.2(@types/node@26.6.6)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2))
+      jest: 30.5.2(@types/node@26.6.11)(supports-color@8.1.1)(ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2))
       json5: 2.2.3
       lodash.memoize: 4.1.2
       make-error: 1.3.6
@@ -15606,14 +15606,14 @@ snapshots:
       esbuild: 0.28.2
       jest-util: 30.5.1
 
-  ts-node@10.9.2(@types/node@26.6.6)(typescript@7.0.2):
+  ts-node@10.9.2(@types/node@26.6.11)(typescript@7.0.2):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       '@tsconfig/node10': 1.0.13
       '@tsconfig/node12': 1.0.11
       '@tsconfig/node14': 1.0.3
       '@tsconfig/node16': 1.0.4
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       acorn: 8.19.0
       acorn-walk: 8.3.5
       arg: 4.1.3
@@ -15864,7 +15864,7 @@ snapshots:
 
   vary@1.1.2: {}
 
-  vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
+  vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.7
@@ -15872,16 +15872,16 @@ snapshots:
       rolldown: 1.2.19
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
       esbuild: 0.28.2
       fsevents: 2.3.3
       tsx: 4.23.15
       yaml: 2.9.1
 
-  vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
+  vitest@5.1.1(@opentelemetry/api@1.10.0)(@types/node@26.6.11)(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
-      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+      '@vitest/mocker': 5.1.1(vite@8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
       chai: 6.3.0
       es-module-lexer: 2.3.2
       expect-type: 1.4.0
@@ -15892,11 +15892,11 @@ snapshots:
       tinybench: 6.2.4
       tinyexec: 1.3.1
       tinyglobby: 0.2.17
-      vite: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
+      vite: 8.3.8(@types/node@26.6.11)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
-      '@types/node': 26.6.6
+      '@types/node': 26.6.11
     transitivePeerDependencies:
       - msw
 

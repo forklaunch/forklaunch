@@ -183,6 +183,8 @@ RULES = [
           f'cli/src/{_alternatives(CLI_PLATFORM_MODULES)}/**'], CLI_TESTS),
     # The skill pack `forklaunch context` embeds, and its consistency checks.
     Rule(['cli/assets/**', 'cli/scripts/check-skill-*.sh'], CLI_TESTS),
+    # Maintainer tool that rewrites the base-image pins in constants.rs.
+    Rule('cli/scripts/base-image-pins.sh', CLI_TESTS),
     Rule(['cli/Cargo.toml', 'cli/build.rs', 'cli/.rustfmt.toml'], *GENERATION),
     Rule('cli/Cargo.toml', RUST_SECURITY),
     # npm packaging of the CLI; the version prechecks rewrite package.json.

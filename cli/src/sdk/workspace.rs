@@ -274,7 +274,7 @@ pub(super) fn plan_typescript_sdk(
     if !bun {
         object
             .entry("packageManager")
-            .or_insert(json!("pnpm@11.28.7"));
+            .or_insert(json!(format!("pnpm@{}", crate::constants::PNPM_VERSION)));
     }
     if bun {
         object.entry("name").or_insert_with(|| {

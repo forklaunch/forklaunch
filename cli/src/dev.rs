@@ -1066,15 +1066,10 @@ fn plan_with(
         .unwrap_or("forklaunch")
         .to_case(Case::Kebab);
     // The toolchain stage only: sources (and a local framework checkout) are
-    // bind-mounted, never copied into the development image.
-    let template = include_str!("templates/rust/application/Dockerfile");
-    let toolchain = template
-        .find("FROM rust:")
-        .context("Native builder template missing toolchain stage")?;
-    let dockerfile = template[toolchain..]
-        .split("\nCOPY ")
-        .next()
-        .context("Native builder template missing source-copy boundary")?
+    // bind-mounted, never copied into the development image. This local image
+    // stays on Debian's rustup image, which installs the application's pinned
+    // toolchain below; production images use the ForkLaunch base images.
+    let dockerfile = crate::init::rust_project::development_toolchain_stage()
         .replace("pkg-config libssl-dev", "pkg-config curl xz-utils lld libssl-dev")
         + "\nENV SQLX_OFFLINE=true\n"
         + &watchexec_install()

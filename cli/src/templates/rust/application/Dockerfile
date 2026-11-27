@@ -5,14 +5,7 @@
 FROM scratch AS framework
 FROM scratch AS blueprint
 
-FROM rust:1.98.0-slim-bookworm AS builder
-
-ARG FRAMEWORK_ROOT=/forklaunch
-WORKDIR /app
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends pkg-config libssl-dev libcurl4-openssl-dev ca-certificates cmake make g++ perl \
-    && rm -rf /var/lib/apt/lists/*
-
+{{{builder_stage}}}
 COPY --from=framework Cargo.tom[l] Cargo.loc[k] ${FRAMEWORK_ROOT}/framework-rs/
 COPY --from=framework crate[s] ${FRAMEWORK_ROOT}/framework-rs/crates
 COPY --from=blueprint Cargo.tom[l] Cargo.loc[k] ${FRAMEWORK_ROOT}/blueprint-rs/
@@ -22,14 +15,7 @@ COPY . .
 ENV SQLX_OFFLINE=true
 RUN cargo build --release --workspace --bins
 
-FROM debian:bookworm-slim
-
-WORKDIR /app
-RUN apt-get update \
-    && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
-    && rm -rf /var/lib/apt/lists/*
-
+{{{runtime_stage}}}
 COPY --from=builder /app/target/release /app/target/release
 # Deployed PostgreSQL URLs verify the server against the AWS RDS CA bundle.
 ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem

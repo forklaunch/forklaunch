@@ -50,7 +50,7 @@ try:
     docker = (app / 'Dockerfile.typescript').read_text()
     assert 'RUN cargo check --locked -p api-sdk' in docker
     assert 'COPY --from=native-sdk-compiler [\"/app/src/api/sdk/typescript/\",\"/app/src/api/sdk/typescript/\"]' in docker
-    assert docker.index('RUN cargo check --locked -p api-sdk') < docker.index('FROM node:')
+    assert docker.index('RUN cargo check --locked -p api-sdk') < docker.index('/node:')
     print('PASS: clean local SDK + dependency-only aggregate compile, service-owned artifacts, CLI freshness')
 finally:
     if os.environ.get('FORKLAUNCH_KEEP_FIXTURE'):

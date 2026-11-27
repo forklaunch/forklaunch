@@ -13,7 +13,7 @@ pub(crate) const ESLINT_VERSION: &str = "^10.0.1";
 // @types/jest
 pub(crate) const JEST_TYPES_VERSION: &str = "^30.0.0";
 // @types/node
-pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.6";
+pub(crate) const TYPES_NODE_VERSION: &str = "^26.6.7";
 // jest
 pub(crate) const JEST_VERSION: &str = "^30.5.2";
 // oxlint

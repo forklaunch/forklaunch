@@ -227,6 +227,37 @@ pub(crate) fn refresh_mixed_images(root: &Path) -> Result<()> {
     crate::core::github_configs::reconcile_github_configs(root)
 }
 
+/// `forklaunch sync`: regenerate the CLI-owned production images that are
+/// unedited, so an application created by an older CLI moves to the current
+/// runtime stage. Edited images are left as they are, without an error.
+pub(crate) fn refresh_unedited_images(root: &Path) -> Result<()> {
+    let path = root.join(".forklaunch/manifest.toml");
+    if !path.is_file() {
+        return Ok(());
+    }
+    if refresh_rust_dockerfile(root)? {
+        return Ok(());
+    }
+    let mixed = read_manifest_value(&path)?
+        .get("language")
+        .and_then(Value::as_str)
+        == Some("mixed");
+    let typescript_unedited =
+        typescript_image::managed_image(root).is_some_and(|(_, unchanged)| unchanged);
+    if !typescript_unedited {
+        return Ok(());
+    }
+    if mixed {
+        if crate::core::forklaunch_state::file_stamped(&root.join("Dockerfile.rust")) == Some(true)
+        {
+            refresh_mixed_images(root)?;
+        }
+    } else {
+        typescript_image::reconcile(root)?;
+    }
+    Ok(())
+}
+
 fn sdk_targets_from_manifest(manifest: &Value) -> Vec<String> {
     manifest
         .get("sdkTargets")
@@ -2897,32 +2928,108 @@ fn render_rust_template<T: Content>(template_path: &str, data: &T) -> String {
         .unwrap_or_else(|error| panic!("Invalid embedded Rust template {template_path}: {error:#}"))
 }
 
+const RUST_DOCKERFILE_TEMPLATE: &str = "rust/application/Dockerfile";
+
+#[derive(Content)]
+struct RustDockerfileTemplate {
+    builder_stage: String,
+    runtime_stage: String,
+}
+
 pub(super) fn render_static_rust_template(template_path: &str) -> String {
+    if template_path == RUST_DOCKERFILE_TEMPLATE {
+        return rust_dockerfile_with_stages(
+            &crate::core::runtime_image::rust_template_builder_stage(),
+            &crate::core::runtime_image::rust_template_runtime_stage(),
+        );
+    }
     render_rust_template(template_path, &EmptyRustTemplate {})
 }
 
-/// The runtime-stage line added to `rust/application/Dockerfile` so generated
-/// images upgrade the base image's OS packages (openssl, zlib, ...).
-const RUST_DOCKERFILE_UPGRADE_LINE: &str = "    && apt-get upgrade -y \\\n";
-
-/// `rust/application/Dockerfile` as the CLI rendered it before the runtime
-/// stage gained [`RUST_DOCKERFILE_UPGRADE_LINE`]. Unstamped applications
-/// generated from it are still CLI-owned and must keep being regenerated.
-pub(super) fn rust_dockerfile_previous() -> String {
-    render_static_rust_template("rust/application/Dockerfile").replacen(
-        RUST_DOCKERFILE_UPGRADE_LINE,
-        "",
-        1,
+fn rust_dockerfile_with_stages(builder_stage: &str, runtime_stage: &str) -> String {
+    render_rust_template(
+        RUST_DOCKERFILE_TEMPLATE,
+        &RustDockerfileTemplate {
+            builder_stage: builder_stage.to_owned(),
+            runtime_stage: runtime_stage.to_owned(),
+        },
     )
 }
 
+/// The Debian builder stage `rust/application/Dockerfile` had before it moved
+/// to the ForkLaunch base images.
+const RUST_DOCKERFILE_BOOKWORM_BUILDER: &str = "FROM rust:1.98.0-slim-bookworm AS builder\n\nARG FRAMEWORK_ROOT=/forklaunch\nWORKDIR /app\nRUN apt-get update \\\n    && apt-get install -y --no-install-recommends pkg-config libssl-dev libcurl4-openssl-dev ca-certificates cmake make g++ perl \\\n    && rm -rf /var/lib/apt/lists/*\n";
+
+/// Toolchain stage of the local `forklaunch dev` native image: rustup (for the
+/// application's rust-toolchain.toml) and apt packages, which the ForkLaunch
+/// Rust dev image does not carry. Sources are bind-mounted, not copied.
+pub(crate) fn development_toolchain_stage() -> &'static str {
+    RUST_DOCKERFILE_BOOKWORM_BUILDER
+}
+
+/// The Debian runtime stage `rust/application/Dockerfile` had before it moved
+/// to the ForkLaunch base images.
+const RUST_DOCKERFILE_BOOKWORM_RUNTIME: &str = "FROM debian:bookworm-slim\n\nWORKDIR /app\nRUN apt-get update \\\n    && apt-get upgrade -y \\\n    && apt-get install -y --no-install-recommends ca-certificates curl \\\n    && rm -rf /var/lib/apt/lists/*\n";
+
+/// The runtime-stage line added to the Debian runtime stage so generated
+/// images upgraded the base image's OS packages (openssl, zlib, ...).
+const RUST_DOCKERFILE_UPGRADE_LINE: &str = "    && apt-get upgrade -y \\\n";
+
+/// `rust/application/Dockerfile` as the CLI rendered it on Debian, before it
+/// moved to the ForkLaunch base images.
+pub(super) fn rust_dockerfile_bookworm() -> String {
+    rust_dockerfile_with_stages(
+        RUST_DOCKERFILE_BOOKWORM_BUILDER,
+        RUST_DOCKERFILE_BOOKWORM_RUNTIME,
+    )
+}
+
+/// `rust/application/Dockerfile` as the CLI rendered it before the Debian
+/// runtime stage gained [`RUST_DOCKERFILE_UPGRADE_LINE`]. Unstamped
+/// applications generated from it are still CLI-owned and must keep being
+/// regenerated.
+pub(super) fn rust_dockerfile_previous() -> String {
+    rust_dockerfile_bookworm().replacen(RUST_DOCKERFILE_UPGRADE_LINE, "", 1)
+}
+
 /// Whether `actual` is an unedited rendering of the CLI's Rust Dockerfile:
-/// the current template or [`rust_dockerfile_previous`], ignoring trailing
-/// whitespace.
+/// the current template under any base-image pins, [`rust_dockerfile_bookworm`] or
+/// [`rust_dockerfile_previous`], ignoring trailing whitespace.
 pub(super) fn is_generated_rust_dockerfile(actual: &str) -> bool {
+    use crate::core::runtime_image::without_pins;
     let actual = actual.trim_end();
-    actual == render_static_rust_template("rust/application/Dockerfile").trim_end()
+    let current = render_static_rust_template(RUST_DOCKERFILE_TEMPLATE);
+    without_pins(actual) == without_pins(current.trim_end())
+        || actual == rust_dockerfile_bookworm().trim_end()
         || actual == rust_dockerfile_previous().trim_end()
+}
+
+/// Bring an unedited single-language Rust `Dockerfile` to the current template
+/// (the ForkLaunch base images at their current pins). An edited one is the
+/// user's. Returns whether the file was rewritten.
+pub(crate) fn refresh_rust_dockerfile(root: &Path) -> Result<bool> {
+    let Ok(manifest) = read_manifest_value(&root.join(".forklaunch/manifest.toml")) else {
+        return Ok(false);
+    };
+    if manifest.get("runtime").and_then(Value::as_str) != Some("tokio")
+        || manifest.get("language").and_then(Value::as_str) == Some("mixed")
+    {
+        return Ok(false);
+    }
+    let relative = manifest
+        .get("dockerfile")
+        .and_then(Value::as_str)
+        .unwrap_or("Dockerfile");
+    let path = crate::core::application_output::output_path(root, Path::new(relative))?;
+    let Ok(actual) = std::fs::read_to_string(&path) else {
+        return Ok(false);
+    };
+    let current = render_static_rust_template(RUST_DOCKERFILE_TEMPLATE);
+    if actual == current || !is_generated_rust_dockerfile(&actual) {
+        return Ok(false);
+    }
+    std::fs::write(&path, current)?;
+    Ok(true)
 }
 
 fn root_cargo_toml(license: &str, author: &str) -> String {
@@ -2996,7 +3103,8 @@ fn mixed_typescript_sdk_templates(
                 "name": package_name,
                 "private": true,
                 "type": "module",
-                "packageManager": "pnpm@11.28.7",
+                "packageManager": format!("pnpm@{}", crate::constants::PNPM_VERSION),
+                "engines": { "node": format!(">={}", crate::constants::NODE_MAJOR) },
                 "scripts": {
                     "dev": "forklaunch dev",
                     "rust:build": "cargo build --workspace",
@@ -5109,5 +5217,117 @@ mod local_env_tests {
         create_dir_all(&consumer).unwrap();
         ensure_rust_local_env(root.path(), &consumer, "consumer").unwrap();
         assert!(!consumer.join(".env.local").exists());
+    }
+}
+
+#[cfg(test)]
+mod dockerfile_template_tests {
+    use super::*;
+
+    fn rust_app(dockerfile: &str) -> tempfile::TempDir {
+        let root = tempfile::tempdir().unwrap();
+        create_dir_all(root.path().join(".forklaunch")).unwrap();
+        write(
+            root.path().join(".forklaunch/manifest.toml"),
+            "app_name = \"notes\"\nruntime = \"tokio\"\ndockerfile = \"Dockerfile\"\n",
+        )
+        .unwrap();
+        write(root.path().join("Dockerfile"), dockerfile).unwrap();
+        root
+    }
+
+    /// The single-application template builds on the ForkLaunch Rust dev image
+    /// and runs on its runtime image; the rest of the file is unchanged.
+    #[test]
+    fn template_builds_and_runs_on_pinned_forklaunch_images() {
+        use crate::core::runtime_image::{
+            rust_template_builder_stage, rust_template_runtime_stage,
+        };
+        let current = render_static_rust_template(RUST_DOCKERFILE_TEMPLATE);
+        assert!(current.contains(&format!(
+            "FROM scratch AS blueprint\n\n{}\nCOPY --from=framework ",
+            rust_template_builder_stage()
+        )));
+        assert!(!current.contains("{{") && !current.contains("debian"));
+        assert!(!current.contains("apt-get") && !current.contains("bookworm"));
+        assert!(current.contains(&format!(
+            "RUN cargo build --release --workspace --bins\n\n{}\nCOPY --from=builder /app/target/release /app/target/release\n",
+            rust_template_runtime_stage()
+        )));
+        // The Debian-era rendering differs only in its two stage headers.
+        let bookworm = rust_dockerfile_bookworm();
+        assert_eq!(
+            bookworm
+                .replace(RUST_DOCKERFILE_BOOKWORM_BUILDER, "<builder>")
+                .replace(RUST_DOCKERFILE_BOOKWORM_RUNTIME, "<runtime>"),
+            current
+                .replace(&rust_template_builder_stage(), "<builder>")
+                .replace(&rust_template_runtime_stage(), "<runtime>")
+        );
+        assert!(bookworm.contains("FROM rust:1.98.0-slim-bookworm AS builder\n"));
+    }
+
+    #[test]
+    fn generated_rust_dockerfiles_are_recognized_under_any_pins() {
+        let current = render_static_rust_template(RUST_DOCKERFILE_TEMPLATE);
+        assert!(is_generated_rust_dockerfile(&current));
+        assert!(is_generated_rust_dockerfile(&rust_dockerfile_bookworm()));
+        assert!(is_generated_rust_dockerfile(&rust_dockerfile_previous()));
+        let older_pins = current
+            .replace(
+                crate::constants::RUST_RUNTIME_IMAGE,
+                &format!(
+                    "{}/rust:20260101@sha256:{}",
+                    crate::constants::BASE_IMAGE_REGISTRY,
+                    "1".repeat(64)
+                ),
+            )
+            .replace(
+                crate::constants::RUST_DEV_IMAGE,
+                &format!(
+                    "{}/rust:1.99.0-dev@sha256:{}",
+                    crate::constants::BASE_IMAGE_REGISTRY,
+                    "2".repeat(64)
+                ),
+            );
+        assert_ne!(older_pins, current);
+        assert!(is_generated_rust_dockerfile(&older_pins));
+        assert!(!is_generated_rust_dockerfile(
+            &current.replace("ENV PORT=8000", "ENV PORT=9000")
+        ));
+        assert!(!is_generated_rust_dockerfile(
+            &current.replace("USER root", "USER 65532")
+        ));
+    }
+
+    /// Existing single-language Rust applications move to the ForkLaunch images
+    /// when their Dockerfile is an unedited rendering; edited files are kept.
+    #[test]
+    fn unedited_rust_dockerfiles_refresh_and_edited_ones_are_kept() {
+        let current = render_static_rust_template(RUST_DOCKERFILE_TEMPLATE);
+        for legacy in [rust_dockerfile_bookworm(), rust_dockerfile_previous()] {
+            let root = rust_app(&legacy);
+            assert!(refresh_rust_dockerfile(root.path()).unwrap());
+            assert_eq!(
+                std::fs::read_to_string(root.path().join("Dockerfile")).unwrap(),
+                current
+            );
+            assert!(!refresh_rust_dockerfile(root.path()).unwrap());
+        }
+        let edited = rust_dockerfile_bookworm().replace("EXPOSE 8000", "EXPOSE 9000");
+        let root = rust_app(&edited);
+        assert!(!refresh_rust_dockerfile(root.path()).unwrap());
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("Dockerfile")).unwrap(),
+            edited
+        );
+        // Mixed applications own Dockerfile.rust through the shared image.
+        let root = rust_app(&rust_dockerfile_bookworm());
+        write(
+            root.path().join(".forklaunch/manifest.toml"),
+            "app_name = \"notes\"\nruntime = \"node\"\nlanguage = \"mixed\"\n",
+        )
+        .unwrap();
+        assert!(!refresh_rust_dockerfile(root.path()).unwrap());
     }
 }

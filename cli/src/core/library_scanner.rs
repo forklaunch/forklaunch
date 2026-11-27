@@ -718,13 +718,7 @@ impl ImportScanner {
     fn parse_node_version_from_dockerfile(modules_root: &Path) -> Option<String> {
         let dockerfile_path = modules_root.join("Dockerfile");
         let content = fs::read_to_string(&dockerfile_path).ok()?;
-        let from_re = Regex::new(r"(?i)^FROM\s+node:(\d+)").ok()?;
-        for line in content.lines() {
-            if let Some(cap) = from_re.captures(line.trim()) {
-                return cap.get(1).map(|m| m.as_str().to_string());
-            }
-        }
-        None
+        node_version_from_dockerfile(&content)
     }
 
     fn resolve_local_import(&self, param_dir: &Path, import_path: &str) -> Option<PathBuf> {
@@ -760,6 +754,19 @@ impl ImportScanner {
 
         None
     }
+}
+
+/// Node.js major version a Dockerfile runs: the first `FROM [registry/]node:<major>`
+/// (`FROM node:25-trixie-slim` and the generated
+/// `FROM public.ecr.aws/e6h0t2z8/node:26-dev@sha256:...` are "25" and "26").
+fn node_version_from_dockerfile(content: &str) -> Option<String> {
+    let from_re = Regex::new(r"(?i)^FROM\s+(?:\S+/)?node:(\d+)").ok()?;
+    content.lines().find_map(|line| {
+        from_re
+            .captures(line.trim())
+            .and_then(|cap| cap.get(1))
+            .map(|m| m.as_str().to_string())
+    })
 }
 
 /// Parsed route extracted from a .routes.ts file
@@ -845,6 +852,31 @@ pub fn parse_route_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn node_version_reads_node_images_with_or_without_a_registry() {
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM node:25-trixie-slim\nRUN true\n"),
+            Some("25".to_string())
+        );
+        let generated = format!(
+            "# heading\n{}{}",
+            crate::core::runtime_image::node_builder_stage("pnpm@12.23.0"),
+            crate::core::runtime_image::node_runtime_stage("pnpm@12.23.0")
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile(&generated),
+            Some(crate::constants::NODE_MAJOR.to_string())
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM oven/bun:1.4\n"),
+            None
+        );
+        assert_eq!(
+            super::node_version_from_dockerfile("FROM custom-node:22\n"),
+            None
+        );
+    }
 
     #[test]
     fn test_scan_worker_controller_topology() {
